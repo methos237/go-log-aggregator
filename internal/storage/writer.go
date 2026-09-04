@@ -471,35 +471,93 @@ func (w *Writer) flush(dbCtx context.Context, log *slog.Logger, batch *writeBatc
 
 func (w *Writer) recordSuccess(batch *writeBatch, inserted int64, took time.Duration) {
 	copied := int64(len(batch.records))
-	if w.metrics != nil {
-		w.metrics.WriteDuration.WithLabelValues(outcomeSuccess).Observe(took.Seconds())
-		w.metrics.RowsCopied.Add(float64(copied))
-		w.metrics.RowsInserted.Add(float64(inserted))
-		if deduped := copied - inserted; deduped > 0 {
-			w.metrics.RowsDeduped.Add(float64(deduped))
-		}
-		w.metrics.StreamUpserts.Add(float64(len(batch.streams)))
+	if w.metrics == nil {
+		return
 	}
-
-	// Only now is it safe to remember these streams: the transaction that created
-	// them has committed, so a later batch relying on the cache will not hit a
-	// foreign key violation.
-	at := w.now()
-	for id := range batch.streams {
-		w.streams.markUpserted(id, at)
+	w.metrics.WriteDuration.WithLabelValues(outcomeSuccess).Observe(took.Seconds())
+	w.metrics.RowsCopied.Add(float64(copied))
+	w.metrics.RowsInserted.Add(float64(inserted))
+	if deduped := copied - inserted; deduped > 0 {
+		w.metrics.RowsDeduped.Add(float64(deduped))
 	}
 }
 
-// writeOnce performs one attempt: upsert the streams, COPY into staging, move the
-// rows across. It returns the number of rows that reached the hypertable.
-//
-// Everything is one transaction. Splitting the stream upsert out would let a crash
-// leave log rows with no stream row — impossible anyway thanks to the foreign key,
-// which would instead reject them and lose the batch.
+// writeOnce performs one attempt: make sure the streams exist, then write the records.
+// It returns the number of rows that reached the hypertable.
 func (w *Writer) writeOnce(ctx context.Context, batch *writeBatch) (int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, w.cfg.WriteTimeout)
 	defer cancel()
 
+	if err := w.commitStreams(ctx, batch); err != nil {
+		return 0, err
+	}
+	return w.commitRecords(ctx, batch)
+}
+
+// commitStreams upserts the batch's streams in their own short transaction.
+//
+// Deliberately *not* in the same transaction as the records, and this is the single
+// least obvious decision in the package. Sharing a transaction deadlocks under
+// concurrency, reproducibly:
+//
+//   - ON CONFLICT DO UPDATE takes an exclusive row lock on the stream row and holds it
+//     until commit, which with a shared transaction means for the whole duration of a
+//     5000-row COPY.
+//   - The insert into logs creates hypertable chunks, and Timescale serializes chunk
+//     creation on its own catalog lock.
+//
+// Two writers therefore acquire {stream row, chunk catalog} in whichever order they
+// happen to reach them, and PostgreSQL reports the cycle as SQLSTATE 40P01. It showed
+// up as roughly one lost batch in four on a 20k-record run, and only under real
+// concurrency -- a single-writer test never sees it.
+//
+// Splitting them means the exclusive row lock is held for microseconds and released
+// before any chunk lock is taken. The records transaction then only needs KEY SHARE on
+// the stream row for the foreign key check, which is a shared lock that concurrent
+// writers can all hold at once.
+//
+// The cost is that a crash between the two commits leaves a stream row with no
+// records. That is harmless: streams is a dimension table, and a row there means "this
+// label set was seen", which was true. The reverse ordering -- records first -- would
+// violate the foreign key and lose the batch, which is why it is this way round.
+func (w *Writer) commitStreams(ctx context.Context, batch *writeBatch) error {
+	streams := batch.streamSlice()
+	if len(streams) == 0 {
+		return nil
+	}
+
+	tx, err := w.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin stream upsert: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err := upsertStreams(ctx, tx, streams); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit %d streams: %w", len(streams), err)
+	}
+
+	// Cached only now, after the commit. Caching earlier would let a rolled-back
+	// upsert leave the cache claiming a stream exists, and the next batch's records
+	// would fail their foreign key.
+	at := w.now()
+	for _, s := range streams {
+		w.streams.markUpserted(s.ID, at)
+	}
+	if w.metrics != nil {
+		w.metrics.StreamUpserts.Add(float64(len(streams)))
+	}
+
+	// Cleared so a retry of the records transaction does not redo work that is already
+	// durable.
+	batch.streamsCommitted()
+	return nil
+}
+
+// commitRecords stages the batch with COPY and moves it into the hypertable.
+func (w *Writer) commitRecords(ctx context.Context, batch *writeBatch) (int64, error) {
 	tx, err := w.pool.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("begin: %w", err)
@@ -508,10 +566,6 @@ func (w *Writer) writeOnce(ctx context.Context, batch *writeBatch) (int64, error
 	// unconditional deferred rollback is the safe way to guarantee the transaction
 	// is never left open on an early return.
 	defer func() { _ = tx.Rollback(ctx) }()
-
-	if serr := upsertStreams(ctx, tx, batch.streamSlice()); serr != nil {
-		return 0, serr
-	}
 
 	if _, err = tx.Exec(ctx, createStagingSQL); err != nil {
 		return 0, fmt.Errorf("create staging table: %w", err)
@@ -666,6 +720,10 @@ func (b *writeBatch) streamSlice() []model.Stream {
 	slices.SortFunc(out, func(a, b model.Stream) int { return cmp.Compare(a.ID, b.ID) })
 	return out
 }
+
+// streamsCommitted marks the batch's streams as durable, so a retry of the records
+// transaction does not upsert them again.
+func (b *writeBatch) streamsCommitted() { clear(b.streams) }
 
 func (b *writeBatch) empty() bool             { return len(b.records) == 0 }
 func (b *writeBatch) full(threshold int) bool { return len(b.records) >= threshold }

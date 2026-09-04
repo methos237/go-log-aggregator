@@ -567,6 +567,88 @@ func TestConcurrentWritersDoNotDeadlockOnStreams(t *testing.T) {
 	require.Equal(t, int64(1), countStreams(ctx, t, pool))
 }
 
+// TestConcurrentWritersSpanningChunksDoNotDeadlock is the regression test for the
+// deadlock that made the stream upsert its own transaction (see commitStreams).
+//
+// It maximizes the interleaving that caused it: several writers, one shared stream, a
+// refresh interval short enough that every batch upserts that stream, and records
+// spread over hours so nearly every batch also creates hypertable chunks. Sharing one
+// transaction between the upsert and the insert makes PostgreSQL report SQLSTATE 40P01
+// here, and retries do not save it -- a batch is lost, which shows up as a row count
+// short by a multiple of the batch size.
+func TestConcurrentWritersSpanningChunksDoNotDeadlock(t *testing.T) {
+	t.Parallel()
+
+	pool, _ := migratedDB(t)
+	ctx := testContext(t)
+
+	stream := model.NewStream(model.LabelSet{Service: "api", Host: "shared", Env: "prod"}, time.Now())
+	// Far enough back that every record stays inside the backfill window while still
+	// spanning many 1 hour chunks.
+	base := time.Now().Add(-72 * time.Hour).Truncate(time.Hour)
+
+	const (
+		writers   = 6
+		perWriter = 6000
+		batchSize = 1000
+	)
+
+	runCtx := context.WithoutCancel(ctx)
+
+	var (
+		wg      sync.WaitGroup
+		mu      sync.Mutex
+		ackErrs []error
+	)
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+
+			cfg := writerConfig()
+			cfg.Workers = 2
+			cfg.BatchSize = batchSize
+			// Every batch sees the stream as stale, so every batch upserts it. That is
+			// what puts the exclusive row lock and the chunk lock in the same window.
+			cfg.StreamRefreshInterval = time.Nanosecond
+			w, err := storage.NewWriter(pool, cfg, storage.NewMetrics(nil), testLogger(t))
+			require.NoError(t, err)
+			w.Start(runCtx)
+
+			for offset := 0; offset < perWriter; offset += batchSize {
+				seqBase := index*perWriter + offset
+				_, serr := w.Submit(ctx, storage.Shipment{
+					Stream: stream,
+					// One record per minute, so a 1000-record batch covers ~17 chunks.
+					Records: synthesizeMinutely(stream.ID, base, seqBase, batchSize),
+					Ack: func(err error) {
+						if err == nil {
+							return
+						}
+						mu.Lock()
+						defer mu.Unlock()
+						ackErrs = append(ackErrs, err)
+					},
+				})
+				require.NoError(t, serr)
+			}
+
+			closeCtx, cancel := context.WithTimeout(runCtx, 2*time.Minute)
+			defer cancel()
+			require.NoError(t, w.Close(closeCtx))
+		}(i)
+	}
+	wg.Wait()
+
+	mu.Lock()
+	errs := ackErrs
+	mu.Unlock()
+	require.Empty(t, errs, "batches were lost to write failures")
+
+	require.Equal(t, int64(writers*perWriter), countLogs(ctx, t, pool))
+	require.Equal(t, int64(1), countStreams(ctx, t, pool))
+}
+
 // synthesize builds size records with sequence numbers and timestamps derived from
 // offset, so the same (offset, size) always produces byte-identical records. That is
 // what makes the replay tests meaningful.
@@ -592,6 +674,24 @@ func synthesize(id model.StreamID, base time.Time, offset, size int) []model.Log
 			records[i].TraceID[0] = byte(seq)
 			records[i].SpanID[0] = byte(seq)
 		}
+	}
+	return records
+}
+
+// chunkSpanMinutes is how far synthesizeMinutely spreads records before wrapping:
+// 48 hours, so records land in about 48 one-hour chunks.
+const chunkSpanMinutes = 48 * 60
+
+// synthesizeMinutely spreads records one minute apart so a batch spans many chunks and
+// forces chunk creation to contend between writers.
+//
+// Timestamps wrap after chunkSpanMinutes to keep every record inside the model's
+// backfill window; seq keeps increasing, so the (stream_id, seq, time) dedup key stays
+// unique across the wrap and the row count is still exact.
+func synthesizeMinutely(id model.StreamID, base time.Time, offset, size int) []model.LogRecord {
+	records := synthesize(id, base, offset, size)
+	for i := range records {
+		records[i].Time = base.Add(time.Duration(records[i].Seq%chunkSpanMinutes) * time.Minute)
 	}
 	return records
 }
