@@ -1,7 +1,7 @@
 -- Base schema: the stream dimension table and the logs hypertable.
 --
 -- The shape here is the one decision that is expensive to change later, so the
--- reasoning is recorded inline as well as in .aidocs/decisions/ADR-0002.
+-- reasoning is recorded inline as well as in docs/decisions/ADR-0002.
 
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 

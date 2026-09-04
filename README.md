@@ -121,13 +121,13 @@ The write path is `COPY` into a session-local staging table followed by
 That is what makes at-least-once delivery safe: a redelivered batch is a no-op instead
 of a duplicate or an error. The full reasoning, including the TimescaleDB behaviours
 that shaped it, is in
-[`ADR-0002`](.aidocs/decisions/ADR-0002-schema-and-write-path.md).
+[`ADR-0002`](docs/decisions/ADR-0002-schema-and-write-path.md).
 
 ## Non-goals
 
 Not a Loki or Elasticsearch replacement. No multi-tenancy, no RBAC beyond a static API
 token, no cross-region replication, no plugin system, no TimescaleDB multi-node.
-Rationale for each in [`.aidocs/decisions/`](.aidocs/decisions/).
+Rationale for each in [`docs/decisions/`](docs/decisions/).
 
 ## License
 
