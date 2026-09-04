@@ -1,9 +1,13 @@
 // Command collector is the log aggregator server.
 //
 // One binary runs every server-side role: ingest (gRPC), query (HTTP), and
-// cluster membership. Phase 0 wires configuration, logging, metrics, health
-// probes and graceful shutdown; the ingest, storage, query and cluster
-// subsystems land in later phases.
+// cluster membership. Phase 0 wired configuration, logging, metrics, health
+// probes and graceful shutdown; phase 1 adds the schema and the write path. The
+// ingest, query and cluster subsystems land in later phases.
+//
+// The binary also doubles as the migration tool (-migrate and friends) and as its
+// own container healthcheck (-healthcheck), because the image is distroless and
+// has no shell to run either from.
 package main
 
 import (
@@ -23,12 +27,19 @@ import (
 	"github.com/jamespolk/go-log-aggregator/internal/config"
 	"github.com/jamespolk/go-log-aggregator/internal/httpapi"
 	"github.com/jamespolk/go-log-aggregator/internal/observability"
+	"github.com/jamespolk/go-log-aggregator/internal/storage"
 	"github.com/jamespolk/go-log-aggregator/internal/version"
 )
 
 func main() {
 	showVersion := flag.Bool("version", false, "print version and exit")
 	healthcheck := flag.Bool("healthcheck", false, "probe this process's own /readyz and exit 0 or 1")
+	migrateUp := flag.Bool("migrate", false, "apply pending database migrations and exit")
+	migrateDown := flag.Bool("migrate-down", false, "revert every database migration and exit (destroys all data)")
+	migrateStatus := flag.Bool("migrate-status", false, "print the applied schema version and exit")
+	// Migrations are often run from the host or from CI, where the compose-internal
+	// hostname in the default DSN does not resolve.
+	dbDSN := flag.String("db-dsn", "", "override the configured database DSN")
 	flag.Parse()
 
 	if *showVersion {
@@ -46,7 +57,15 @@ func main() {
 		return
 	}
 
-	if err := run(); err != nil {
+	if *migrateUp || *migrateDown || *migrateStatus {
+		if err := runMigrations(*migrateUp, *migrateDown, *migrateStatus, *dbDSN); err != nil {
+			fmt.Fprintf(os.Stderr, "collector: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	if err := run(*dbDSN); err != nil {
 		// The logger may not exist yet when configuration fails, so this path
 		// writes to stderr directly.
 		fmt.Fprintf(os.Stderr, "collector: %v\n", err)
@@ -54,10 +73,53 @@ func main() {
 	}
 }
 
-func run() error {
+// runMigrations handles the -migrate family of flags. Exactly one runs per
+// invocation; the caller has already established that at least one is set.
+func runMigrations(up, down, status bool, dsnOverride string) error {
+	cfg, err := loadConfig(dsnOverride)
+	if err != nil {
+		return err
+	}
+	log := observability.NewLogger(cfg.Log, os.Stdout, cfg.Node.Name)
+
+	// No signal handling here on purpose: golang-migrate holds an advisory lock and
+	// interrupting a migration midway is how a schema ends up marked dirty. These
+	// commands are short.
+	ctx := context.Background()
+
+	switch {
+	case status:
+		version, dirty, verr := storage.SchemaVersion(ctx, cfg.DB.DSN)
+		if verr != nil {
+			return fmt.Errorf("schema status: %w", verr)
+		}
+		fmt.Printf("schema version %d (dirty=%t)\n", version, dirty)
+		return nil
+	case down:
+		return storage.MigrateDown(ctx, cfg.DB.DSN, log)
+	case up:
+		return storage.Migrate(ctx, cfg.DB.DSN, log)
+	default:
+		return errors.New("no migration action requested")
+	}
+}
+
+// loadConfig loads configuration and applies the DSN override, if any.
+func loadConfig(dsnOverride string) (*config.Config, error) {
 	cfg, err := config.Load()
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return nil, fmt.Errorf("load config: %w", err)
+	}
+	if dsnOverride != "" {
+		cfg.DB.DSN = dsnOverride
+	}
+	return cfg, nil
+}
+
+func run(dsnOverride string) error {
+	cfg, err := loadConfig(dsnOverride)
+	if err != nil {
+		return err
 	}
 
 	log := observability.NewLogger(cfg.Log, os.Stdout, cfg.Node.Name)
@@ -77,11 +139,39 @@ func run() error {
 		slog.Bool("cluster_enabled", cfg.Cluster.Enabled),
 	)
 
-	// Phase 1 replaces this with a real TimescaleDB ping, phase 2 adds a
-	// JetStream check. Registering a placeholder now keeps /readyz meaningful:
-	// it reports ready only once every registered dependency answers.
-	health.Register("self", func(context.Context) error { return nil })
+	// Migrations run before the pool is used for anything else, and before the
+	// listeners come up, so a node never serves traffic against a schema it does not
+	// understand. Concurrent replicas are safe: golang-migrate takes an advisory
+	// lock and the losers observe "already current".
+	if cfg.DB.MigrateOnStart {
+		if migErr := storage.Migrate(ctx, cfg.DB.DSN, log); migErr != nil {
+			return fmt.Errorf("migrate schema: %w", migErr)
+		}
+	}
 
+	pool, err := storage.Open(ctx, cfg.DB, "logagg-collector/"+cfg.Node.Name)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer pool.Close()
+	metrics.Registerer.MustRegister(storage.NewPoolCollector(pool))
+
+	// A dead database makes this node unready rather than dead: restarting would not
+	// bring Postgres back, and phase 2's JetStream buffer is what absorbs the outage.
+	health.Register("database", storage.HealthCheck(pool))
+
+	// Started with no producer yet: phase 2's JetStream consumer is what will call
+	// Submit. Wiring it now means the pool sizing, the metric registration and the
+	// drain-on-shutdown path are exercised by `make dev` and by the compose smoke
+	// test before there is any ingest traffic to debug at the same time.
+	writer, err := storage.NewWriter(pool, cfg.Writer, storage.NewMetrics(metrics.Registerer), log)
+	if err != nil {
+		return fmt.Errorf("create writer: %w", err)
+	}
+	writer.Start(ctx)
+
+	// Phase 2 adds a JetStream check. /readyz reports ready only once every
+	// registered dependency answers.
 	apiSrv := httpapi.New(cfg.HTTP, health, log)
 	adminSrv := observability.NewAdminServer(cfg.Admin, metrics, log)
 
@@ -114,11 +204,20 @@ func run() error {
 
 		log.Info("shutting down", slog.Duration("timeout", cfg.Node.ShutdownTimeout))
 
-		// Stop serving new public traffic first, then tear down admin, so metrics
-		// and profiles stay scrapeable while the API drains.
+		// Stop serving new public traffic first, then drain the writer, then tear
+		// down admin. Order matters: the writer must flush after nothing new can
+		// arrive, and metrics stay scrapeable throughout so the drain is observable.
+		//
+		// The database check is deregistered up front so a shutting-down node reports
+		// unready to a load balancer instead of failing requests it has already
+		// stopped serving.
 		var errs []error
+		health.Deregister("database")
 		if apiErr := apiSrv.Shutdown(shutdownCtx); apiErr != nil {
 			errs = append(errs, fmt.Errorf("http shutdown: %w", apiErr))
+		}
+		if writerErr := writer.Close(shutdownCtx); writerErr != nil {
+			errs = append(errs, fmt.Errorf("writer shutdown: %w", writerErr))
 		}
 		if adminErr := adminSrv.Shutdown(shutdownCtx); adminErr != nil {
 			errs = append(errs, fmt.Errorf("admin shutdown: %w", adminErr))

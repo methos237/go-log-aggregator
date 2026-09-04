@@ -1,0 +1,454 @@
+package storage
+
+import (
+	"context"
+	"errors"
+	"net"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/jamespolk/go-log-aggregator/internal/config"
+	"github.com/jamespolk/go-log-aggregator/internal/model"
+)
+
+// stubPool satisfies NewWriter's nil check for tests that never reach the database.
+// Any call on it would panic, which is the point: nothing in this file may touch
+// Postgres.
+var stubPool pgxpool.Pool
+
+// These tests cover the writer's decision logic without a database. The parts that
+// need real Postgres -- COPY, the staging insert, dedup on replay -- live in
+// test/integration, because faking them would only test the fake.
+
+func testWriterConfig() config.Writer {
+	return config.Writer{
+		Workers:               2,
+		BatchSize:             4,
+		FlushInterval:         50 * time.Millisecond,
+		QueueDepth:            8,
+		WriteTimeout:          time.Second,
+		MaxAttempts:           3,
+		RetryBaseDelay:        time.Millisecond,
+		RetryMaxDelay:         10 * time.Millisecond,
+		StreamCacheSize:       16,
+		StreamRefreshInterval: time.Minute,
+	}
+}
+
+func TestNewWriterRejectsBadInput(t *testing.T) {
+	t.Parallel()
+
+	if _, err := NewWriter(nil, testWriterConfig(), nil, nil); err == nil {
+		t.Error("expected an error for a nil pool")
+	}
+
+	// A zero config would otherwise produce a writer with no workers, whose Submit
+	// blocks forever -- the worst possible failure mode for a write path.
+	if _, err := NewWriter(&stubPool, config.Writer{}, nil, nil); err == nil {
+		t.Error("expected an error for an invalid config")
+	}
+}
+
+func TestIsRetryable(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "connection failure", err: &pgconn.PgError{Code: "08006"}, want: true},
+		{name: "deadlock", err: &pgconn.PgError{Code: "40P01"}, want: true},
+		{name: "serialization failure", err: &pgconn.PgError{Code: "40001"}, want: true},
+		{name: "too many connections", err: &pgconn.PgError{Code: "53300"}, want: true},
+		{name: "admin shutdown", err: &pgconn.PgError{Code: "57P01"}, want: true},
+		{name: "io error", err: &pgconn.PgError{Code: "58030"}, want: true},
+
+		// Bad data or bad SQL: retrying burns attempts and never succeeds.
+		{name: "unique violation", err: &pgconn.PgError{Code: "23505"}, want: false},
+		{name: "foreign key violation", err: &pgconn.PgError{Code: "23503"}, want: false},
+		{name: "not null violation", err: &pgconn.PgError{Code: "23502"}, want: false},
+		{name: "string too long", err: &pgconn.PgError{Code: "22001"}, want: false},
+		{name: "undefined table", err: &pgconn.PgError{Code: "42P01"}, want: false},
+		{name: "malformed code", err: &pgconn.PgError{Code: "X"}, want: false},
+
+		// Shutdown or a blown deadline: the caller has already stopped waiting.
+		{name: "context canceled", err: context.Canceled, want: false},
+		{name: "deadline exceeded", err: context.DeadlineExceeded, want: false},
+
+		// Anything unclassified defaults to retrying, because the unclassifiable
+		// errors on this path are network and pool errors.
+		{name: "network error", err: &net.OpError{Op: "dial", Err: errors.New("refused")}, want: true},
+		{name: "unknown error", err: errors.New("something odd"), want: true},
+
+		// Wrapping must not change the verdict: every error from writeOnce is wrapped
+		// with context before it reaches the retry decision.
+		{
+			name: "wrapped connection failure",
+			err:  errors.Join(errors.New("copy into staging"), &pgconn.PgError{Code: "08003"}),
+			want: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := isRetryable(tc.err); got != tc.want {
+				t.Fatalf("isRetryable(%v) = %t, want %t", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestBackoffGrowsAndStaysBounded(t *testing.T) {
+	t.Parallel()
+
+	const (
+		base     = 10 * time.Millisecond
+		maxDelay = 200 * time.Millisecond
+	)
+
+	// Full jitter means each delay is uniform in (0, ceiling], so the assertion is on
+	// the bound, not on the value. A fixed multiple would make every node in the
+	// cluster retry in lockstep, which is the thundering herd this avoids.
+	for attempt := 1; attempt <= 12; attempt++ {
+		ceiling := min(base<<(attempt-1), maxDelay)
+		for i := 0; i < 200; i++ {
+			got := backoff(attempt, base, maxDelay)
+			if got <= 0 {
+				t.Fatalf("attempt %d produced a non-positive delay %s", attempt, got)
+			}
+			if got > ceiling {
+				t.Fatalf("attempt %d produced %s, above the ceiling %s", attempt, got, ceiling)
+			}
+		}
+	}
+
+	// A nonsensical attempt number must not panic or return a negative delay.
+	if got := backoff(0, base, maxDelay); got <= 0 || got > base {
+		t.Fatalf("backoff(0) = %s, want a positive delay no greater than %s", got, base)
+	}
+}
+
+func TestBackoffDoesNotOverflowOnLargeAttempts(t *testing.T) {
+	t.Parallel()
+
+	// base << 60 overflows time.Duration; the shift must be clamped or the delay goes
+	// negative and time.NewTimer fires instantly, turning backoff into a spin loop.
+	const maxDelay = time.Second
+	for _, attempt := range []int{40, 63, 64, 1000} {
+		got := backoff(attempt, time.Second, maxDelay)
+		if got <= 0 || got > maxDelay {
+			t.Fatalf("backoff(%d) = %s, want a positive delay no greater than %s", attempt, got, maxDelay)
+		}
+	}
+}
+
+func TestSleepReturnsEarlyOnCancel(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if sleep(ctx, time.Hour) {
+		t.Fatal("sleep should report false when the context is already canceled")
+	}
+	if !sleep(context.Background(), time.Millisecond) {
+		t.Fatal("sleep should report true when the timer wins")
+	}
+}
+
+func TestCopyRowMatchesColumnOrder(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, 3, 14, 15, 9, 26, 0, time.UTC)
+	rec := model.LogRecord{
+		StreamID: -42, // negative is legal: stream IDs are reinterpreted hash bits
+		Time:     at,
+		Seq:      9,
+		Level:    model.LevelError,
+		Message:  "boom",
+		TraceID:  []byte("0123456789abcdef"),
+		SpanID:   []byte("01234567"),
+		Fields:   map[string]string{"b": "2", "a": "1"},
+	}
+
+	row, err := copyRow(&rec)
+	if err != nil {
+		t.Fatalf("copyRow: %v", err)
+	}
+	if len(row) != len(logColumns) {
+		t.Fatalf("copyRow returned %d values for %d columns", len(row), len(logColumns))
+	}
+
+	want := []any{at, int64(-42), int64(9), int16(model.LevelError), "boom"}
+	for i, w := range want {
+		if row[i] != w {
+			t.Errorf("column %s = %#v, want %#v", logColumns[i], row[i], w)
+		}
+	}
+	if got := string(row[5].([]byte)); got != "0123456789abcdef" {
+		t.Errorf("trace_id = %q", got)
+	}
+	if got := string(row[6].([]byte)); got != "01234567" {
+		t.Errorf("span_id = %q", got)
+	}
+	// encoding/json sorts map keys, so the JSONB bytes are stable across runs.
+	if got := string(row[7].([]byte)); got != `{"a":"1","b":"2"}` {
+		t.Errorf("fields = %s", got)
+	}
+}
+
+func TestCopyRowUsesNullForAbsentOptionals(t *testing.T) {
+	t.Parallel()
+
+	rec := model.LogRecord{Time: time.Now(), Message: "plain"}
+	row, err := copyRow(&rec)
+	if err != nil {
+		t.Fatalf("copyRow: %v", err)
+	}
+
+	// nil rather than an empty slice or "{}": NULL costs nothing per row, while an
+	// empty JSONB value costs bytes on every row that has no fields.
+	for _, i := range []int{5, 6, 7} {
+		if v, ok := row[i].([]byte); !ok || v != nil {
+			t.Errorf("column %s = %#v, want a nil []byte", logColumns[i], row[i])
+		}
+	}
+}
+
+func TestEncodeLabels(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		extra map[string]string
+		want  string
+	}{
+		// Always an object, never SQL NULL: the column is NOT NULL and containment
+		// queries have no null case to handle.
+		{name: "nil", extra: nil, want: "{}"},
+		{name: "empty", extra: map[string]string{}, want: "{}"},
+		{name: "sorted", extra: map[string]string{"z": "1", "a": "2"}, want: `{"a":"2","z":"1"}`},
+		{name: "escapes quotes", extra: map[string]string{"k": `a"b`}, want: `{"k":"a\"b"}`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := encodeLabels(model.LabelSet{Extra: tc.extra})
+			if err != nil {
+				t.Fatalf("encodeLabels: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("encodeLabels = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestStreamCacheRefreshWindow(t *testing.T) {
+	t.Parallel()
+
+	const refreshAfter = time.Minute
+	cache := newStreamCache(4, refreshAfter, nil)
+	base := time.Date(2026, 3, 14, 15, 0, 0, 0, time.UTC)
+	const id model.StreamID = 1
+
+	if !cache.needsUpsert(id, base) {
+		t.Fatal("an unknown stream must be upserted")
+	}
+
+	cache.markUpserted(id, base)
+	if cache.needsUpsert(id, base.Add(refreshAfter-time.Second)) {
+		t.Fatal("a freshly written stream must not be upserted again")
+	}
+	// At exactly the refresh interval last_seen is stale enough to rewrite. Because
+	// the upsert guards last_seen with GREATEST, being late here is a freshness
+	// tradeoff and never a correctness one.
+	if !cache.needsUpsert(id, base.Add(refreshAfter)) {
+		t.Fatal("a stale stream must be upserted again")
+	}
+}
+
+func TestStreamCacheEvictionForcesReupsert(t *testing.T) {
+	t.Parallel()
+
+	cache := newStreamCache(2, time.Hour, nil)
+	now := time.Now()
+	for id := model.StreamID(1); id <= 3; id++ {
+		cache.markUpserted(id, now)
+	}
+
+	// Eviction must fail safe: forgetting a stream costs one redundant upsert, while
+	// remembering one that is not in the table costs a foreign key violation for a
+	// whole batch.
+	if !cache.needsUpsert(1, now) {
+		t.Fatal("the evicted stream should need upserting again")
+	}
+	if cache.needsUpsert(3, now) {
+		t.Fatal("the most recent stream should still be cached")
+	}
+}
+
+func TestWriteBatchDeduplicatesStreams(t *testing.T) {
+	t.Parallel()
+
+	cache := newStreamCache(16, time.Hour, nil)
+	batch := newWriteBatch(8)
+	now := time.Now()
+
+	labels := model.LabelSet{Service: "api", Host: "h", Env: "prod"}
+	stream := model.NewStream(labels, now)
+
+	for i := 0; i < 3; i++ {
+		sh := Shipment{Stream: stream, Records: []model.LogRecord{{Time: now, Seq: int64(i)}}}
+		batch.add(&sh, cache, now)
+	}
+
+	// One upsert per distinct stream per batch. More than one would make ON CONFLICT
+	// DO UPDATE touch the same row twice, which Postgres rejects outright.
+	if got := len(batch.streams); got != 1 {
+		t.Fatalf("batch holds %d streams, want 1", got)
+	}
+	if got := len(batch.records); got != 3 {
+		t.Fatalf("batch holds %d records, want 3", got)
+	}
+	if got := len(batch.streamSlice()); got != 1 {
+		t.Fatalf("streamSlice returned %d entries, want 1", got)
+	}
+}
+
+func TestWriteBatchSkipsCachedStreams(t *testing.T) {
+	t.Parallel()
+
+	cache := newStreamCache(16, time.Hour, nil)
+	batch := newWriteBatch(8)
+	now := time.Now()
+
+	stream := model.NewStream(model.LabelSet{Service: "api", Host: "h", Env: "prod"}, now)
+	cache.markUpserted(stream.ID, now)
+
+	sh := Shipment{Stream: stream, Records: []model.LogRecord{{Time: now}}}
+	batch.add(&sh, cache, now)
+
+	if len(batch.streams) != 0 {
+		t.Fatalf("a cached stream should not be re-upserted, got %d", len(batch.streams))
+	}
+	if batch.streamSlice() != nil {
+		t.Fatal("streamSlice should be nil when there is nothing to upsert")
+	}
+	if batch.empty() {
+		t.Fatal("the records should still have been queued")
+	}
+}
+
+func TestWriteBatchClonesLabels(t *testing.T) {
+	t.Parallel()
+
+	cache := newStreamCache(16, time.Hour, nil)
+	batch := newWriteBatch(8)
+	now := time.Now()
+
+	labels := model.LabelSet{Service: "api", Host: "h", Env: "prod", Extra: map[string]string{"k": "v"}}
+	sh := Shipment{Stream: model.NewStream(labels, now), Records: []model.LogRecord{{Time: now}}}
+	batch.add(&sh, cache, now)
+
+	// The batch outlives Submit, and the caller may reuse its label map for the next
+	// shipment.
+	labels.Extra["k"] = "mutated"
+	for _, s := range batch.streams {
+		if s.Labels.Extra["k"] != "v" {
+			t.Fatalf("batch aliases the caller's label map: %q", s.Labels.Extra["k"])
+		}
+	}
+}
+
+func TestWriteBatchResetKeepsCapacity(t *testing.T) {
+	t.Parallel()
+
+	cache := newStreamCache(16, time.Hour, nil)
+	batch := newWriteBatch(64)
+	now := time.Now()
+
+	sh := Shipment{
+		Stream:  model.NewStream(model.LabelSet{Service: "s", Host: "h", Env: "e"}, now),
+		Records: make([]model.LogRecord, 32),
+		Ack:     func(error) {},
+	}
+	batch.add(&sh, cache, now)
+
+	capacityBefore := cap(batch.records)
+	batch.reset()
+
+	if !batch.empty() || len(batch.streams) != 0 || len(batch.acks) != 0 {
+		t.Fatal("reset left state behind")
+	}
+	// A steady-state writer must stop allocating after its first few batches.
+	if cap(batch.records) != capacityBefore {
+		t.Fatalf("capacity dropped from %d to %d", capacityBefore, cap(batch.records))
+	}
+}
+
+func TestWriteBatchAckAllRunsEveryCallback(t *testing.T) {
+	t.Parallel()
+
+	cache := newStreamCache(16, time.Hour, nil)
+	batch := newWriteBatch(8)
+	now := time.Now()
+	stream := model.NewStream(model.LabelSet{Service: "s", Host: "h", Env: "e"}, now)
+
+	got := make([]error, 0, 3)
+	for i := 0; i < 3; i++ {
+		sh := Shipment{
+			Stream:  stream,
+			Records: []model.LogRecord{{Time: now}},
+			Ack:     func(err error) { got = append(got, err) },
+		}
+		batch.add(&sh, cache, now)
+	}
+	// A shipment with no Ack must not consume a slot, or the acks would be misaligned.
+	noAck := Shipment{Stream: stream, Records: []model.LogRecord{{Time: now}}}
+	batch.add(&noAck, cache, now)
+
+	want := errors.New("write failed")
+	batch.ackAll(want)
+
+	if len(got) != 3 {
+		t.Fatalf("ackAll invoked %d callbacks, want 3", len(got))
+	}
+	for _, err := range got {
+		if !errors.Is(err, want) {
+			t.Fatalf("callback got %v, want %v", err, want)
+		}
+	}
+}
+
+func TestSubmitBeforeStartFails(t *testing.T) {
+	t.Parallel()
+
+	w, err := NewWriter(&stubPool, testWriterConfig(), nil, nil)
+	if err != nil {
+		t.Fatalf("NewWriter: %v", err)
+	}
+
+	// Without this guard Submit would block on a channel nobody is reading, which
+	// looks like a hung database rather than a wiring mistake.
+	if _, err := w.Submit(context.Background(), Shipment{}); !errors.Is(err, ErrWriterNotStarted) {
+		t.Fatalf("Submit error = %v, want ErrWriterNotStarted", err)
+	}
+}
+
+func TestCloseWithoutStartIsANoOp(t *testing.T) {
+	t.Parallel()
+
+	w, err := NewWriter(&stubPool, testWriterConfig(), nil, nil)
+	if err != nil {
+		t.Fatalf("NewWriter: %v", err)
+	}
+	if err := w.Close(context.Background()); err != nil {
+		t.Fatalf("Close on an unstarted writer: %v", err)
+	}
+}

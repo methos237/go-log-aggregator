@@ -1,0 +1,107 @@
+// Wire format for agent -> collector log shipping.
+//
+// Design notes that matter for the rest of the system:
+//
+//   - Records are grouped into a batch that carries the label set once. Identical
+//     label sets collapse to one stream_id at the collector (see internal/model),
+//     so repeating labels per record would be pure wire overhead.
+//   - Timestamps are int64 unix nanoseconds rather than google.protobuf.Timestamp:
+//     one scalar instead of a heap-allocated message per record, on the hottest
+//     path in the project.
+//   - Levels are an enum, stored as SMALLINT. Never a free-text level column.
+syntax = "proto3";
+
+package logagg.v1;
+
+option go_package = "github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1;logaggv1";
+
+// Level is the severity of a record. Values are stable: they are persisted as
+// integers in the logs table, so they may be appended to but never renumbered.
+enum Level {
+  LEVEL_UNSPECIFIED = 0;
+  LEVEL_TRACE = 1;
+  LEVEL_DEBUG = 2;
+  LEVEL_INFO = 3;
+  LEVEL_WARN = 4;
+  LEVEL_ERROR = 5;
+  LEVEL_FATAL = 6;
+}
+
+// LabelSet identifies the stream a batch belongs to.
+//
+// service, host and env are promoted to their own fields because every query
+// filters on them and they become real columns; everything else lives in the
+// extra map and is stored as JSONB.
+message LabelSet {
+  string service = 1;
+  string host = 2;
+  string env = 3;
+  map<string, string> extra = 4;
+}
+
+// LogRecord is a single log line.
+message LogRecord {
+  // Nanoseconds since the Unix epoch, UTC. Assigned by the agent at read time.
+  int64 time_unix_nano = 1;
+  // Monotonic per-stream counter assigned by the agent. Together with the
+  // stream and the timestamp this forms the storage dedup key, which is what
+  // makes at-least-once delivery safe to replay.
+  int64 seq = 2;
+  Level level = 3;
+  string message = 4;
+  // Raw 16-byte trace ID and 8-byte span ID, empty when absent. Bytes rather
+  // than hex strings: half the wire size and half the storage.
+  bytes trace_id = 5;
+  bytes span_id = 6;
+  // Extracted structured fields. String-valued on purpose: agents extract from
+  // text, and typed JSON would make the same key arrive as a number from one
+  // agent and a string from another.
+  map<string, string> fields = 7;
+}
+
+// LogBatch is one shipment: a label set plus the records observed for it.
+message LogBatch {
+  // Agent-assigned identifier, unique per connection, echoed back in the Ack so
+  // the agent knows which batch it may drop from its spool.
+  string batch_id = 1;
+  LabelSet labels = 2;
+  repeated LogRecord records = 3;
+}
+
+// AckCode reports what the collector did with a batch.
+enum AckCode {
+  ACK_CODE_UNSPECIFIED = 0;
+  // Accepted and durably queued. The agent may drop the batch.
+  ACK_CODE_ACCEPTED = 1;
+  // Rejected because the collector is saturated. Retryable: back off and resend.
+  ACK_CODE_OVERLOADED = 2;
+  // Rejected because the batch is malformed. Not retryable: resending the same
+  // bytes will fail identically, so the agent must drop and count it.
+  ACK_CODE_INVALID = 3;
+  // Rejected because of a collector-side fault. Retryable.
+  ACK_CODE_INTERNAL = 4;
+}
+
+// Ack is the collector's response for one batch.
+message Ack {
+  string batch_id = 1;
+  AckCode code = 2;
+  // Records durably accepted. May be fewer than were sent when individual
+  // records were rejected by validation.
+  uint32 accepted = 3;
+  // Records rejected. accepted + rejected always equals the batch size.
+  uint32 rejected = 4;
+  // Human-readable detail, set only when code is not ACK_CODE_ACCEPTED. Never
+  // parsed by the agent; code carries the decision.
+  string detail = 5;
+}
+
+// LogService ingests logs from agents.
+service LogService {
+  // Stream is bidirectional so acknowledgement is decoupled from submission:
+  // the agent keeps sending while acks arrive asynchronously, and the ack
+  // window is what bounds how much unacknowledged data is in flight.
+  //
+  // An Ack is sent only after the batch is durably queued, never on receipt.
+  rpc Stream(stream LogBatch) returns (stream Ack);
+}
