@@ -1,0 +1,98 @@
+# golangci-lint v2 configuration.
+#
+# Philosophy: enable linters that catch real defects (unchecked errors, leaked
+# contexts, dropped contexts, unclosed bodies) and skip the ones that only argue
+# about style.
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    # Correctness
+    - bodyclose        # unclosed HTTP response bodies leak connections
+    - contextcheck     # functions that should inherit a context but drop it
+    - durationcheck    # multiplying two durations is almost always a bug
+    - errorlint        # %v on errors instead of %w, comparisons without errors.Is
+    - nilerr           # returning nil after checking err != nil
+    - noctx            # HTTP requests built without a context
+    - rowserrcheck     # sql.Rows.Err() left unchecked
+    - sqlclosecheck    # unclosed sql.Rows / sql.Stmt
+    - copyloopvar      # redundant loop variable copies (Go 1.22+ semantics)
+    - makezero         # append to a slice created with a non-zero length
+    - reassign         # reassigning another package's variables
+
+    # Concurrency and performance: the whole point of this project
+    - gocritic
+
+    # Hygiene
+    - misspell
+    - unconvert
+    - wastedassign
+    - whitespace
+    - revive
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+      # check-blank stays off: an explicit `_ = f()` is how you state in code that
+      # the error is knowingly discarded. Flagging it would push people back to
+      # bare calls, which is strictly worse.
+      check-blank: false
+
+    govet:
+      enable-all: true
+      disable:
+        # fieldalignment optimizes struct memory layout at the cost of grouping
+        # related fields together. Readability wins outside hot paths; revisit
+        # for the per-record structs in phase 8 if profiling says it matters.
+        - fieldalignment
+
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - disableStutteringCheck
+        - name: package-comments
+        - name: error-strings
+        - name: context-as-argument
+        - name: indent-error-flow
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+      disabled-checks:
+        # Fires on every multi-branch if/else; not worth the churn.
+        - ifElseChain
+
+    misspell:
+      locale: US
+
+  exclusions:
+    rules:
+      # Tests deliberately ignore errors from setup helpers, and
+      # httptest.NewRequest already carries a background context, so noctx has
+      # nothing useful to say about it.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gocritic
+          - noctx
+
+issues:
+  # Report everything, not just the first few of each kind.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/jamespolk/go-log-aggregator

@@ -1,0 +1,15 @@
+# Overlay for running more than one collector. Applied by `make dev-scale N=5`.
+#
+# Fixed host ports cannot be shared by replicas, so this replaces them with
+# ranges. Compose assigns from a range in nondeterministic order — replica 1 may
+# land on 8083 — so run `make dev-ps` to see the actual mapping. Phase 5 adds a
+# reverse proxy on a stable port in front of the cluster, which removes the
+# guesswork.
+services:
+  collector:
+    # !override replaces the base list instead of appending to it; without it,
+    # compose would keep the fixed 8080 mapping and the second replica would fail
+    # to start with a port collision.
+    ports: !override
+      - "127.0.0.1:8080-8089:8080"
+      - "127.0.0.1:9090-9099:9090"

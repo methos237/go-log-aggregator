@@ -1,0 +1,51 @@
+# Multi-stage build shared by every binary in cmd/. Select one with --build-arg BIN=agent.
+#
+# Base images are pinned by digest, not just tag: a tag can be re-pointed at new
+# content, so digest pinning is what makes a build reproducible and keeps a
+# compromised upstream tag from silently entering the image.
+
+# golang:1.27-alpine
+FROM golang@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS build
+
+WORKDIR /src
+
+# Dependencies resolve in their own layer so source edits do not re-download the
+# module cache on every build.
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+
+COPY . .
+
+ARG BIN=collector
+ARG VERSION=dev
+ARG COMMIT=none
+ARG BUILD_DATE=unknown
+ARG TARGETOS
+ARG TARGETARCH
+
+# CGO off yields a static binary, which is what lets the runtime stage be
+# distroless/static with no libc at all.
+# -trimpath strips local filesystem paths; -s -w drops the symbol table and DWARF.
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+    go build -trimpath \
+      -ldflags "-s -w \
+        -X github.com/jamespolk/go-log-aggregator/internal/version.Version=${VERSION} \
+        -X github.com/jamespolk/go-log-aggregator/internal/version.Commit=${COMMIT} \
+        -X github.com/jamespolk/go-log-aggregator/internal/version.BuildDate=${BUILD_DATE}" \
+      -o /out/app ./cmd/${BIN}
+
+# gcr.io/distroless/static-debian12:nonroot
+# No shell, no package manager, no libc: nothing for an attacker to pivot into,
+# and nothing to patch on a CVE treadmill. Runs as uid 65532.
+FROM gcr.io/distroless/static-debian12@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+
+COPY --from=build /out/app /app
+
+USER 65532:65532
+WORKDIR /
+
+EXPOSE 8080 9090 9095 9096 7946
+
+ENTRYPOINT ["/app"]

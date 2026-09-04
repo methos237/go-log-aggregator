@@ -26,7 +26,23 @@ go.work.sum
 
 # env file
 .env
+.env.*
+
+# Build output
+bin/
+dist/
+
+# Profiles from `make bench` / pprof
+*.prof
+*.pprof
+
+# TLS material for local development. Never commit keys or certificates, even
+# self-signed ones: it teaches the habit of committing them.
+certs/
+*.pem
+*.key
+*.crt
 
 # Editor/IDE
-# .idea/
+.idea/
 # .vscode/

@@ -1,0 +1,104 @@
+# Development stack. Drive it with `make dev` from the repo root, which passes
+# this file explicitly.
+#
+# Credentials here are development-only and deliberately hardcoded so a clean
+# clone starts with no setup. Nothing in this file is safe to expose beyond
+# localhost: the admin port serves pprof unauthenticated, and Postgres accepts a
+# well-known password.
+name: logagg
+
+services:
+  timescaledb:
+    # timescale/timescaledb:2.22.1-pg17
+    image: timescale/timescaledb@sha256:fba60021a224479e174ae1ec577c1a0576d5185b09fe9e622f1d19e4bf5bab0d
+    environment:
+      POSTGRES_USER: logagg
+      POSTGRES_PASSWORD: logagg
+      POSTGRES_DB: logagg
+      # The image runs timescaledb-tune on first boot; telemetry off keeps a dev
+      # database from phoning home.
+      TIMESCALEDB_TELEMETRY: "off"
+    ports:
+      # Bound to loopback only. Publishing 0.0.0.0:5432 with a known password
+      # would expose the database to anything that can reach this host.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - timescale-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U logagg -d logagg"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  nats:
+    # nats:2.12-alpine
+    image: nats@sha256:b270f5e2428354c0335612694d7dd2fb588148e567a5757fdff325ef9c9332e6
+    # -js enables JetStream, -sd sets its storage directory so streams survive a
+    # container restart, -m exposes the monitoring endpoint used by the healthcheck.
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports:
+      - "127.0.0.1:4222:4222"
+      - "127.0.0.1:8222:8222"
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8222/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  collector:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        BIN: collector
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-none}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    environment:
+      LOGAGG_ENV: dev
+      LOGAGG_LOG_LEVEL: ${LOGAGG_LOG_LEVEL:-info}
+      LOGAGG_LOG_FORMAT: json
+      LOGAGG_DB_DSN: postgres://logagg:logagg@timescaledb:5432/logagg?sslmode=disable
+      LOGAGG_QUEUE_URL: nats://nats:4222
+      # Phase 5 flips this on; until then each replica runs standalone.
+      LOGAGG_CLUSTER_ENABLED: "false"
+      LOGAGG_CLUSTER_PEERS: collector:7946
+    ports:
+      # Fixed mappings, which means this file supports exactly one collector.
+      # Compose assigns ports from a range in nondeterministic order, so ranges
+      # here would make `curl 127.0.0.1:8080` a coin flip. Scaling uses the
+      # docker-compose.scale.yml override instead (`make dev-scale`).
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      # The image is distroless: no shell, no curl. The binary probes itself.
+      test: ["CMD", "/app", "-healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    # Hardening that costs nothing here and catches accidental writes to the
+    # image filesystem. /tmp stays writable for pprof output.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+volumes:
+  timescale-data:
+  nats-data:

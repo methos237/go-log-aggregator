@@ -1,0 +1,21 @@
+# Keep the build context small and keep secrets out of image layers.
+.git
+.github
+.idea
+.vscode
+.remember
+.aidocs
+docs
+bin
+dist
+certs
+*.pem
+*.key
+*.crt
+.env
+.env.*
+coverage.*
+*.out
+*.test
+*.prof
+deploy/grafana/data
