@@ -50,6 +50,19 @@ jobs:
         with:
           version: v2.13.2
 
+      # The integration suite is behind a build tag, so the linters above skip it
+      # entirely unless it is asked for explicitly.
+      - name: golangci-lint (integration-tagged code)
+        run: golangci-lint run --build-tags=integration ./test/...
+
+      - name: Lint protobuf definitions
+        run: make proto-lint
+
+      # Generated code is committed, so a .proto edit without a regenerate would
+      # otherwise ship a stale wire format.
+      - name: Generated protobuf code is current
+        run: make proto-check
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -74,6 +87,27 @@ jobs:
           name: coverage
           path: coverage.out
 
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      # testcontainers-go starts TimescaleDB itself, using the same digest-pinned
+      # image deploy/docker-compose.yml runs. No compose stack needed here, and no
+      # LOGAGG_TEST_DB_DSN: that variable is for the local inner loop against
+      # `make dev`.
+      #
+      # This is the job that enforces the phase 1 exit criterion: a million records
+      # through the writer, dedup on replay, and the compression and continuous
+      # aggregate policies doing real work.
+      - name: Run integration tests
+        run: make test-integration
+
   vulncheck:
     name: Vulnerability scan
     runs-on: ubuntu-latest
@@ -84,6 +118,11 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
       - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+      # Scanned separately because the integration suite is behind a build tag and
+      # pulls in testcontainers and the Docker client, which the default scan cannot
+      # see at all.
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest -tags=integration ./...
 
   build:
     name: Build images
@@ -129,6 +168,16 @@ jobs:
 
       - name: Metrics endpoint exposes build info
         run: curl -fsS --retry 10 --retry-delay 2 --retry-all-errors http://127.0.0.1:9090/metrics | grep -q logagg_build_info
+
+      # /readyz only returns 200 once the database check passes, so reaching this point
+      # already proves the pool is live. This asserts the collector also migrated the
+      # schema on the way up, which is what LOGAGG_DB_MIGRATE_ON_START promises.
+      - name: Collector migrated the schema at startup
+        run: |
+          docker compose -f deploy/docker-compose.yml exec -T timescaledb \
+            psql -U logagg -d logagg -tAc \
+            "SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = 'logs'" \
+            | grep -qx 1
 
       - name: pprof is not reachable on the public port
         run: |

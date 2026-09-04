@@ -1,0 +1,26 @@
+# buf module configuration. Drive codegen with `make proto`, which pins the buf
+# and plugin versions so two machines generate byte-identical output.
+#
+# buf rather than protoc: protoc is a C++ binary that every contributor would
+# have to install out of band, while buf and the plugins are Go modules `go run`
+# and `go install` can fetch at a pinned version.
+version: v2
+
+modules:
+  - path: api/proto
+
+lint:
+  use:
+    - STANDARD
+  except:
+    # STANDARD wants StreamRequest/StreamResponse. That convention exists so a
+    # request message can gain fields without disturbing a shared type — but
+    # LogBatch and Ack *are* the domain types here: the agent spools LogBatch to
+    # disk and correlates Ack by batch_id, both outside the RPC. Wrapping them in
+    # single-field envelopes would add a layer that names nothing.
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
+
+breaking:
+  use:
+    - FILE

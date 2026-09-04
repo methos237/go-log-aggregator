@@ -26,6 +26,7 @@ type Config struct {
 	Admin   Admin
 	Ingest  Ingest
 	DB      DB
+	Writer  Writer
 	Queue   Queue
 	Cluster Cluster
 	Log     Log
@@ -86,6 +87,44 @@ type DB struct {
 	// single-operator project; a real multi-replica deploy would run migrations
 	// as a separate job to avoid concurrent DDL.
 	MigrateOnStart bool
+}
+
+// Writer is the pool that batches records into TimescaleDB.
+//
+// These are the throughput knobs. Phase 8 sweeps BatchSize and Workers and
+// publishes the numbers, so every one of them is an environment variable rather
+// than a constant.
+type Writer struct {
+	// Workers is the number of concurrent batch-writing goroutines. Each one holds
+	// one pooled connection while it writes, so this should stay below DB.MaxConns
+	// or workers will simply queue on connection acquisition.
+	Workers int
+	// BatchSize is the record count that triggers a write. Larger batches amortize
+	// the round trip and the staging-table insert; too large and a single failure
+	// retries a lot of work.
+	BatchSize int
+	// FlushInterval writes a partial batch that has been waiting this long, which is
+	// what bounds ingest-to-queryable latency on a quiet stream.
+	FlushInterval time.Duration
+	// QueueDepth is the capacity of the bounded channel feeding the workers, in
+	// shipments. Full means Submit blocks, which is the intended backpressure:
+	// JetStream is the buffer, not process memory.
+	QueueDepth int
+	// WriteTimeout bounds a single write attempt.
+	WriteTimeout time.Duration
+	// MaxAttempts includes the first try. Retries are safe because the insert is
+	// idempotent through the dedup index.
+	MaxAttempts int
+	// RetryBaseDelay and RetryMaxDelay bound exponential backoff with full jitter.
+	RetryBaseDelay time.Duration
+	RetryMaxDelay  time.Duration
+	// StreamCacheSize caps the in-memory set of streams known to exist in the
+	// dimension table. Bounded because label cardinality is attacker- and
+	// misconfiguration-controlled.
+	StreamCacheSize int
+	// StreamRefreshInterval is how often a stream's last_seen is rewritten. Trades
+	// freshness of /v1/labels against write volume.
+	StreamRefreshInterval time.Duration
 }
 
 // Queue is the NATS JetStream connection.
@@ -166,6 +205,21 @@ func Load() (*Config, error) {
 			ConnMaxLifetime: e.dur("DB_CONN_MAX_LIFETIME", time.Hour),
 			ConnectTimeout:  e.dur("DB_CONNECT_TIMEOUT", 10*time.Second),
 			MigrateOnStart:  e.bool("DB_MIGRATE_ON_START", true),
+		},
+		Writer: Writer{
+			Workers:       e.int("WRITER_WORKERS", 4),
+			BatchSize:     e.int("WRITER_BATCH_SIZE", 5000),
+			FlushInterval: e.dur("WRITER_FLUSH_INTERVAL", 250*time.Millisecond),
+			QueueDepth:    e.int("WRITER_QUEUE_DEPTH", 1024),
+			WriteTimeout:  e.dur("WRITER_WRITE_TIMEOUT", 30*time.Second),
+			MaxAttempts:   e.int("WRITER_MAX_ATTEMPTS", 5),
+			// 50ms doubling to a 5s ceiling: five attempts span a few seconds, which
+			// covers a leader failover or a brief connection storm without holding a
+			// batch long enough for JetStream to redeliver it.
+			RetryBaseDelay:        e.dur("WRITER_RETRY_BASE_DELAY", 50*time.Millisecond),
+			RetryMaxDelay:         e.dur("WRITER_RETRY_MAX_DELAY", 5*time.Second),
+			StreamCacheSize:       e.int("WRITER_STREAM_CACHE_SIZE", 8192),
+			StreamRefreshInterval: e.dur("WRITER_STREAM_REFRESH_INTERVAL", 5*time.Minute),
 		},
 		Queue: Queue{
 			URL:            e.str("QUEUE_URL", "nats://nats:4222"),
@@ -251,6 +305,15 @@ func (c *Config) Validate() error {
 	if c.DB.MinConns > c.DB.MaxConns {
 		bad("db min conns %d exceeds max conns %d", c.DB.MinConns, c.DB.MaxConns)
 	}
+	if err := c.Writer.Validate(); err != nil {
+		errs = append(errs, err)
+	}
+	// A worker holds a pooled connection for the whole of its write transaction, so
+	// more workers than connections just moves the queue from the channel to the
+	// pool's acquire path, where it is harder to see.
+	if c.Writer.Workers > c.DB.MaxConns {
+		bad("writer workers %d exceeds db max conns %d", c.Writer.Workers, c.DB.MaxConns)
+	}
 	if c.Queue.URL == "" {
 		bad("queue url must not be empty")
 	}
@@ -276,6 +339,50 @@ func (c *Config) Validate() error {
 	}
 	if c.Log.Format != "json" && c.Log.Format != "text" {
 		bad("log format must be json or text, got %q", c.Log.Format)
+	}
+
+	return errors.Join(errs...)
+}
+
+// Validate reports every invalid writer setting at once.
+//
+// A method on Writer rather than inline in Config.Validate so storage.NewWriter can
+// check a hand-built config in tests without constructing a whole Config.
+func (w *Writer) Validate() error {
+	var errs []error
+	bad := func(format string, args ...any) {
+		errs = append(errs, fmt.Errorf(format, args...))
+	}
+
+	if w.Workers < 1 {
+		bad("writer workers must be at least 1, got %d", w.Workers)
+	}
+	if w.BatchSize < 1 {
+		bad("writer batch size must be at least 1, got %d", w.BatchSize)
+	}
+	if w.FlushInterval <= 0 {
+		bad("writer flush interval must be positive, got %s", w.FlushInterval)
+	}
+	if w.QueueDepth < 1 {
+		bad("writer queue depth must be at least 1, got %d", w.QueueDepth)
+	}
+	if w.WriteTimeout <= 0 {
+		bad("writer write timeout must be positive, got %s", w.WriteTimeout)
+	}
+	if w.MaxAttempts < 1 {
+		bad("writer max attempts must be at least 1, got %d", w.MaxAttempts)
+	}
+	if w.RetryBaseDelay <= 0 {
+		bad("writer retry base delay must be positive, got %s", w.RetryBaseDelay)
+	}
+	if w.RetryMaxDelay < w.RetryBaseDelay {
+		bad("writer retry max delay %s is below base delay %s", w.RetryMaxDelay, w.RetryBaseDelay)
+	}
+	if w.StreamCacheSize < 1 {
+		bad("writer stream cache size must be at least 1, got %d", w.StreamCacheSize)
+	}
+	if w.StreamRefreshInterval <= 0 {
+		bad("writer stream refresh interval must be positive, got %s", w.StreamRefreshInterval)
 	}
 
 	return errors.Join(errs...)

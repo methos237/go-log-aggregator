@@ -24,6 +24,17 @@ LDFLAGS     := -s -w \
 BIN_DIR := bin
 CMDS    := $(notdir $(wildcard cmd/*))
 
+# Pinned codegen toolchain. These are not go.mod dependencies: nothing in the
+# built binaries imports them, and adding them would put buf's dependency tree
+# into every `go mod download`.
+BUF_VERSION                := v1.72.0
+PROTOC_GEN_GO_VERSION      := v1.36.12
+PROTOC_GEN_GO_GRPC_VERSION := v1.6.2
+
+# Host DSN for migrations run from the host rather than from inside a container.
+# Matches the port deploy/docker-compose.yml publishes on loopback.
+DB_DSN ?= postgres://logagg:logagg@127.0.0.1:5432/logagg?sslmode=disable
+
 export VERSION COMMIT BUILD_DATE
 
 .PHONY: help
@@ -145,15 +156,48 @@ dev-scale: ## Scale collectors: make dev-scale N=5 (host ports become a range)
 psql: ## Open a psql shell against the dev database
 	$(COMPOSE) exec timescaledb psql -U logagg -d logagg
 
-## ---- placeholders for later phases ---------------------------------------
+## ---- protobuf -------------------------------------------------------------
+
+.PHONY: proto-tools
+proto-tools: ## Install pinned protoc plugins into bin/
+	@mkdir -p $(BIN_DIR)
+	GOBIN=$(CURDIR)/$(BIN_DIR) go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
+	GOBIN=$(CURDIR)/$(BIN_DIR) go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@$(PROTOC_GEN_GO_GRPC_VERSION)
 
 .PHONY: proto
-proto: ## Generate Go code from protobuf definitions (phase 1)
-	@echo "not implemented until phase 1: api/proto has no definitions yet"
+proto: proto-tools ## Generate Go code from protobuf definitions
+	PATH="$(CURDIR)/$(BIN_DIR):$$PATH" go run github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION) generate
+
+.PHONY: proto-lint
+proto-lint: ## Lint protobuf definitions
+	go run github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION) lint
+
+.PHONY: proto-check
+proto-check: proto ## Fail if the committed generated code is stale
+	@if ! git diff --quiet -- api/proto; then \
+		echo "generated protobuf code is stale; run 'make proto' and commit the result"; \
+		git diff --stat -- api/proto; exit 1; \
+	fi
+
+## ---- database -------------------------------------------------------------
 
 .PHONY: migrate
-migrate: ## Apply database migrations (phase 1)
-	@echo "not implemented until phase 1: migrations/ is empty"
+migrate: ## Apply database migrations against DB_DSN
+	go run ./cmd/collector -migrate -db-dsn "$(DB_DSN)"
+
+.PHONY: migrate-status
+migrate-status: ## Print the applied schema version of DB_DSN
+	go run ./cmd/collector -migrate-status -db-dsn "$(DB_DSN)"
+
+.PHONY: migrate-down
+migrate-down: ## Roll every migration back (destroys all data in DB_DSN)
+	go run ./cmd/collector -migrate-down -db-dsn "$(DB_DSN)"
+
+.PHONY: test-integration
+test-integration: ## Run integration tests (needs Docker, or LOGAGG_TEST_DB_DSN)
+	go test -tags=integration -timeout 20m ./test/integration/...
+
+## ---- placeholders for later phases ---------------------------------------
 
 .PHONY: certs
 certs: ## Generate development mTLS certificates (phase 2)

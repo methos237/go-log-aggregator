@@ -1,0 +1,191 @@
+package storage
+
+import (
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/jamespolk/go-log-aggregator/internal/observability"
+)
+
+// Drop and retry reasons. These are metric label values, so they are a closed set
+// of short constants rather than formatted strings: a reason derived from an error
+// message would blow up cardinality the first time a DSN appeared in one.
+const (
+	reasonQueueFull    = "writer_queue_full"
+	reasonInvalid      = "invalid_record"
+	reasonWriteFailed  = "write_failed"
+	reasonShutdown     = "shutdown"
+	reasonRetryable    = "retryable_db_error"
+	reasonNonRetryable = "non_retryable_db_error"
+)
+
+// queueWriter names the writer's bounded intake channel in queue-labeled metrics.
+const queueWriter = "writer"
+
+// storageSubsystem prefixes metrics that are specific to this package. The
+// queue/batch/write families deliberately do not use it: they are named in §6 of
+// the roadmap and shared with the ingest and queue layers, so a dashboard can plot
+// every bounded queue in the system on one panel.
+const storageSubsystem = "storage"
+
+// Metrics is the storage subsystem's instrumentation.
+//
+// Passed in rather than package-global so tests can register against a throwaway
+// registry, and so the node label that observability.Metrics applies is not
+// bypassed. A nil Registerer is accepted and means "build the metrics but do not
+// export them", which is what unit tests want.
+type Metrics struct {
+	// Bounded-queue instrumentation, per the roadmap rule that every bounded queue
+	// exposes both a depth gauge and a wait-time histogram. Depth alone cannot
+	// distinguish "full but draining fast" from "full and stuck".
+	QueueDepth *prometheus.GaugeVec
+	QueueWait  *prometheus.HistogramVec
+
+	BatchSize     prometheus.Histogram
+	WriteDuration *prometheus.HistogramVec
+
+	RowsCopied     prometheus.Counter
+	RowsInserted   prometheus.Counter
+	RowsDeduped    prometheus.Counter
+	RecordsDropped *prometheus.CounterVec
+	WriteRetries   *prometheus.CounterVec
+
+	StreamUpserts       prometheus.Counter
+	StreamCacheHits     prometheus.Counter
+	StreamCacheMisses   prometheus.Counter
+	StreamCacheEntries  prometheus.Gauge
+	StreamCacheCapacity prometheus.Gauge
+}
+
+// NewMetrics registers the storage metrics and returns them.
+func NewMetrics(reg prometheus.Registerer) *Metrics {
+	f := promauto.With(reg)
+
+	m := &Metrics{
+		QueueDepth: f.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: observability.Namespace,
+			Name:      "queue_depth",
+			Help:      "Records currently waiting in a bounded in-process queue.",
+		}, []string{"queue"}),
+
+		QueueWait: f.NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: observability.Namespace,
+			Name:      "queue_wait_seconds",
+			Help:      "Time a record spent waiting in a bounded in-process queue.",
+			// Sub-millisecond at the low end because a healthy writer queue is
+			// nearly empty; the top buckets are seconds wide, because that is the
+			// regime where backpressure is doing its job and the shape matters.
+			Buckets: []float64{0.0001, 0.001, 0.005, 0.025, 0.1, 0.5, 1, 5, 30},
+		}, []string{"queue"}),
+
+		BatchSize: f.NewHistogram(prometheus.HistogramOpts{
+			Namespace: observability.Namespace,
+			Name:      "batch_size",
+			Help:      "Records per write batch.",
+			// Powers of two from 16 to 32k: batch size is the main throughput knob
+			// and phase 8 sweeps it, so the buckets must span that whole sweep.
+			Buckets: prometheus.ExponentialBuckets(16, 2, 12),
+		}),
+
+		WriteDuration: f.NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: observability.Namespace,
+			Name:      "write_duration_seconds",
+			Help:      "Wall time to persist one batch, including stream upserts and retries.",
+			Buckets:   prometheus.ExponentialBuckets(0.001, 2.5, 10),
+		}, []string{"outcome"}),
+
+		RowsCopied: f.NewCounter(prometheus.CounterOpts{
+			Namespace: observability.Namespace,
+			Subsystem: storageSubsystem,
+			Name:      "rows_copied_total",
+			Help:      "Rows COPYed into the staging table.",
+		}),
+
+		RowsInserted: f.NewCounter(prometheus.CounterOpts{
+			Namespace: observability.Namespace,
+			Subsystem: storageSubsystem,
+			Name:      "rows_inserted_total",
+			Help:      "Rows that reached the logs hypertable.",
+		}),
+
+		// The gap between copied and inserted is the redelivery rate that
+		// at-least-once delivery produces. Its own counter makes "what is
+		// redelivery costing" a query rather than an arithmetic exercise.
+		RowsDeduped: f.NewCounter(prometheus.CounterOpts{
+			Namespace: observability.Namespace,
+			Subsystem: storageSubsystem,
+			Name:      "rows_deduplicated_total",
+			Help:      "Rows discarded by the dedup index on insert, i.e. redeliveries.",
+		}),
+
+		RecordsDropped: f.NewCounterVec(prometheus.CounterOpts{
+			Namespace: observability.Namespace,
+			Name:      "records_dropped_total",
+			Help:      "Records the storage layer refused or gave up on.",
+		}, []string{"reason"}),
+
+		WriteRetries: f.NewCounterVec(prometheus.CounterOpts{
+			Namespace: observability.Namespace,
+			Subsystem: storageSubsystem,
+			Name:      "write_retries_total",
+			Help:      "Batch write attempts that failed and were retried.",
+		}, []string{"reason"}),
+
+		StreamUpserts: f.NewCounter(prometheus.CounterOpts{
+			Namespace: observability.Namespace,
+			Subsystem: storageSubsystem,
+			Name:      "stream_upserts_total",
+			Help:      "Streams written to the dimension table.",
+		}),
+
+		StreamCacheHits: f.NewCounter(prometheus.CounterOpts{
+			Namespace: observability.Namespace,
+			Subsystem: storageSubsystem,
+			Name:      "stream_cache_hits_total",
+			Help:      "Stream lookups served from the in-memory cache.",
+		}),
+
+		StreamCacheMisses: f.NewCounter(prometheus.CounterOpts{
+			Namespace: observability.Namespace,
+			Subsystem: storageSubsystem,
+			Name:      "stream_cache_misses_total",
+			Help:      "Stream lookups that required an upsert.",
+		}),
+
+		StreamCacheEntries: f.NewGauge(prometheus.GaugeOpts{
+			Namespace: observability.Namespace,
+			Subsystem: storageSubsystem,
+			Name:      "stream_cache_entries",
+			Help:      "Streams currently cached.",
+		}),
+
+		StreamCacheCapacity: f.NewGauge(prometheus.GaugeOpts{
+			Namespace: observability.Namespace,
+			Subsystem: storageSubsystem,
+			Name:      "stream_cache_capacity_entries",
+			Help:      "Configured stream cache capacity, in entries.",
+		}),
+	}
+
+	// Pre-create the label combinations that matter so a dashboard shows 0 rather
+	// than a gap before the first drop or retry. An alert on a series that does not
+	// exist yet does not fire.
+	for _, reason := range []string{reasonQueueFull, reasonInvalid, reasonWriteFailed, reasonShutdown} {
+		m.RecordsDropped.WithLabelValues(reason)
+	}
+	for _, reason := range []string{reasonRetryable, reasonNonRetryable} {
+		m.WriteRetries.WithLabelValues(reason)
+	}
+	for _, outcome := range []string{outcomeSuccess, outcomeFailure} {
+		m.WriteDuration.WithLabelValues(outcome)
+	}
+	m.QueueDepth.WithLabelValues(queueWriter)
+	m.QueueWait.WithLabelValues(queueWriter)
+
+	return m
+}
+
+const (
+	outcomeSuccess = "success"
+	outcomeFailure = "failure"
+)

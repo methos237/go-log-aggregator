@@ -1,0 +1,19 @@
+# Code generation for api/proto. Run via `make proto`.
+#
+# Generated files are committed to git: a clean clone must build with nothing but
+# a Go toolchain, and reviewers can see wire-format changes in the diff.
+#
+# Managed mode is off on purpose. Every .proto declares its own go_package, so
+# the mapping from proto path to Go import path is visible in the file being
+# edited rather than in this config.
+version: v2
+
+plugins:
+  # paths=source_relative writes logagg/v1/ingest.pb.go next to the .proto
+  # instead of nesting a full module path under the output directory.
+  - local: protoc-gen-go
+    out: api/proto
+    opt: paths=source_relative
+  - local: protoc-gen-go-grpc
+    out: api/proto
+    opt: paths=source_relative

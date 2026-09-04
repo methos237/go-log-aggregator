@@ -10,10 +10,12 @@ over a consistent hash ring, so nodes can join and leave while ingest continues.
 **Delivery semantics: at-least-once end to end, deduplicated at the storage layer.**
 Not exactly-once.
 
-> **Status: phase 0 of 9 complete.** Configuration, logging, metrics, health probes,
-> graceful shutdown, the container image, and the development stack are in place.
-> Ingest, storage, the query compiler, and the cluster layer land in phases 1–5. The
-> full plan is in [`.aidocs/ROADMAP.md`](.aidocs/ROADMAP.md).
+> **Status: phase 1 of 9 complete.** Foundations (configuration, logging, metrics,
+> health probes, graceful shutdown, container image, dev stack) plus the data model,
+> schema and write path: protobuf wire format, TimescaleDB hypertable with compression
+> and continuous aggregates, and a batching writer pool that deduplicates redelivered
+> records. The gRPC ingest service, agent, query compiler and cluster layer land in
+> phases 2–5. The full plan is in [`.aidocs/ROADMAP.md`](.aidocs/ROADMAP.md).
 
 ## Quickstart
 
@@ -79,14 +81,47 @@ values are reported all at once at startup rather than one per restart.
 ## Development
 
 ```bash
-make test        # unit tests
-make test-race   # unit tests under the race detector
-make lint        # golangci-lint
-make cover       # coverage report
-make ci          # everything CI enforces
+make test              # unit tests, no Docker needed
+make test-race         # unit tests under the race detector
+make test-integration  # integration tests against a real TimescaleDB
+make lint              # golangci-lint
+make cover             # coverage report
+make ci                # everything CI enforces
+make proto             # regenerate protobuf code (pinned buf + plugins)
+make migrate           # apply migrations to DB_DSN
+make migrate-status    # print the applied schema version
 ```
 
-Go 1.27, golangci-lint v2.
+Go 1.27, golangci-lint v2. `make proto` needs no protoc: `buf` and the plugins are Go
+modules fetched at pinned versions, and the generated code is committed so a clean
+clone builds with only a Go toolchain.
+
+Integration tests start their own TimescaleDB container via testcontainers-go. For a
+faster inner loop, point them at an already-running `make dev` stack — each test still
+gets its own freshly migrated database:
+
+```bash
+LOGAGG_TEST_DB_DSN='postgres://logagg:logagg@127.0.0.1:5432/logagg?sslmode=disable' \
+  LOGAGG_TEST_RECORDS=50000 make test-integration
+```
+
+`LOGAGG_TEST_RECORDS` scales the throughput test down from its default of one million.
+
+## Data model
+
+Label sets are deduplicated into a `streams` dimension table keyed by a 64-bit hash of
+their canonical encoding, so every node derives the same `stream_id` with no
+coordination. Log rows are narrow and reference it. `logs` is a TimescaleDB hypertable
+with 1 hour chunks, columnar compression segmented by stream, 30 day retention, and
+per-minute and per-hour count aggregates that the query planner will choose between in
+phase 4.
+
+The write path is `COPY` into a session-local staging table followed by
+`INSERT ... ON CONFLICT DO NOTHING` against a unique `(stream_id, seq, time)` index.
+That is what makes at-least-once delivery safe: a redelivered batch is a no-op instead
+of a duplicate or an error. The full reasoning, including the TimescaleDB behaviours
+that shaped it, is in
+[`ADR-0002`](.aidocs/decisions/ADR-0002-schema-and-write-path.md).
 
 ## Non-goals
 
