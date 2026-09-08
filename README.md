@@ -78,6 +78,30 @@ with `LOGAGG_`-prefixed environment variables — for example `LOGAGG_LOG_LEVEL=
 [`internal/config/config.go`](internal/config/config.go) for the full list; invalid
 values are reported all at once at startup rather than one per restart.
 
+### mTLS on the ingest port
+
+Ingest speaks plaintext when no TLS files are configured, which is what makes
+`make dev` work with no setup. Enabling it requires all three of a server
+certificate, its key, and a client CA — configuring the first two without the third
+is refused at startup rather than served as one-way TLS, which would encrypt the
+connection while letting anyone who can reach the port write logs into the cluster.
+
+```bash
+make certs         # writes certs/ (gitignored): ca, server, client
+make certs-verify  # show what those certificates actually claim
+
+LOGAGG_INGEST_TLS_CERT_FILE=certs/server.pem \
+LOGAGG_INGEST_TLS_KEY_FILE=certs/server-key.pem \
+LOGAGG_INGEST_TLS_CLIENT_CA_FILE=certs/ca.pem \
+  go run ./cmd/collector
+```
+
+**These certificates are for local development only.** They are self-signed by a CA
+whose private key sits in your working tree, they last a year, and nothing can revoke
+them. A real deployment gets certificates from a CA with a rotation and revocation
+story, and keys that were never on a laptop. `certs/` and `*.pem` are gitignored:
+never commit key material, self-signed included, because it teaches the habit.
+
 ## Development
 
 ```bash
@@ -90,6 +114,7 @@ make ci                # everything CI enforces
 make proto             # regenerate protobuf code (pinned buf + plugins)
 make migrate           # apply migrations to DB_DSN
 make migrate-status    # print the applied schema version
+make certs             # development mTLS material (gitignored)
 ```
 
 Go 1.27, golangci-lint v2. `make proto` needs no protoc: `buf` and the plugins are Go

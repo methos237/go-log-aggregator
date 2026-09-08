@@ -197,8 +197,74 @@ migrate-down: ## Roll every migration back (destroys all data in DB_DSN)
 test-integration: ## Run integration tests (needs Docker, or LOGAGG_TEST_DB_DSN)
 	go test -tags=integration -timeout 20m ./test/integration/...
 
-## ---- placeholders for later phases ---------------------------------------
+## ---- tls ------------------------------------------------------------------
+
+# Development mTLS material. CERT_DIR is gitignored; see .gitignore.
+#
+# These are for `make dev` and for local experiments, nothing else. A real
+# deployment gets certificates from a CA that can revoke them, with a rotation
+# story and keys that were never on a laptop.
+CERT_DIR  ?= certs
+CERT_DAYS ?= 365
+CERT_SANS ?= DNS:localhost,DNS:collector,DNS:agent,IP:127.0.0.1,IP:::1
 
 .PHONY: certs
-certs: ## Generate development mTLS certificates (phase 2)
-	@echo "not implemented until phase 2"
+certs: ## Generate development mTLS certificates into certs/ (gitignored)
+	@if [[ -f "$(CERT_DIR)/ca.pem" ]]; then \
+		echo "$(CERT_DIR)/ca.pem already exists; run 'make certs-clean' first"; exit 1; \
+	fi
+	@mkdir -p $(CERT_DIR)
+	@umask 077; \
+	tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
+	printf '%s\n' \
+		'[req]' 'distinguished_name = dn' 'prompt = no' \
+		'[dn]' 'CN = logagg-dev-ca' \
+		'[ext]' 'basicConstraints = critical,CA:TRUE,pathlen:0' \
+		'keyUsage = critical,keyCertSign,cRLSign' > "$$tmp/ca.cnf"; \
+	printf '%s\n' \
+		'[req]' 'distinguished_name = dn' 'prompt = no' \
+		'[dn]' 'CN = collector' \
+		'[ext]' 'basicConstraints = critical,CA:FALSE' \
+		'keyUsage = critical,digitalSignature,keyEncipherment' \
+		'extendedKeyUsage = serverAuth' \
+		'subjectAltName = $(CERT_SANS)' > "$$tmp/server.cnf"; \
+	printf '%s\n' \
+		'[req]' 'distinguished_name = dn' 'prompt = no' \
+		'[dn]' 'CN = agent' \
+		'[ext]' 'basicConstraints = critical,CA:FALSE' \
+		'keyUsage = critical,digitalSignature' \
+		'extendedKeyUsage = clientAuth' > "$$tmp/client.cnf"; \
+	openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -noenc \
+		-days $(CERT_DAYS) -config "$$tmp/ca.cnf" -extensions ext \
+		-keyout $(CERT_DIR)/ca-key.pem -out $(CERT_DIR)/ca.pem 2>/dev/null; \
+	for name in server client; do \
+		openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -noenc \
+			-config "$$tmp/$$name.cnf" \
+			-keyout $(CERT_DIR)/$$name-key.pem -out "$$tmp/$$name.csr" 2>/dev/null; \
+		openssl x509 -req -in "$$tmp/$$name.csr" -days $(CERT_DAYS) \
+			-CA $(CERT_DIR)/ca.pem -CAkey $(CERT_DIR)/ca-key.pem -set_serial $$RANDOM$$RANDOM \
+			-extfile "$$tmp/$$name.cnf" -extensions ext \
+			-out $(CERT_DIR)/$$name.pem 2>/dev/null; \
+	done
+	@chmod 600 $(CERT_DIR)/*-key.pem
+	@echo "development certificates written to $(CERT_DIR)/ (gitignored, dev only):"
+	@echo "  ca.pem          trust root for both sides"
+	@echo "  server.pem/-key collector, SAN $(CERT_SANS)"
+	@echo "  client.pem/-key agent"
+	@echo
+	@echo "enable mTLS on the collector:"
+	@echo "  LOGAGG_INGEST_TLS_CERT_FILE=$(CERT_DIR)/server.pem"
+	@echo "  LOGAGG_INGEST_TLS_KEY_FILE=$(CERT_DIR)/server-key.pem"
+	@echo "  LOGAGG_INGEST_TLS_CLIENT_CA_FILE=$(CERT_DIR)/ca.pem"
+
+.PHONY: certs-clean
+certs-clean: ## Delete the development certificates
+	rm -rf $(CERT_DIR)
+
+.PHONY: certs-verify
+certs-verify: ## Show what the development certificates actually say
+	@openssl verify -CAfile $(CERT_DIR)/ca.pem $(CERT_DIR)/server.pem $(CERT_DIR)/client.pem
+	@for f in server client; do \
+		echo "--- $$f"; \
+		openssl x509 -in $(CERT_DIR)/$$f.pem -noout -subject -dates -ext subjectAltName,extendedKeyUsage; \
+	done

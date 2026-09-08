@@ -325,13 +325,19 @@ func (c *Config) Validate() error {
 		bad("ingest publish workers must be at least 1, got %d", c.Ingest.PublishWorkers)
 	}
 
-	// Partial TLS configuration is worse than none: it silently serves plaintext.
+	// Partial TLS configuration is worse than none: it silently serves plaintext, or
+	// it serves one-way TLS that looks authenticated and is not.
 	certSet, keySet := c.Ingest.TLSCertFile != "", c.Ingest.TLSKeyFile != ""
 	switch {
 	case certSet != keySet:
 		bad("ingest TLS needs both cert and key files, got cert=%q key=%q", c.Ingest.TLSCertFile, c.Ingest.TLSKeyFile)
 	case !certSet && c.Ingest.TLSClientCAFile != "":
 		bad("ingest client CA is set but server TLS is not enabled")
+	case certSet && c.Ingest.TLSClientCAFile == "":
+		// mTLS is the baseline for this hop (roadmap §8). Server-only TLS would
+		// encrypt the connection while letting anyone who can reach the port write
+		// logs into the cluster.
+		bad("ingest TLS is enabled without a client CA: mutual authentication is required")
 	}
 
 	if c.DB.DSN == "" {

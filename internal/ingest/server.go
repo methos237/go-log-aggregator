@@ -30,6 +30,7 @@ type Server struct {
 	grpc     *grpc.Server
 	lis      net.Listener
 	pipeline *pipeline
+	mtls     bool
 	log      *slog.Logger
 }
 
@@ -68,6 +69,13 @@ func New(ctx context.Context, cfg config.Ingest, q queue.Publisher, metrics *Met
 	}
 	log = log.With(slog.String("component", "ingest"))
 
+	// Certificates are loaded before anything is bound or started, so a bad TLS
+	// configuration leaves nothing to unwind.
+	opts, err := serverOptions(cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	var lc net.ListenConfig
 	lis, err := lc.Listen(ctx, "tcp", cfg.Addr)
 	if err != nil {
@@ -80,7 +88,7 @@ func New(ctx context.Context, cfg config.Ingest, q queue.Publisher, metrics *Met
 	pipe := newPipeline(ctx, cfg, q, metrics, log, time.Now)
 	pipe.start()
 
-	srv := grpc.NewServer(serverOptions(cfg)...)
+	srv := grpc.NewServer(opts...)
 	logaggv1.RegisterLogServiceServer(srv, &service{
 		pipeline: pipe,
 		log:      log,
@@ -88,7 +96,7 @@ func New(ctx context.Context, cfg config.Ingest, q queue.Publisher, metrics *Met
 		now:      time.Now,
 	})
 
-	return &Server{grpc: srv, lis: lis, pipeline: pipe, log: log}, nil
+	return &Server{grpc: srv, lis: lis, pipeline: pipe, mtls: cfg.TLSCertFile != "", log: log}, nil
 }
 
 // serverOptions is the server's resource envelope.
@@ -98,11 +106,19 @@ func New(ctx context.Context, cfg config.Ingest, q queue.Publisher, metrics *Met
 // process allocate for a single message. gRPC's own default is 4MB, but leaving it
 // implicit would mean the limit silently changed with a dependency bump.
 //
+// Transport security is part of this envelope: an unauthenticated peer should not
+// get as far as allocating a message.
+//
 //nolint:gocritic // hugeParam: called once per process
-func serverOptions(cfg config.Ingest) []grpc.ServerOption {
+func serverOptions(cfg config.Ingest) ([]grpc.ServerOption, error) {
+	creds, err := transportCredentials(cfg)
+	if err != nil {
+		return nil, err
+	}
 	return []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(cfg.MaxRecvMsgBytes),
-	}
+		creds,
+	}, nil
 }
 
 // Addr reports the address actually bound, which is what a test that asked for
@@ -111,7 +127,12 @@ func (s *Server) Addr() string { return s.lis.Addr().String() }
 
 // Serve blocks until the server stops. A clean Shutdown returns nil.
 func (s *Server) Serve() error {
-	s.log.Info("ingest server listening", slog.String("addr", s.Addr()))
+	// mTLS state is logged because "why is this agent being rejected" and "why is
+	// this port answering in the clear" are both answered by this one line.
+	s.log.Info("ingest server listening",
+		slog.String("addr", s.Addr()),
+		slog.Bool("mtls", s.mtls),
+	)
 	if err := s.grpc.Serve(s.lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 		return err
 	}
