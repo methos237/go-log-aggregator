@@ -138,9 +138,18 @@ type Queue struct {
 	StreamName     string
 	SubjectPrefix  string
 	ConnectTimeout time.Duration
+	// Durable is the name of the shared pull consumer the writers bind to. Shared
+	// rather than per-node: replicas competing on one durable consumer is what
+	// distributes the backlog instead of duplicating it.
+	Durable string
 	// MaxAckPending bounds unacknowledged messages per consumer, which is how
 	// storage-side slowness propagates back into ingest as backpressure.
 	MaxAckPending int
+	// AckWait is how long the broker waits for an ack before redelivering. It must
+	// exceed the writer's worst case -- WriteTimeout times MaxAttempts plus backoff
+	// -- or a batch that is merely slow gets redelivered while it is still being
+	// written, which costs a duplicate the dedup index then has to absorb.
+	AckWait time.Duration
 	// PublishTimeout bounds one publish, including waiting for the JetStream ack.
 	// The ingest handler acks the agent only after that ack arrives, so this is
 	// also the ceiling on how long a batch can hold a gRPC handler.
@@ -244,7 +253,12 @@ func Load() (*Config, error) {
 			StreamName:     e.str("QUEUE_STREAM", "LOGS"),
 			SubjectPrefix:  e.str("QUEUE_SUBJECT_PREFIX", "logs"),
 			ConnectTimeout: e.dur("QUEUE_CONNECT_TIMEOUT", 10*time.Second),
+			Durable:        e.str("QUEUE_DURABLE", "writer"),
 			MaxAckPending:  e.int("QUEUE_MAX_ACK_PENDING", 4096),
+			// Five minutes clears the writer's worst case (30s x 5 attempts plus
+			// backoff) with room to spare. Redelivering earlier than that would
+			// duplicate work the writer is still doing.
+			AckWait: e.dur("QUEUE_ACK_WAIT", 5*time.Minute),
 			// Well under the gRPC handler's patience: a publish that has not been
 			// acked in five seconds means JetStream is unhealthy, and telling the
 			// agent to retry beats holding its stream open.
@@ -349,6 +363,17 @@ func (c *Config) Validate() error {
 	}
 	if c.Queue.SubjectPrefix == "" {
 		bad("queue subject prefix must not be empty")
+	}
+	if c.Queue.Durable == "" {
+		bad("queue durable consumer name must not be empty")
+	}
+	if c.Queue.AckWait <= 0 {
+		bad("queue ack wait must be positive, got %s", c.Queue.AckWait)
+	}
+	// Redelivering a batch the writer is still retrying wastes a write and leans on
+	// the dedup index to clean up after it.
+	if worst := c.Writer.WriteTimeout * time.Duration(c.Writer.MaxAttempts); c.Queue.AckWait < worst {
+		bad("queue ack wait %s is below the writer's worst case %s (write timeout x max attempts)", c.Queue.AckWait, worst)
 	}
 	if c.Queue.MaxAckPending < 1 {
 		bad("queue max ack pending must be at least 1, got %d", c.Queue.MaxAckPending)

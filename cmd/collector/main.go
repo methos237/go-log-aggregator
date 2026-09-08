@@ -197,9 +197,21 @@ func run(dsnOverride string) error {
 
 	// Binds its port here, so a conflict fails startup rather than surfacing as a
 	// listener dying a moment after the node reports itself healthy.
-	ingestSrv, err := ingest.New(ctx, cfg.Ingest, q, ingest.NewMetrics(metrics.Registerer), log)
+	ingestMetrics := ingest.NewMetrics(metrics.Registerer)
+	ingestSrv, err := ingest.New(ctx, cfg.Ingest, q, ingestMetrics, log)
 	if err != nil {
 		return fmt.Errorf("create ingest server: %w", err)
+	}
+
+	// The queue consumer is what finally gives the writer a producer. Started after
+	// the writer, because a message delivered before the workers exist would be
+	// refused and immediately redelivered.
+	consumer, err := ingest.NewConsumer(q, writer, ingestMetrics, log)
+	if err != nil {
+		return fmt.Errorf("create queue consumer: %w", err)
+	}
+	if err = consumer.Start(ctx); err != nil {
+		return fmt.Errorf("start queue consumer: %w", err)
 	}
 
 	g, gctx := errgroup.WithContext(ctx)
@@ -251,6 +263,9 @@ func run(dsnOverride string) error {
 		if ingestErr := ingestSrv.Shutdown(shutdownCtx); ingestErr != nil {
 			errs = append(errs, fmt.Errorf("ingest shutdown: %w", ingestErr))
 		}
+		// Stopped before the writer drains: new deliveries would only be refused and
+		// redelivered, while the batches already submitted still get flushed below.
+		consumer.Stop()
 		if apiErr := apiSrv.Shutdown(shutdownCtx); apiErr != nil {
 			errs = append(errs, fmt.Errorf("http shutdown: %w", apiErr))
 		}

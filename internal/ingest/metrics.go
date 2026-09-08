@@ -22,6 +22,7 @@ const (
 	reasonBufferFull    = "ingest_buffer_full"
 	reasonShutdown      = "shutdown"
 	reasonClientGone    = "client_gone"
+	reasonDecodeFailed  = "decode_failed"
 )
 
 // Metrics is the ingest layer's instrumentation.
@@ -46,6 +47,10 @@ type Metrics struct {
 	BatchDuration prometheus.Histogram
 	// ActiveStreams is the number of agent streams currently connected.
 	ActiveStreams prometheus.Gauge
+	// TerminatedMessages counts queue messages this node refused to retry. Every
+	// one of them is data leaving the system, so it belongs on an alert even though
+	// it should never move.
+	TerminatedMessages *prometheus.CounterVec
 }
 
 // NewMetrics registers the ingest metrics and returns them.
@@ -96,6 +101,13 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Name:      "active_streams",
 			Help:      "Agent streams currently connected.",
 		}),
+
+		TerminatedMessages: f.NewCounterVec(prometheus.CounterOpts{
+			Namespace: observability.Namespace,
+			Subsystem: ingestSubsystem,
+			Name:      "messages_terminated_total",
+			Help:      "Queue messages dropped as permanently unprocessable.",
+		}, []string{"reason"}),
 	}
 
 	// Pre-created so a dashboard reads 0 rather than "no data" before the first
@@ -109,6 +121,9 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	}
 	for _, code := range ackCodeNames {
 		m.Acks.WithLabelValues(code)
+	}
+	for _, reason := range []string{reasonDecodeFailed, reasonInvalidLabels} {
+		m.TerminatedMessages.WithLabelValues(reason)
 	}
 	m.QueueDepth.WithLabelValues(observability.QueueIngest)
 	m.QueueWait.WithLabelValues(observability.QueueIngest)

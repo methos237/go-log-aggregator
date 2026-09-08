@@ -27,6 +27,12 @@ type Metrics struct {
 	// PublishBytes is payload bytes accepted by the queue, which is what sizes the
 	// stream's disk ceiling against a given ingest rate.
 	PublishBytes prometheus.Counter
+	// Consumed counts deliveries to this node, including redeliveries.
+	Consumed prometheus.Counter
+	// Redeliveries counts deliveries that were not the first attempt. Its ratio to
+	// Consumed is the cost of at-least-once delivery, and a climbing ratio means
+	// batches are timing out before the writer finishes them.
+	Redeliveries prometheus.Counter
 }
 
 // NewMetrics registers the queue metrics and returns them.
@@ -49,6 +55,20 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Subsystem: queueSubsystem,
 			Name:      "published_bytes_total",
 			Help:      "Payload bytes accepted by the queue.",
+		}),
+
+		Consumed: f.NewCounter(prometheus.CounterOpts{
+			Namespace: observability.Namespace,
+			Subsystem: queueSubsystem,
+			Name:      "consumed_total",
+			Help:      "Messages delivered to this node, including redeliveries.",
+		}),
+
+		Redeliveries: f.NewCounter(prometheus.CounterOpts{
+			Namespace: observability.Namespace,
+			Subsystem: queueSubsystem,
+			Name:      "redeliveries_total",
+			Help:      "Messages delivered more than once.",
 		}),
 	}
 
