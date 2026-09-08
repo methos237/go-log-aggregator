@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -79,6 +80,13 @@ type Ingest struct {
 	TLSCertFile     string
 	TLSKeyFile      string
 	TLSClientCAFile string
+	// AllowPlaintext permits serving ingest without TLS on an address that is not
+	// loopback. Without it that combination refuses to start, because it is an
+	// unauthenticated write path into the log store reachable by anything that can
+	// route to the port. Containers legitimately need it — inside a container the
+	// listener must bind every interface for the runtime to forward to it — so it is
+	// a setting rather than a prohibition, but it has to be chosen deliberately.
+	AllowPlaintext bool
 }
 
 // DB is the TimescaleDB connection.
@@ -217,13 +225,19 @@ func Load() (*Config, error) {
 			EnablePprof: e.bool("ADMIN_ENABLE_PPROF", true),
 		},
 		Ingest: Ingest{
-			Addr:            e.str("INGEST_ADDR", ":9095"),
+			// Loopback by default, unlike the HTTP and admin listeners. Those serve
+			// reads; this one accepts writes with no application-level auth, so the
+			// default must not be reachable from off-box. A container overrides it to
+			// ":9095" and opts in below, because inside a container the listener has to
+			// bind every interface for the runtime to forward to it.
+			Addr:            e.str("INGEST_ADDR", "127.0.0.1:9095"),
 			MaxRecvMsgBytes: e.bytes("INGEST_MAX_RECV_BYTES", 4<<20),
 			BufferSize:      e.int("INGEST_BUFFER_SIZE", 8192),
 			PublishWorkers:  e.int("INGEST_PUBLISH_WORKERS", 8),
 			TLSCertFile:     e.str("INGEST_TLS_CERT_FILE", ""),
 			TLSKeyFile:      e.str("INGEST_TLS_KEY_FILE", ""),
 			TLSClientCAFile: e.str("INGEST_TLS_CLIENT_CA_FILE", ""),
+			AllowPlaintext:  e.bool("INGEST_ALLOW_PLAINTEXT", false),
 		},
 		DB: DB{
 			DSN:             e.str("DB_DSN", "postgres://logagg:logagg@timescaledb:5432/logagg?sslmode=disable"),
@@ -338,6 +352,13 @@ func (c *Config) Validate() error {
 		// encrypt the connection while letting anyone who can reach the port write
 		// logs into the cluster.
 		bad("ingest TLS is enabled without a client CA: mutual authentication is required")
+	case !certSet && !c.Ingest.AllowPlaintext && !loopbackAddr(c.Ingest.Addr):
+		// Ingest is a write path into the log store with no application-level auth,
+		// so plaintext on a routable address means anyone who can reach the port can
+		// forge records. Loopback is exempt because that is what `make dev` and the
+		// tests use.
+		bad("ingest listens on %s without TLS: set the TLS files, bind loopback, or set %sINGEST_ALLOW_PLAINTEXT=true to accept an unauthenticated write path",
+			c.Ingest.Addr, EnvPrefix)
 	}
 
 	if c.DB.DSN == "" {
@@ -455,6 +476,28 @@ func (w *Writer) Validate() error {
 	return errors.Join(errs...)
 }
 
+// loopbackAddr reports whether addr binds only the loopback interface.
+//
+// An empty or wildcard host means every interface, which is the case that matters:
+// ":9095" and "0.0.0.0:9095" are reachable from off-box, "127.0.0.1:9095" is not.
+// A hostname that is not an IP literal is treated as routable, because resolving it
+// here would make validation depend on DNS.
+func loopbackAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		// Not host:port at all. Reported by the listener rather than guessed at here.
+		return false
+	}
+	if host == "" {
+		return false
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return host == "localhost"
+	}
+	return ip.IsLoopback()
+}
+
 // env reads prefixed variables, accumulating parse failures.
 type env struct {
 	errs []error
@@ -529,6 +572,13 @@ func (e *env) bytes64(key string, def int64) int64 {
 	v, err := strconv.ParseInt(strings.TrimSpace(num), 10, 64)
 	if err != nil {
 		e.fail(key, raw, errors.New("not a byte size (e.g. 4194304, 4MB)"))
+		return def
+	}
+	// Checked rather than trusted: a suffixed value large enough to wrap would come
+	// back negative and be reported as "must be positive", which sends an operator
+	// looking in the wrong place.
+	if mult > 1 && (v > math.MaxInt64/mult || v < math.MinInt64/mult) {
+		e.fail(key, raw, errors.New("byte size overflows a 64-bit integer"))
 		return def
 	}
 	return v * mult

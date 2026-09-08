@@ -109,6 +109,16 @@ LOGAGG_INGEST_TLS_CLIENT_CA_FILE=certs/ca.pem \
   go run ./cmd/collector
 ```
 
+Without TLS, ingest binds loopback by default and refuses to serve a routable address
+unless `LOGAGG_INGEST_ALLOW_PLAINTEXT=true` is set — the compose stack sets it, because
+a container has to bind every interface for Docker to forward to it, and publishes the
+port on `127.0.0.1` only. Plaintext ingest also logs at WARN: it is an unauthenticated
+write path.
+
+A verified client certificate authorises writing anything, not writing as a particular
+service; ingest is one trust domain. See ADR-0003 §7 for why that is deferred rather
+than half-implemented.
+
 **These certificates are for local development only.** They are self-signed by a CA
 whose private key sits in your working tree, they last a year, and nothing can revoke
 them. A real deployment gets certificates from a CA with a rotation and revocation

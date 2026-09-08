@@ -58,10 +58,18 @@ jobs:
       # Architectural invariants that golangci-lint cannot express — currently the
       # no-unbounded-channels rule, which is a property of this design rather than
       # of Go. Pinned to the version the Makefile names.
+      # Checksum-pinned, not just version-pinned: GitHub release assets are mutable
+      # by the upstream owner, and this step sudo-installs a binary that then runs
+      # over the checked-out source. The rest of the project pins by digest for the
+      # same reason (see the image pins in deploy/docker-compose.yml).
       - name: Install ast-grep
+        env:
+          AST_GREP_VERSION: "0.45.1"
+          AST_GREP_SHA256: "76fb6555be6734fb5057dba8d2fb756430f374bb9e1af694cf1ce00e13238d63"
         run: |
-          curl -fsSL https://github.com/ast-grep/ast-grep/releases/download/0.45.1/app-x86_64-unknown-linux-gnu.zip \
+          curl -fsSL "https://github.com/ast-grep/ast-grep/releases/download/${AST_GREP_VERSION}/app-x86_64-unknown-linux-gnu.zip" \
             -o /tmp/ast-grep.zip
+          echo "${AST_GREP_SHA256}  /tmp/ast-grep.zip" | sha256sum -c -
           unzip -o -q /tmp/ast-grep.zip -d /tmp/ast-grep
           sudo install -m 0755 /tmp/ast-grep/ast-grep /usr/local/bin/ast-grep
           ast-grep --version

@@ -128,11 +128,20 @@ func (s *Server) Addr() string { return s.lis.Addr().String() }
 // Serve blocks until the server stops. A clean Shutdown returns nil.
 func (s *Server) Serve() error {
 	// mTLS state is logged because "why is this agent being rejected" and "why is
-	// this port answering in the clear" are both answered by this one line.
-	s.log.Info("ingest server listening",
-		slog.String("addr", s.Addr()),
-		slog.Bool("mtls", s.mtls),
-	)
+	// this port answering in the clear" are both answered by this one line. Plaintext
+	// is a warning rather than an info: it means anything that can reach the port can
+	// write records, and that should be visible in a log scan rather than buried.
+	if s.mtls {
+		s.log.Info("ingest server listening",
+			slog.String("addr", s.Addr()),
+			slog.Bool("mtls", true),
+		)
+	} else {
+		s.log.Warn("ingest server listening without TLS: writes are unauthenticated",
+			slog.String("addr", s.Addr()),
+			slog.Bool("mtls", false),
+		)
+	}
 	if err := s.grpc.Serve(s.lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 		return err
 	}

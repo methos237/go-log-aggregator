@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"time"
+	"unicode/utf8"
 
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
@@ -273,13 +274,23 @@ func ackCodeLabel(code logaggv1.AckCode) string {
 	}
 }
 
-// truncate bounds a string on a byte boundary, marking that it was cut.
+// truncate bounds a string, marking that it was cut, without splitting a rune.
+//
+// The rune boundary is not cosmetic. Detail is built from validation errors that
+// quote the sender's own label names and field values, so it can contain multi-byte
+// UTF-8; a proto3 string field must be valid UTF-8, and cutting mid-sequence would
+// make marshaling the ack fail — turning a rejected batch into a broken stream.
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
+
 	const ellipsis = "..."
-	return s[:maxLen-len(ellipsis)] + ellipsis
+	cut := maxLen - len(ellipsis)
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + ellipsis
 }
 
 // nowFunc is injectable so the timestamp acceptance window is testable without

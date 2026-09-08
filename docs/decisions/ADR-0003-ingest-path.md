@@ -152,6 +152,25 @@ this repository, so there is no legacy peer to accommodate.
 documented as dev-only in the README: self-signed by a CA whose key sits in the working
 tree, one year, no revocation.
 
+Plaintext is still the default, so the default listen address is loopback —
+deliberately unlike the HTTP and admin listeners, which serve reads. Serving ingest
+without TLS on a routable address requires `LOGAGG_INGEST_ALLOW_PLAINTEXT=true`, which
+a container legitimately needs (inside one, the listener must bind every interface for
+the runtime to forward to it) and which nothing else should set casually. That
+combination also logs at WARN rather than INFO, because it means anything able to reach
+the port can write records.
+
+**Known limitation: ingest is a single trust domain.** A verified client certificate
+authorises writing *anything*, not writing as a particular service. The handler takes
+`service`, `host` and `env` from the batch and never consults the peer certificate, so
+any holder of a certificate signed by the configured CA can attribute records to any
+service — which matters for a store whose contents are used as evidence, and is made
+starker by `make certs` minting one shared agent certificate for a whole fleet. Binding
+the authenticated identity to the claimed labels (rejecting a mismatched `host`, or
+recording the verified identity in a column agents cannot set) needs per-agent
+certificates and a rotation story, so it is deferred rather than half-done. Stated here
+because an undocumented gap is worse than a documented one.
+
 ### 8. Subject scheme is `prefix.env.service`, with label values sanitized per byte
 
 Those two labels are what every query filters on, so a consumer can subscribe to one
