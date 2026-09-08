@@ -305,7 +305,9 @@ func TestConsumerStopIsSafeBeforeStart(t *testing.T) {
 	}
 	// Reached whenever startup fails after the consumer is built but before it
 	// subscribes, which the shutdown path does not special-case.
-	c.Stop()
+	if err = c.Stop(context.Background()); err != nil {
+		t.Errorf("Stop before Start: %v", err)
+	}
 }
 
 func TestConsumerStopEndsTheSubscription(t *testing.T) {
@@ -319,7 +321,9 @@ func TestConsumerStopEndsTheSubscription(t *testing.T) {
 	if err = c.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	c.Stop()
+	if err = c.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
 
 	if !q.stopped {
 		t.Error("Stop did not stop the subscription, so the consumer keeps pulling")
@@ -345,4 +349,92 @@ func TestRealTypesSatisfyTheConsumerInterfaces(t *testing.T) {
 	var _ Consumable = (*queue.Conn)(nil)
 	var _ Submitter = (*storage.Writer)(nil)
 	_ = time.Now
+}
+
+// Stop must wait for a handler that is mid-Submit. Abandoning it would have the
+// batch refused by a closing writer, naked, and redelivered -- work discarded when
+// it was one call from being queued.
+func TestConsumerStopWaitsForInFlightHandlers(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	inSubmit := make(chan struct{})
+	w := &blockingWriter{inSubmit: inSubmit, release: release}
+
+	q := &fakeQueue{}
+	c, err := NewConsumer(q, w, NewMetrics(nil), slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatalf("NewConsumer: %v", err)
+	}
+	if err = c.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	msg := &fakeMessage{data: encoded(t, validBatch("b1", 2)), subject: "logs.dev.checkout"}
+	go q.handler(msg)
+	<-inSubmit
+
+	stopped := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		stopped <- c.Stop(ctx)
+	}()
+
+	select {
+	case <-stopped:
+		t.Fatal("Stop returned while a handler was still submitting")
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	close(release)
+	if err = <-stopped; err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+}
+
+// A handler that never returns must not hold shutdown open past the deadline: the
+// batch is unacked, so the queue will bring it back.
+func TestConsumerStopGivesUpOnADeadline(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	defer close(release)
+	inSubmit := make(chan struct{})
+	w := &blockingWriter{inSubmit: inSubmit, release: release}
+
+	q := &fakeQueue{}
+	c, err := NewConsumer(q, w, NewMetrics(nil), slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatalf("NewConsumer: %v", err)
+	}
+	if err = c.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	msg := &fakeMessage{data: encoded(t, validBatch("b1", 1)), subject: "logs.dev.checkout"}
+	go q.handler(msg)
+	<-inSubmit
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if err = c.Stop(ctx); err == nil {
+		t.Fatal("Stop reported a clean drain despite a handler that never finished")
+	}
+}
+
+// blockingWriter holds Submit open until released.
+type blockingWriter struct {
+	inSubmit chan struct{}
+	release  chan struct{}
+	once     sync.Once
+}
+
+func (w *blockingWriter) Submit(_ context.Context, sh storage.Shipment) (int, error) {
+	w.once.Do(func() { close(w.inSubmit) })
+	<-w.release
+	if sh.Ack != nil {
+		sh.Ack(nil)
+	}
+	return len(sh.Records), nil
 }

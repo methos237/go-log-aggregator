@@ -182,6 +182,10 @@ func run(dsnOverride string) error {
 	if err != nil {
 		return fmt.Errorf("connect queue: %w", err)
 	}
+	// Deferred rather than placed in the shutdown sequence, and last of everything:
+	// the writer's drain is what fires the deferred acks, so the connection those
+	// acks travel on has to outlive it. Close is idempotent, so this also covers the
+	// startup paths that fail before an ordered shutdown exists.
 	defer func() {
 		closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cfg.Node.ShutdownTimeout)
 		defer cancel()
@@ -249,23 +253,40 @@ func run(dsnOverride string) error {
 
 		log.Info("shutting down", slog.Duration("timeout", cfg.Node.ShutdownTimeout))
 
-		// Ingest first, then the public API, then drain the writer, then tear down
-		// admin. Order matters in both directions: nothing new may arrive before the
-		// writer flushes, and metrics stay scrapeable throughout so the drain is
-		// observable rather than a silent gap.
+		// The order below is the whole graceful-shutdown story, and every step earns
+		// its position:
 		//
-		// The dependency checks are deregistered up front so a shutting-down node
-		// reports unready to a load balancer instead of failing requests it has
-		// already stopped serving.
+		//  1. Deregister the readiness checks, so a load balancer stops sending work
+		//     to this node before it stops being able to do it. Unready-then-drain
+		//     produces no client-visible errors; drain-then-unready produces a burst
+		//     of them.
+		//  2. Stop the ingest listener. New streams are refused and in-flight batches
+		//     get their publish finished, so no agent is left holding an unanswered
+		//     batch it already handed over.
+		//  3. Stop the queue consumer, waiting for handlers mid-Submit. Nothing new
+		//     is pulled; nothing nearly-queued is discarded.
+		//  4. Stop the public API, which by this phase only serves health.
+		//  5. Drain the writer. It flushes what it holds and, crucially, this is when
+		//     the deferred acks fire — so the queue connection must still be open,
+		//     which is why it is closed last, by the deferred Close above.
+		//  6. Tear down admin last, so metrics stay scrapeable for the whole drain
+		//     instead of the interesting part being a gap in the graph.
+		//
+		// Every step is bounded by the same deadline. Whatever does not finish inside
+		// it was never acknowledged, so the queue redelivers it — the shutdown is
+		// allowed to be imperfect precisely because the delivery contract is not.
 		var errs []error
 		health.Deregister("database")
 		health.Deregister("queue")
 		if ingestErr := ingestSrv.Shutdown(shutdownCtx); ingestErr != nil {
 			errs = append(errs, fmt.Errorf("ingest shutdown: %w", ingestErr))
 		}
-		// Stopped before the writer drains: new deliveries would only be refused and
-		// redelivered, while the batches already submitted still get flushed below.
-		consumer.Stop()
+		// Stopped before the writer drains, and it waits for handlers that are
+		// mid-Submit: a batch one call away from being queued should not be thrown
+		// away, and anything genuinely still in flight comes back by redelivery.
+		if consumerErr := consumer.Stop(shutdownCtx); consumerErr != nil {
+			errs = append(errs, fmt.Errorf("consumer shutdown: %w", consumerErr))
+		}
 		if apiErr := apiSrv.Shutdown(shutdownCtx); apiErr != nil {
 			errs = append(errs, fmt.Errorf("http shutdown: %w", apiErr))
 		}

@@ -3,7 +3,9 @@ package ingest
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -34,6 +36,9 @@ type Consumer struct {
 	now     nowFunc
 
 	sub queue.Subscription
+	// inFlight counts handlers that have not finished submitting. Stop waits on it,
+	// which is what "drain in-flight batches" means on this side of the pipeline.
+	inFlight sync.WaitGroup
 }
 
 // Consumable is the queue side of the consumer, narrowed to what it uses so a test
@@ -76,7 +81,11 @@ func NewConsumer(q Consumable, w Submitter, metrics *Metrics, log *slog.Logger) 
 // handler passes to Submit, so a shutdown stops the handler blocking on a writer
 // queue that is no longer being drained.
 func (c *Consumer) Start(ctx context.Context) error {
-	sub, err := c.queue.Consume(ctx, func(msg queue.Message) { c.handle(ctx, msg) })
+	sub, err := c.queue.Consume(ctx, func(msg queue.Message) {
+		c.inFlight.Add(1)
+		defer c.inFlight.Done()
+		c.handle(ctx, msg)
+	})
 	if err != nil {
 		return err
 	}
@@ -84,15 +93,38 @@ func (c *Consumer) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop ends the subscription. In-flight messages are left to finish; anything not
-// acked returns to the stream and is redelivered, which is the property that makes
-// killing a collector mid-write safe.
-func (c *Consumer) Stop() {
+// Stop ends the subscription and waits for handlers already running to hand their
+// batches to the writer, giving up when ctx expires.
+//
+// Waiting matters because Stop only stops *new* deliveries. A handler mid-Submit
+// that got abandoned here would have its batch refused by a writer that is closing,
+// naked, and redelivered — work thrown away for no reason when it was one call from
+// being queued. Waiting for Submit is not the same as waiting for the write: the
+// rows land during writer.Close, and the ack fires from there, which is why the
+// queue connection must outlive both.
+//
+// Giving up is safe in the way everything on this path is safe: an unacked message
+// returns to the stream and comes back.
+func (c *Consumer) Stop(ctx context.Context) error {
 	if c.sub == nil {
-		return
+		// Reached when startup failed between building the consumer and subscribing.
+		return nil
 	}
 	c.sub.Stop()
-	c.log.Info("consumer stopped")
+
+	drained := make(chan struct{})
+	go func() {
+		c.inFlight.Wait()
+		close(drained)
+	}()
+
+	select {
+	case <-drained:
+		c.log.Info("consumer stopped")
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("consumer did not drain in time: %w", ctx.Err())
+	}
 }
 
 // handle turns one message into a shipment and hands it to the writer.

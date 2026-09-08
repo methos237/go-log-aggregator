@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -66,6 +67,7 @@ type Conn struct {
 	log     *slog.Logger
 	metrics *Metrics
 
+	closeOnce sync.Once
 	// closing distinguishes an intentional Close from a broker that went away.
 	// nats.go fires the disconnect handler for both, and a WARN on every clean
 	// shutdown trains an operator to ignore the one that matters.
@@ -241,10 +243,23 @@ func (c *Conn) Subject(env, service string) string {
 // durable; dropping the connection first would turn it into a lost batch that
 // nobody retries. The flush is bounded by ctx, and a failure is reported rather
 // than swallowed so shutdown says so.
+//
+// Idempotent, because the shutdown path closes the queue explicitly, in order,
+// while a deferred close also covers the startup paths that fail before that
+// ordering exists. A second call must not report an error for a connection that is
+// already correctly closed.
 func (c *Conn) Close(ctx context.Context) error {
-	c.closing.Store(true)
-	err := c.nc.FlushWithContext(ctx)
-	c.nc.Close()
+	var err error
+	closed := false
+	c.closeOnce.Do(func() {
+		closed = true
+		c.closing.Store(true)
+		err = c.nc.FlushWithContext(ctx)
+		c.nc.Close()
+	})
+	if !closed {
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("flush queue on close: %w", err)
 	}
