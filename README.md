@@ -126,6 +126,7 @@ make ci                # everything CI enforces
 make proto             # regenerate protobuf code (pinned buf + plugins)
 make migrate           # apply migrations to DB_DSN
 make migrate-status    # print the applied schema version
+make lint-arch         # architectural invariants (ast-grep)
 make certs             # development mTLS material (gitignored)
 ```
 
@@ -143,6 +144,16 @@ LOGAGG_TEST_DB_DSN='postgres://logagg:logagg@127.0.0.1:5432/logagg?sslmode=disab
 ```
 
 `LOGAGG_TEST_RECORDS` scales the throughput test down from its default of one million.
+`LOGAGG_TEST_NATS_URL` does for the broker what `LOGAGG_TEST_DB_DSN` does for the
+database; each test still isolates itself with its own JetStream stream, durable
+consumer and subject prefix.
+
+`make lint-arch` checks architectural invariants that golangci-lint cannot express,
+using [ast-grep](https://ast-grep.github.io) rules in
+[`.ast-grep/rules/`](.ast-grep/rules). Currently one: no unbuffered channel may carry
+data, because every queue in this pipeline is bounded from configuration and
+instrumented with a depth gauge and a wait histogram. Signal channels
+(`chan struct{}`) are exempt.
 
 ## Data model
 

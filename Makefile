@@ -96,8 +96,26 @@ bench: ## Run Go benchmarks
 vulncheck: ## Scan dependencies for known vulnerabilities
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
+# Pinned so a rule that passes locally passes in CI. ast-grep is a Rust binary, not
+# a Go module, so it cannot be version-pinned through go.mod like the other tools.
+AST_GREP_VERSION := 0.45.1
+
+.PHONY: lint-arch
+lint-arch: ## Check architectural invariants with ast-grep (see .ast-grep/rules)
+	@if ! command -v ast-grep >/dev/null 2>&1; then \
+		echo "ast-grep is not installed; get it with:"; \
+		echo "  brew install ast-grep     # or"; \
+		echo "  cargo install ast-grep --version $(AST_GREP_VERSION) --locked"; \
+		exit 1; \
+	fi
+	@have=$$(ast-grep --version | awk '{print $$2}'); \
+	if [[ "$$have" != "$(AST_GREP_VERSION)" ]]; then \
+		echo "warning: ast-grep $$have, expected $(AST_GREP_VERSION)"; \
+	fi
+	ast-grep scan
+
 .PHONY: ci
-ci: tidy-check fmt-check vet lint test-race ## Everything CI enforces
+ci: tidy-check fmt-check vet lint lint-arch test-race ## Everything CI enforces
 
 .PHONY: fmt-check
 fmt-check: ## Fail if any file is not gofmt-clean

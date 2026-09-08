@@ -55,6 +55,20 @@ jobs:
       - name: golangci-lint (integration-tagged code)
         run: golangci-lint run --build-tags=integration ./test/...
 
+      # Architectural invariants that golangci-lint cannot express — currently the
+      # no-unbounded-channels rule, which is a property of this design rather than
+      # of Go. Pinned to the version the Makefile names.
+      - name: Install ast-grep
+        run: |
+          curl -fsSL https://github.com/ast-grep/ast-grep/releases/download/0.45.1/app-x86_64-unknown-linux-gnu.zip \
+            -o /tmp/ast-grep.zip
+          unzip -o -q /tmp/ast-grep.zip -d /tmp/ast-grep
+          sudo install -m 0755 /tmp/ast-grep/ast-grep /usr/local/bin/ast-grep
+          ast-grep --version
+
+      - name: Lint architectural invariants
+        run: make lint-arch
+
       - name: Lint protobuf definitions
         run: make proto-lint
 

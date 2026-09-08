@@ -36,9 +36,21 @@ type Consumer struct {
 	now     nowFunc
 
 	sub queue.Subscription
-	// inFlight counts handlers that have not finished submitting. Stop waits on it,
-	// which is what "drain in-flight batches" means on this side of the pipeline.
-	inFlight sync.WaitGroup
+
+	// mu guards the in-flight bookkeeping below.
+	//
+	// A sync.WaitGroup is the obvious choice here and is wrong: Add may not run
+	// concurrently with a Wait that started while the counter was zero, and that is
+	// exactly this shape — deliveries arrive from the broker's goroutine while Stop
+	// waits from another. The race detector catches it. A counter plus a flag also
+	// buys something a WaitGroup cannot express: a delivery that arrives *after* Stop
+	// began is refused rather than admitted, so shutdown cannot be starved by new work.
+	mu       sync.Mutex
+	inFlight int
+	closing  bool
+	// drained is created by Stop when it has to wait, and closed by the last handler
+	// to leave.
+	drained chan struct{}
 }
 
 // Consumable is the queue side of the consumer, narrowed to what it uses so a test
@@ -82,8 +94,13 @@ func NewConsumer(q Consumable, w Submitter, metrics *Metrics, log *slog.Logger) 
 // queue that is no longer being drained.
 func (c *Consumer) Start(ctx context.Context) error {
 	sub, err := c.queue.Consume(ctx, func(msg queue.Message) {
-		c.inFlight.Add(1)
-		defer c.inFlight.Done()
+		if !c.enter() {
+			// Arrived after Stop began. Naked rather than held: the batch goes back to
+			// the stream immediately instead of waiting out AckWait.
+			c.terminate(msg, nak)
+			return
+		}
+		defer c.leave()
 		c.handle(ctx, msg)
 	})
 	if err != nil {
@@ -110,20 +127,54 @@ func (c *Consumer) Stop(ctx context.Context) error {
 		// Reached when startup failed between building the consumer and subscribing.
 		return nil
 	}
+
+	c.mu.Lock()
+	c.closing = true
+	var drained chan struct{}
+	if c.inFlight > 0 {
+		if c.drained == nil {
+			c.drained = make(chan struct{})
+		}
+		drained = c.drained
+	}
+	c.mu.Unlock()
+
+	// After the flag is set, so a delivery racing this call is refused rather than
+	// admitted just as the drain begins.
 	c.sub.Stop()
 
-	drained := make(chan struct{})
-	go func() {
-		c.inFlight.Wait()
-		close(drained)
-	}()
-
+	if drained == nil {
+		c.log.Info("consumer stopped")
+		return nil
+	}
 	select {
 	case <-drained:
 		c.log.Info("consumer stopped")
 		return nil
 	case <-ctx.Done():
 		return fmt.Errorf("consumer did not drain in time: %w", ctx.Err())
+	}
+}
+
+// enter admits a delivery, reporting false once Stop has begun.
+func (c *Consumer) enter() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closing {
+		return false
+	}
+	c.inFlight++
+	return true
+}
+
+// leave releases a delivery, waking Stop when it was the last one.
+func (c *Consumer) leave() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.inFlight--
+	if c.inFlight == 0 && c.closing && c.drained != nil {
+		close(c.drained)
+		c.drained = nil
 	}
 }
 

@@ -1,0 +1,32 @@
+id: no-unbuffered-data-channel
+language: go
+severity: error
+message: unbuffered channel carrying data; give it a bounded capacity from config
+note: |
+  Every queue in this pipeline is bounded on purpose. An unbuffered data channel is
+  the opposite failure: the sender blocks until a receiver is ready, so throughput
+  collapses to lockstep and a slow consumer becomes a stalled producer with no depth
+  gauge to show it. An *unbounded* channel is worse still — it turns a slow database
+  into an OOM — which is why capacities come from configuration and every one of them
+  has a depth gauge and a wait histogram.
+
+  Signal channels are exempt: `make(chan struct{})` carries no data, so it has
+  nothing to buffer. Close it to broadcast.
+
+  If you genuinely need a rendezvous, restructure so the bound is explicit, or add
+  the construct to this rule's ignores with a reason. There is no inline suppression
+  on purpose: an architectural invariant that can be waived per line is a style
+  preference.
+
+# Test files are excluded: a test uses an unbuffered channel to prove ordering,
+# which is exactly the rendezvous semantics production code must not rely on.
+ignores:
+  - "**/*_test.go"
+
+rule:
+  pattern: make(chan $T)
+
+constraints:
+  T:
+    not:
+      regex: '^struct\{\}$'

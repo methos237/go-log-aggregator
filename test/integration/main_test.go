@@ -60,12 +60,20 @@ func runTests(m *testing.M) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
+	// The broker is cheap to start and every ingest test needs one, so it comes up
+	// regardless of which database source is in use.
+	stopNATS, err := startNATS(ctx)
+	defer stopNATS()
+	if err != nil {
+		return 0, err
+	}
+
 	if dsn := os.Getenv("LOGAGG_TEST_DB_DSN"); dsn != "" {
 		adminDSN = dsn
 		return m.Run(), nil
 	}
 
-	container, err := postgres.Run(ctx, timescaleImage,
+	container, cerr := postgres.Run(ctx, timescaleImage,
 		postgres.WithDatabase("logagg_admin"),
 		postgres.WithUsername("logagg"),
 		postgres.WithPassword("logagg"),
@@ -81,8 +89,8 @@ func runTests(m *testing.M) (int, error) {
 			log.Printf("terminating container: %v", terr)
 		}
 	}()
-	if err != nil {
-		return 0, fmt.Errorf("start timescaledb container: %w", err)
+	if cerr != nil {
+		return 0, fmt.Errorf("start timescaledb container: %w", cerr)
 	}
 
 	adminDSN, err = container.ConnectionString(ctx, "sslmode=disable")

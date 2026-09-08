@@ -438,3 +438,33 @@ func (w *blockingWriter) Submit(_ context.Context, sh storage.Shipment) (int, er
 	}
 	return len(sh.Records), nil
 }
+
+// A delivery that arrives after Stop has begun must be naked rather than admitted.
+// Admitting it would let a busy stream starve the drain; holding it would make the
+// batch wait out AckWait for no reason.
+func TestConsumerNaksDeliveriesArrivingDuringShutdown(t *testing.T) {
+	t.Parallel()
+
+	q := &fakeQueue{}
+	w := &fakeWriter{accepted: 1, autoAck: true}
+	c, err := NewConsumer(q, w, NewMetrics(nil), slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatalf("NewConsumer: %v", err)
+	}
+	if err = c.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if err = c.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+
+	msg := &fakeMessage{data: encoded(t, validBatch("late", 1)), subject: "logs.dev.checkout"}
+	q.handler(msg)
+
+	if got := msg.terminals(); len(got) != 1 || got[0] != nak {
+		t.Fatalf("terminals = %v, want one nak", got)
+	}
+	if len(w.submitted()) != 0 {
+		t.Error("a delivery arriving during shutdown reached the writer")
+	}
+}
