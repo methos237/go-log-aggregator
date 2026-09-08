@@ -126,6 +126,12 @@ services:
     command: []
     environment:
       LOG_DIR: /var/log/app
+      # Passed through from the invoking shell so e2e-agent.sh can raise the write
+      # rate and rotation frequency for a short run. The defaults are the
+      # human-paced ones make dev-agent wants; without these two lines the
+      # script's knobs would silently do nothing.
+      WRITE_INTERVAL: ${WRITE_INTERVAL:-1}
+      ROTATE_EVERY: ${ROTATE_EVERY:-20}
     volumes:
       - ./logwriter.sh:/sidecar/logwriter.sh:ro
       - agent-log-data:/var/log/app

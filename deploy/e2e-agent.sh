@@ -24,8 +24,18 @@ ROTATE_EVERY=${ROTATE_EVERY:-25}
 # How long to let the stack run before the assertion phase. At the settings above
 # this is ~5 lines/second and a rotation every ~5 seconds.
 RUN_SECONDS=${RUN_SECONDS:-60}
-# How long to wait for the agent to deliver everything after the writer stops.
-DRAIN_TIMEOUT=${DRAIN_TIMEOUT:-120}
+# How long to wait for everything to land after the writer stops.
+#
+# This must exceed the collector's JetStream consumer ack_wait, which defaults to
+# five minutes, and the reason is worth knowing because it looks exactly like data
+# loss when you get it wrong. Restarting the collector leaves whatever its consumer
+# had delivered-but-unacked pending in JetStream, and those messages are not
+# redelivered until ack_wait expires. So the observable recovery time after a
+# collector restart is bounded by ack_wait, not by anything the agent does: with a
+# shorter window than this the run reports a gap that fills in by itself minutes
+# later. The agent's own metrics are the tell -- zero drops with rows still
+# missing means "not yet redelivered", not "lost".
+DRAIN_TIMEOUT=${DRAIN_TIMEOUT:-400}
 # Duplicate ceiling. Duplicates here come from two bounded sources: batches
 # in flight when the collector restarts (resent from the spool, since the
 # checkpoint only advances on an ack) and the spool's cursor-persist window. This
@@ -68,9 +78,40 @@ cleanup_note() {
 }
 trap cleanup_note EXIT
 
-say "starting stack (sidecar: ${WRITE_INTERVAL}s/line, rotate every ${ROTATE_EVERY} lines)"
+# Reset only this test's own state, never the shared database volume. Two things
+# have to go together or a rerun silently lies: the sidecar's counter lives on the
+# log volume, so dropping that volume restarts numbering at 1, and rows from a
+# previous run carrying those same numbers would then read as duplicates -- or
+# worse, fill a gap the current run actually has. So the volumes and the stream's
+# rows are cleared as a pair.
+say "resetting this test's state (agent volumes and the app stream's rows)"
+$COMPOSE rm -sf agent logwriter >/dev/null 2>&1 || true
+for v in agent-state agent-log-data; do
+	docker volume rm "logagg_${v}" >/dev/null 2>&1 || true
+done
+
+$COMPOSE up -d --wait --wait-timeout 240 timescaledb nats collector
+psql_q "
+	DELETE FROM logs
+	WHERE stream_id IN (
+		SELECT stream_id FROM streams
+		WHERE service = '$SERVICE_LABEL' AND host = '$HOST_LABEL' AND env = '$ENV_LABEL'
+	);" >/dev/null
+echo "prior rows for this stream cleared"
+
+# The agent starts BEFORE the writer, and the ordering is not cosmetic. The agent
+# waits for a missing file to appear, but it never chases a file that was rotated
+# away before it ever opened one -- by design, since it only opens its configured
+# path. If the writer went first it could write and rotate away an entire
+# generation during the agent's container startup, and those lines would be
+# legitimately unreachable: with no checkpoint yet, the agent cannot know data
+# preceded it. That is correct behavior and it would look like a gap here.
+say "starting the agent first, so no generation is written before it is watching"
+$COMPOSE up -d --build --wait --wait-timeout 240 agent
+
+say "starting the sidecar (${WRITE_INTERVAL}s/line, rotate every ${ROTATE_EVERY} lines)"
 WRITE_INTERVAL=$WRITE_INTERVAL ROTATE_EVERY=$ROTATE_EVERY \
-	$COMPOSE up -d --build --wait --wait-timeout 240 timescaledb nats collector agent logwriter
+	$COMPOSE up -d --wait --wait-timeout 240 logwriter
 
 say "waiting for the first records to land"
 deadline=$((SECONDS + 90))
@@ -97,10 +138,35 @@ echo "collector restarted (stats before: $before_restart)"
 
 # Exit-criterion event 2: a rotation forced at a moment of our choosing, on top of
 # the ones the sidecar performs on its own schedule.
-say "forcing an out-of-band rotation"
+#
+# It is deliberately timed to land mid-cycle rather than whenever the clock says.
+# The agent detects rotation by polling, so it survives rotations spaced well
+# apart and cannot survive two inside one poll interval -- the generation between
+# them is skipped, and by design it is not even countable mid-run, because from
+# the source's point of view two rotations and one look identical. Forcing a
+# rotation blindly can land microseconds from a scheduled one and produce exactly
+# that, which is a real property of the design rather than a bug, but not the
+# thing this test is trying to measure. So wait for the writer to be about halfway
+# to its next scheduled rotation first.
+say "forcing an out-of-band rotation, timed away from the sidecar's own schedule"
 sleep $((RUN_SECONDS / 3))
+deadline=$((SECONDS + 60))
+while :; do
+	seq_now=$($COMPOSE exec -T logwriter sh -c 'cat "$LOG_DIR/.seq"' | tr -d '\r[:space:]')
+	phase=$((seq_now % ROTATE_EVERY))
+	# The middle third of a cycle: far enough from the rotation behind and the one
+	# ahead that a poll interval cannot span both.
+	if [ "$phase" -gt $((ROTATE_EVERY / 3)) ] && [ "$phase" -lt $((2 * ROTATE_EVERY / 3)) ]; then
+		break
+	fi
+	if [ "$SECONDS" -ge "$deadline" ]; then
+		echo "warning: never hit a safe window; forcing anyway" >&2
+		break
+	fi
+	sleep 0.2
+done
 $COMPOSE exec -T logwriter sh -c 'mv "$LOG_DIR/app.log" "$LOG_DIR/app.log.1" && : > "$LOG_DIR/app.log"'
-echo "rotation forced"
+echo "rotation forced at seq=$seq_now (phase $phase of $ROTATE_EVERY)"
 
 sleep $((RUN_SECONDS / 3))
 
