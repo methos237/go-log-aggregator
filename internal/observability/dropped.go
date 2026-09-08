@@ -8,6 +8,11 @@ import (
 const (
 	ComponentIngest = "ingest"
 	ComponentWriter = "writer"
+	// ComponentAgent is the shipper process. It runs in a different binary to the
+	// other two, which is exactly why it belongs in the same family: an operator
+	// scraping both asks "is anything losing records", and one query should
+	// answer it.
+	ComponentAgent = "agent"
 )
 
 // RecordsDropped returns the shared drop counter, registering it on first use.
