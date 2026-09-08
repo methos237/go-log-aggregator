@@ -197,7 +197,7 @@ func run(dsnOverride string) error {
 
 	// Binds its port here, so a conflict fails startup rather than surfacing as a
 	// listener dying a moment after the node reports itself healthy.
-	ingestSrv, err := ingest.New(ctx, cfg.Ingest, log)
+	ingestSrv, err := ingest.New(ctx, cfg.Ingest, q, ingest.NewMetrics(metrics.Registerer), log)
 	if err != nil {
 		return fmt.Errorf("create ingest server: %w", err)
 	}

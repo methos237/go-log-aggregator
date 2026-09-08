@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
 
 	logaggv1 "github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1"
 	"github.com/jamespolk/go-log-aggregator/internal/config"
+	"github.com/jamespolk/go-log-aggregator/internal/queue"
+	"github.com/jamespolk/go-log-aggregator/internal/queue/queuetest"
 )
 
 func testIngestConfig() config.Ingest {
@@ -24,8 +24,15 @@ func testIngestConfig() config.Ingest {
 // start brings up a server on an ephemeral port and returns a client for it.
 func start(t *testing.T) (*Server, logaggv1.LogServiceClient) {
 	t.Helper()
+	return startWith(t, &queuetest.Publisher{}, NewMetrics(nil))
+}
 
-	srv, err := New(context.Background(), testIngestConfig(), slog.New(slog.DiscardHandler))
+// startWith is start with a caller-supplied publisher and metrics, so a test can
+// make the queue fail on command or assert on counters.
+func startWith(t *testing.T, pub queue.Publisher, metrics *Metrics) (*Server, logaggv1.LogServiceClient) {
+	t.Helper()
+
+	srv, err := New(context.Background(), testIngestConfig(), pub, metrics, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -68,16 +75,16 @@ func TestServerAnswers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open stream: %v", err)
 	}
-	// The port answering is the whole subtask. Until the handler lands, the
-	// registered service reports Unimplemented rather than refusing the connection.
-	//
-	// Send's error is deliberately ignored: gRPC reports a stream the server has
-	// already finished as a bare EOF, and the real status only comes from Recv. That
-	// race is exactly what happens here, because Unimplemented closes the stream
-	// before the first batch is written.
-	_ = stream.Send(&logaggv1.LogBatch{BatchId: "b1"})
-	if _, err = stream.Recv(); status.Code(err) != codes.Unimplemented {
-		t.Fatalf("Recv returned %v (code %s), want Unimplemented", err, status.Code(err))
+	if err = stream.Send(validBatch("b1", 1)); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+
+	ack, err := stream.Recv()
+	if err != nil {
+		t.Fatalf("Recv: %v", err)
+	}
+	if ack.GetCode() != logaggv1.AckCode_ACK_CODE_ACCEPTED {
+		t.Fatalf("code = %s, detail %q, want ACCEPTED", ack.GetCode(), ack.GetDetail())
 	}
 }
 
@@ -111,7 +118,7 @@ func TestNewFailsOnBusyPort(t *testing.T) {
 	cfg := testIngestConfig()
 	cfg.Addr = held.Addr().String()
 
-	if _, err = New(context.Background(), cfg, nil); err == nil {
+	if _, err = New(context.Background(), cfg, &queuetest.Publisher{}, nil, nil); err == nil {
 		t.Fatal("New succeeded on an address already in use")
 	}
 }
@@ -122,7 +129,7 @@ func TestNewFailsOnBusyPort(t *testing.T) {
 func TestShutdownGivesUpOnAStuckStream(t *testing.T) {
 	t.Parallel()
 
-	srv, err := New(context.Background(), testIngestConfig(), slog.New(slog.DiscardHandler))
+	srv, err := New(context.Background(), testIngestConfig(), &queuetest.Publisher{}, NewMetrics(nil), slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

@@ -118,11 +118,9 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Help:      "Rows discarded by the dedup index on insert, i.e. redeliveries.",
 		}),
 
-		RecordsDropped: f.NewCounterVec(prometheus.CounterOpts{
-			Namespace: observability.Namespace,
-			Name:      "records_dropped_total",
-			Help:      "Records the storage layer refused or gave up on.",
-		}, []string{"reason"}),
+		// Shared with the ingest layer: one family, one panel, distinguished by the
+		// component label. See observability.RecordsDropped.
+		RecordsDropped: observability.RecordsDropped(reg),
 
 		WriteRetries: f.NewCounterVec(prometheus.CounterOpts{
 			Namespace: observability.Namespace,
@@ -171,7 +169,7 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	// than a gap before the first drop or retry. An alert on a series that does not
 	// exist yet does not fire.
 	for _, reason := range []string{reasonQueueFull, reasonInvalid, reasonWriteFailed, reasonShutdown} {
-		m.RecordsDropped.WithLabelValues(reason)
+		m.RecordsDropped.WithLabelValues(observability.ComponentWriter, reason)
 	}
 	for _, reason := range []string{reasonRetryable, reasonNonRetryable} {
 		m.WriteRetries.WithLabelValues(reason)

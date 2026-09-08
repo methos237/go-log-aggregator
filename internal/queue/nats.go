@@ -15,10 +15,43 @@ import (
 	"github.com/jamespolk/go-log-aggregator/internal/observability"
 )
 
-// ErrNotConnected is reported by the health check while the connection is down.
-// It is a readiness failure, not a liveness one: reconnection is automatic, and
-// restarting the process would only throw away the backlog it is holding.
-var ErrNotConnected = errors.New("not connected to nats")
+// Publish failure kinds. Publish wraps one of these alongside the underlying
+// error, so the ingest handler can choose an AckCode without importing nats.go —
+// which is the point of the interface. The distinction is what the agent does
+// next: back off, or drop the batch as unsendable.
+var (
+	// ErrNotConnected is reported by the health check while the connection is down.
+	// It is a readiness failure, not a liveness one: reconnection is automatic, and
+	// restarting the process would only throw away the backlog it is holding.
+	ErrNotConnected = errors.New("not connected to nats")
+	// ErrOverloaded means the stream is at its ceiling. Retryable, and the signal
+	// the agent should slow down: the backlog is real, not a transport hiccup.
+	ErrOverloaded = errors.New("queue is at capacity")
+	// ErrTooLarge means the broker refuses a payload this size. Not retryable —
+	// resending identical bytes fails identically — so the batch has to be dropped
+	// and counted rather than spooled forever.
+	ErrTooLarge = errors.New("payload exceeds the broker limit")
+	// ErrUnavailable covers timeouts, missing responders and a closed connection.
+	// Retryable, and says nothing about the agent's send rate.
+	ErrUnavailable = errors.New("queue is unavailable")
+)
+
+// classify maps a publish failure onto one of the kinds above.
+//
+// The default is ErrUnavailable rather than ErrOverloaded because an unrecognized
+// failure is more likely a transport problem than a full stream, and telling an
+// agent to slow down when the broker is merely unreachable would make it spool
+// while the real fix is a reconnect it is already doing.
+func classify(err error) error {
+	switch {
+	case errors.Is(err, jetstream.ErrMaxBytesExceeded):
+		return ErrOverloaded
+	case errors.Is(err, nats.ErrMaxPayload), errors.Is(err, nats.ErrInvalidMsg):
+		return ErrTooLarge
+	default:
+		return ErrUnavailable
+	}
+}
 
 // Conn is the JetStream implementation of Publisher.
 //
@@ -189,7 +222,9 @@ func (c *Conn) Publish(ctx context.Context, subject string, payload []byte) (Pub
 
 	if err != nil {
 		c.observePublish(outcomeFailure, elapsed, 0)
-		return PubAck{}, fmt.Errorf("publish to %s: %w", subject, err)
+		// Both wrapped: the kind is what the caller switches on, the original is what
+		// makes the log line diagnosable.
+		return PubAck{}, fmt.Errorf("publish to %s: %w: %w", subject, classify(err), err)
 	}
 	c.observePublish(outcomeSuccess, elapsed, len(payload))
 	return PubAck{Stream: ack.Stream, Sequence: ack.Sequence, Duplicate: ack.Duplicate}, nil

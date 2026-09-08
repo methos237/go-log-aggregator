@@ -18,6 +18,7 @@ import (
 
 	"github.com/jamespolk/go-log-aggregator/internal/config"
 	"github.com/jamespolk/go-log-aggregator/internal/model"
+	"github.com/jamespolk/go-log-aggregator/internal/observability"
 )
 
 // Writer errors.
@@ -648,7 +649,7 @@ func (w *Writer) drop(reason string, n int) {
 	if n <= 0 || w.metrics == nil {
 		return
 	}
-	w.metrics.RecordsDropped.WithLabelValues(reason).Add(float64(n))
+	w.metrics.RecordsDropped.WithLabelValues(observability.ComponentWriter, reason).Add(float64(n))
 }
 
 func (w *Writer) ack(sh *Shipment, err error) {

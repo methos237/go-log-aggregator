@@ -15,11 +15,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"time"
 
 	"google.golang.org/grpc"
 
 	logaggv1 "github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1"
 	"github.com/jamespolk/go-log-aggregator/internal/config"
+	"github.com/jamespolk/go-log-aggregator/internal/queue"
 )
 
 // Server is the gRPC listener that agents stream into.
@@ -29,14 +31,16 @@ type Server struct {
 	log  *slog.Logger
 }
 
-// service implements logaggv1.LogServiceServer.
-//
-// The embedded Unimplemented type is what makes this compile before the handler
-// exists, and it keeps compiling when the proto gains a method: an unimplemented
-// RPC answers Unimplemented instead of failing the build. The handler lands in the
-// next subtask.
+// service implements logaggv1.LogServiceServer. The Stream handler lives in
+// handler.go; the embedded Unimplemented type keeps this compiling when the proto
+// gains a method, answering Unimplemented instead of failing the build.
 type service struct {
 	logaggv1.UnimplementedLogServiceServer
+
+	queue   queue.Publisher
+	log     *slog.Logger
+	metrics *Metrics
+	now     nowFunc
 }
 
 // New binds the ingest listener and registers the service.
@@ -47,10 +51,16 @@ type service struct {
 // then mysteriously shut down".
 //
 // ctx bounds binding the socket only, not the listener's lifetime; Shutdown is
-// what stops serving.
+// what stops serving. metrics may be nil, which builds unregistered ones.
 //
 //nolint:gocritic // hugeParam: one copy per process; by value keeps it immutable
-func New(ctx context.Context, cfg config.Ingest, log *slog.Logger) (*Server, error) {
+func New(ctx context.Context, cfg config.Ingest, q queue.Publisher, metrics *Metrics, log *slog.Logger) (*Server, error) {
+	if q == nil {
+		return nil, errors.New("ingest needs a queue publisher")
+	}
+	if metrics == nil {
+		metrics = NewMetrics(nil)
+	}
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
@@ -63,7 +73,12 @@ func New(ctx context.Context, cfg config.Ingest, log *slog.Logger) (*Server, err
 	}
 
 	srv := grpc.NewServer(serverOptions(cfg)...)
-	logaggv1.RegisterLogServiceServer(srv, &service{})
+	logaggv1.RegisterLogServiceServer(srv, &service{
+		queue:   q,
+		log:     log,
+		metrics: metrics,
+		now:     time.Now,
+	})
 
 	return &Server{grpc: srv, lis: lis, log: log}, nil
 }
