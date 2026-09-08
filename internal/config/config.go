@@ -68,8 +68,12 @@ type Ingest struct {
 	// batch size on the wire and is a first-line defense against memory abuse.
 	MaxRecvMsgBytes int
 	// BufferSize is the depth of the bounded channel between the gRPC handler
-	// and the queue publisher. Full buffer means shed load, never grow.
+	// and the queue publisher, in batches. Full buffer means shed load, never grow.
 	BufferSize int
+	// PublishWorkers is how many batches may be in flight to the queue at once.
+	// Publishing is a network round trip, so this is what keeps one slow ack from
+	// serializing every agent behind it.
+	PublishWorkers int
 	// TLS is off by default so `make dev` works without certificates. Enable it
 	// (and require client certs) for anything reachable beyond localhost.
 	TLSCertFile     string
@@ -207,6 +211,7 @@ func Load() (*Config, error) {
 			Addr:            e.str("INGEST_ADDR", ":9095"),
 			MaxRecvMsgBytes: e.bytes("INGEST_MAX_RECV_BYTES", 4<<20),
 			BufferSize:      e.int("INGEST_BUFFER_SIZE", 8192),
+			PublishWorkers:  e.int("INGEST_PUBLISH_WORKERS", 8),
 			TLSCertFile:     e.str("INGEST_TLS_CERT_FILE", ""),
 			TLSKeyFile:      e.str("INGEST_TLS_KEY_FILE", ""),
 			TLSClientCAFile: e.str("INGEST_TLS_CLIENT_CA_FILE", ""),
@@ -301,6 +306,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Ingest.BufferSize <= 0 {
 		bad("ingest buffer size must be positive, got %d", c.Ingest.BufferSize)
+	}
+	if c.Ingest.PublishWorkers < 1 {
+		bad("ingest publish workers must be at least 1, got %d", c.Ingest.PublishWorkers)
 	}
 
 	// Partial TLS configuration is worse than none: it silently serves plaintext.

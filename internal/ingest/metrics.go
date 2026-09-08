@@ -19,6 +19,9 @@ const (
 	reasonEncodeFailed  = "encode_failed"
 	reasonQueueRefused  = "queue_refused"
 	reasonQueueTooLarge = "queue_payload_too_large"
+	reasonBufferFull    = "ingest_buffer_full"
+	reasonShutdown      = "shutdown"
+	reasonClientGone    = "client_gone"
 )
 
 // Metrics is the ingest layer's instrumentation.
@@ -31,6 +34,10 @@ type Metrics struct {
 	RecordsAccepted prometheus.Counter
 	// RecordsDropped is shared with the storage layer; see observability.RecordsDropped.
 	RecordsDropped *prometheus.CounterVec
+	// QueueDepth and QueueWait describe the bounded intake channel, in the same
+	// families the writer's queue uses so one panel covers the whole pipeline.
+	QueueDepth *prometheus.GaugeVec
+	QueueWait  *prometheus.HistogramVec
 	// Acks is keyed by the code returned to the agent. Watching the OVERLOADED rate
 	// is how backpressure becomes visible from outside the process.
 	Acks *prometheus.CounterVec
@@ -63,6 +70,8 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 		}),
 
 		RecordsDropped: observability.RecordsDropped(reg),
+		QueueDepth:     observability.QueueDepth(reg),
+		QueueWait:      observability.QueueWait(reg),
 
 		Acks: f.NewCounterVec(prometheus.CounterOpts{
 			Namespace: observability.Namespace,
@@ -93,12 +102,15 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	// rejection, and so an alert on these series can fire at all.
 	for _, reason := range []string{
 		reasonInvalidLabels, reasonInvalidRecord, reasonEncodeFailed,
-		reasonQueueRefused, reasonQueueTooLarge,
+		reasonQueueRefused, reasonQueueTooLarge, reasonBufferFull, reasonShutdown,
+		reasonClientGone,
 	} {
 		m.RecordsDropped.WithLabelValues(observability.ComponentIngest, reason)
 	}
 	for _, code := range ackCodeNames {
 		m.Acks.WithLabelValues(code)
 	}
+	m.QueueDepth.WithLabelValues(observability.QueueIngest)
+	m.QueueWait.WithLabelValues(observability.QueueIngest)
 	return m
 }

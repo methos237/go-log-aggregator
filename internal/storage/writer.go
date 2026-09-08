@@ -635,13 +635,13 @@ func (w *Writer) observeQueueWait(sh *Shipment) {
 	if w.metrics == nil || sh.enqueued.IsZero() {
 		return
 	}
-	w.metrics.QueueWait.WithLabelValues(queueWriter).Observe(w.now().Sub(sh.enqueued).Seconds())
+	w.metrics.QueueWait.WithLabelValues(observability.QueueWriter).Observe(w.now().Sub(sh.enqueued).Seconds())
 }
 
 func (w *Writer) addDepth(delta int) {
 	depth := w.depth.Add(int64(delta))
 	if w.metrics != nil {
-		w.metrics.QueueDepth.WithLabelValues(queueWriter).Set(float64(depth))
+		w.metrics.QueueDepth.WithLabelValues(observability.QueueWriter).Set(float64(depth))
 	}
 }
 

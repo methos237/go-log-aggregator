@@ -121,8 +121,12 @@ func (s *service) handle(ctx context.Context, batch *logaggv1.LogBatch) *logaggv
 		return s.reject(id, logaggv1.AckCode_ACK_CODE_INTERNAL, received, "encoding batch failed")
 	}
 
-	subject := s.queue.Subject(labels.Env, labels.Service)
-	if _, err = s.queue.Publish(ctx, subject, payload); err != nil {
+	subject := s.pipeline.queue.Subject(labels.Env, labels.Service)
+	if err = s.pipeline.submit(ctx, &job{
+		subject: subject,
+		payload: payload,
+		records: len(valid),
+	}); err != nil {
 		return s.publishFailed(id, subject, streamID, received, len(valid), err)
 	}
 
@@ -171,17 +175,38 @@ func (s *service) acceptable(id model.StreamID, records []*logaggv1.LogRecord) (
 	return kept, firstErr
 }
 
-// publishFailed turns a queue failure into the ack the agent should act on.
+// publishFailed turns a queue or intake failure into the ack the agent should act
+// on.
 //
 // The mapping mirrors the failure kinds the writer already distinguishes:
 // saturation is retryable and means "slow down", an unusable payload is not
 // retryable at all, and anything else is a collector-side fault the agent should
 // retry without changing its rate.
+//
+// A shed batch reports OVERLOADED in band rather than failing the RPC with
+// RESOURCE_EXHAUSTED. Both say "retry later", but a status code ends the whole
+// stream, which would punish every other batch on it for one full moment — and
+// ACK_CODE_OVERLOADED exists in the protocol precisely so saturation is a per-batch
+// answer. gRPC still returns RESOURCE_EXHAUSTED itself for the transport-level
+// case, an agent exceeding MaxRecvMsgSize.
 func (s *service) publishFailed(id, subject string, streamID model.StreamID, received, valid int, err error) *logaggv1.Ack {
 	code := logaggv1.AckCode_ACK_CODE_INTERNAL
 	reason := reasonQueueRefused
+	detail := "queue rejected the batch"
 
 	switch {
+	case errors.Is(err, errShed):
+		code = logaggv1.AckCode_ACK_CODE_OVERLOADED
+		reason = reasonBufferFull
+		detail = "collector is saturated"
+	case errors.Is(err, errPipelineClosed):
+		reason = reasonShutdown
+		detail = "collector is shutting down"
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		// The agent hung up mid-batch. Nothing to tell it, but the records are still
+		// unaccounted for from this node's point of view.
+		reason = reasonClientGone
+		detail = "client went away"
 	case errors.Is(err, queue.ErrOverloaded):
 		code = logaggv1.AckCode_ACK_CODE_OVERLOADED
 	case errors.Is(err, queue.ErrTooLarge):
@@ -203,7 +228,7 @@ func (s *service) publishFailed(id, subject string, streamID model.StreamID, rec
 	s.drop(reason, valid)
 	// Reported as fully rejected on purpose: nothing was made durable, so every
 	// record in the batch is the agent's problem again.
-	return s.reject(id, code, received, "queue rejected the batch")
+	return s.reject(id, code, received, detail)
 }
 
 // reject builds an ack that accepted nothing.

@@ -19,9 +19,6 @@ const (
 	reasonNonRetryable = "non_retryable_db_error"
 )
 
-// queueWriter names the writer's bounded intake channel in queue-labeled metrics.
-const queueWriter = "writer"
-
 // storageSubsystem prefixes metrics that are specific to this package. The
 // queue/batch/write families deliberately do not use it: they are named in §6 of
 // the roadmap and shared with the ingest and queue layers, so a dashboard can plot
@@ -62,21 +59,10 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	f := promauto.With(reg)
 
 	m := &Metrics{
-		QueueDepth: f.NewGaugeVec(prometheus.GaugeOpts{
-			Namespace: observability.Namespace,
-			Name:      "queue_depth",
-			Help:      "Records currently waiting in a bounded in-process queue.",
-		}, []string{"queue"}),
-
-		QueueWait: f.NewHistogramVec(prometheus.HistogramOpts{
-			Namespace: observability.Namespace,
-			Name:      "queue_wait_seconds",
-			Help:      "Time a record spent waiting in a bounded in-process queue.",
-			// Sub-millisecond at the low end because a healthy writer queue is
-			// nearly empty; the top buckets are seconds wide, because that is the
-			// regime where backpressure is doing its job and the shape matters.
-			Buckets: []float64{0.0001, 0.001, 0.005, 0.025, 0.1, 0.5, 1, 5, 30},
-		}, []string{"queue"}),
+		// Shared with the ingest layer so one panel plots every bounded queue in the
+		// pipeline; see observability.QueueDepth.
+		QueueDepth: observability.QueueDepth(reg),
+		QueueWait:  observability.QueueWait(reg),
 
 		BatchSize: f.NewHistogram(prometheus.HistogramOpts{
 			Namespace: observability.Namespace,
@@ -177,8 +163,8 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	for _, outcome := range []string{outcomeSuccess, outcomeFailure} {
 		m.WriteDuration.WithLabelValues(outcome)
 	}
-	m.QueueDepth.WithLabelValues(queueWriter)
-	m.QueueWait.WithLabelValues(queueWriter)
+	m.QueueDepth.WithLabelValues(observability.QueueWriter)
+	m.QueueWait.WithLabelValues(observability.QueueWriter)
 
 	return m
 }

@@ -24,11 +24,13 @@ import (
 	"github.com/jamespolk/go-log-aggregator/internal/queue"
 )
 
-// Server is the gRPC listener that agents stream into.
+// Server is the gRPC listener that agents stream into, plus the bounded pipeline
+// that carries their batches to the queue.
 type Server struct {
-	grpc *grpc.Server
-	lis  net.Listener
-	log  *slog.Logger
+	grpc     *grpc.Server
+	lis      net.Listener
+	pipeline *pipeline
+	log      *slog.Logger
 }
 
 // service implements logaggv1.LogServiceServer. The Stream handler lives in
@@ -37,10 +39,10 @@ type Server struct {
 type service struct {
 	logaggv1.UnimplementedLogServiceServer
 
-	queue   queue.Publisher
-	log     *slog.Logger
-	metrics *Metrics
-	now     nowFunc
+	pipeline *pipeline
+	log      *slog.Logger
+	metrics  *Metrics
+	now      nowFunc
 }
 
 // New binds the ingest listener and registers the service.
@@ -72,15 +74,21 @@ func New(ctx context.Context, cfg config.Ingest, q queue.Publisher, metrics *Met
 		return nil, fmt.Errorf("listen on %s: %w", cfg.Addr, err)
 	}
 
+	// Publishers start here rather than in Serve. Starting them in Serve would let a
+	// Shutdown that arrives first wait on a WaitGroup another goroutine is still
+	// adding to, which is a data race and, worse, an occasional missed drain.
+	pipe := newPipeline(ctx, cfg, q, metrics, log, time.Now)
+	pipe.start()
+
 	srv := grpc.NewServer(serverOptions(cfg)...)
 	logaggv1.RegisterLogServiceServer(srv, &service{
-		queue:   q,
-		log:     log,
-		metrics: metrics,
-		now:     time.Now,
+		pipeline: pipe,
+		log:      log,
+		metrics:  metrics,
+		now:      time.Now,
 	})
 
-	return &Server{grpc: srv, lis: lis, log: log}, nil
+	return &Server{grpc: srv, lis: lis, pipeline: pipe, log: log}, nil
 }
 
 // serverOptions is the server's resource envelope.
@@ -118,6 +126,9 @@ func (s *Server) Serve() error {
 // never closes its stream would block shutdown forever. So the wait is bounded and
 // the fallback is a hard Stop, which kills the remaining streams. That is safe by
 // construction: a batch that has not been acked yet is one the agent will resend.
+// The pipeline is closed only after the handlers are gone, and that order is not
+// interchangeable: a handler waiting for its publish to complete would otherwise be
+// waiting on publishers that had already exited.
 func (s *Server) Shutdown(ctx context.Context) error {
 	stopped := make(chan struct{})
 	go func() {
@@ -125,13 +136,18 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		close(stopped)
 	}()
 
+	var errs []error
 	select {
 	case <-stopped:
 		s.log.Info("ingest server stopped")
-		return nil
 	case <-ctx.Done():
 		s.grpc.Stop()
 		<-stopped
-		return fmt.Errorf("ingest server did not drain in time: %w", ctx.Err())
+		errs = append(errs, fmt.Errorf("ingest server did not drain in time: %w", ctx.Err()))
 	}
+
+	if err := s.pipeline.close(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("ingest pipeline: %w", err))
+	}
+	return errors.Join(errs...)
 }

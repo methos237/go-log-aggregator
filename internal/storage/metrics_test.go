@@ -93,7 +93,7 @@ func TestNewMetricsWithNilRegistererIsUsable(t *testing.T) {
 	m := NewMetrics(nil)
 	m.RowsCopied.Add(1)
 	m.RecordsDropped.WithLabelValues(observability.ComponentWriter, reasonInvalid).Inc()
-	m.QueueDepth.WithLabelValues(queueWriter).Set(3)
+	m.QueueDepth.WithLabelValues(observability.QueueWriter).Set(3)
 }
 
 func TestMetricNamesAreNamespaced(t *testing.T) {

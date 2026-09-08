@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	logaggv1 "github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1"
+	"github.com/jamespolk/go-log-aggregator/internal/config"
 	"github.com/jamespolk/go-log-aggregator/internal/model"
 	"github.com/jamespolk/go-log-aggregator/internal/observability"
 	"github.com/jamespolk/go-log-aggregator/internal/queue"
@@ -361,14 +362,9 @@ func counter(t *testing.T, reg *prometheus.Registry, name string, labels map[str
 		if f.GetName() != name {
 			continue
 		}
-	metric:
 		for _, m := range f.GetMetric() {
-			for wantName, wantValue := range labels {
-				for _, l := range m.GetLabel() {
-					if l.GetName() == wantName && l.GetValue() != wantValue {
-						continue metric
-					}
-				}
+			if !matches(m.GetLabel(), labels) {
+				continue
 			}
 			return m.GetCounter().GetValue()
 		}
@@ -393,5 +389,76 @@ func TestTruncate(t *testing.T) {
 	}
 	if short := truncate("fine", MaxAckDetailLen); short != "fine" {
 		t.Errorf("a short string was altered: %q", short)
+	}
+}
+
+// End to end for the shedding path: a saturated collector answers OVERLOADED in
+// band and keeps the stream open, rather than failing the RPC and taking every
+// other batch on that stream down with it.
+func TestStreamShedsWhenSaturated(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	defer close(release)
+
+	pub := &queuetest.Publisher{}
+	pub.OnPublish(func(context.Context, string, []byte) error {
+		<-release
+		return nil
+	})
+
+	reg := prometheus.NewRegistry()
+	cfg := config.Ingest{Addr: "127.0.0.1:0", MaxRecvMsgBytes: 4 << 20, BufferSize: 1, PublishWorkers: 1}
+	_, client := startCfg(t, cfg, pub, NewMetrics(reg))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// One stream handles its batches in order, so saturating the pipeline takes
+	// several streams: one batch occupies the publisher, one fills the buffer, and
+	// the rest have nowhere to go.
+	const streams = 6
+	acks := make(chan *logaggv1.Ack, streams)
+	for i := 0; i < streams; i++ {
+		go func(i int) {
+			stream, err := client.Stream(ctx)
+			if err != nil {
+				return
+			}
+			if err = stream.Send(validBatch(fmt.Sprintf("b%d", i), 2)); err != nil {
+				return
+			}
+			ack, err := stream.Recv()
+			if err == nil {
+				acks <- ack
+			}
+		}(i)
+	}
+
+	// At least one has to be shed while the publisher is held.
+	var shed *logaggv1.Ack
+	deadline := time.After(10 * time.Second)
+	for shed == nil {
+		select {
+		case ack := <-acks:
+			if ack.GetCode() == logaggv1.AckCode_ACK_CODE_OVERLOADED {
+				shed = ack
+			}
+		case <-deadline:
+			t.Fatal("no batch was shed while the pipeline was saturated")
+		}
+	}
+
+	if shed.GetAccepted() != 0 || shed.GetRejected() != 2 {
+		t.Errorf("accepted/rejected = %d/%d, want 0/2", shed.GetAccepted(), shed.GetRejected())
+	}
+	if got := counter(t, reg, "logagg_records_dropped_total", map[string]string{
+		"component": observability.ComponentIngest,
+		"reason":    reasonBufferFull,
+	}); got == 0 {
+		t.Error("records_dropped_total{ingest,ingest_buffer_full} was not incremented")
+	}
+	if got := counter(t, reg, "logagg_ingest_acks_total", map[string]string{"code": "overloaded"}); got == 0 {
+		t.Error("acks_total{overloaded} was not incremented")
 	}
 }

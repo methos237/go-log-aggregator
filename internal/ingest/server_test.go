@@ -18,7 +18,7 @@ import (
 
 func testIngestConfig() config.Ingest {
 	// Port 0 so tests never collide with each other or with a running dev stack.
-	return config.Ingest{Addr: "127.0.0.1:0", MaxRecvMsgBytes: 4 << 20, BufferSize: 64}
+	return config.Ingest{Addr: "127.0.0.1:0", MaxRecvMsgBytes: 4 << 20, BufferSize: 64, PublishWorkers: 4}
 }
 
 // start brings up a server on an ephemeral port and returns a client for it.
@@ -31,8 +31,17 @@ func start(t *testing.T) (*Server, logaggv1.LogServiceClient) {
 // make the queue fail on command or assert on counters.
 func startWith(t *testing.T, pub queue.Publisher, metrics *Metrics) (*Server, logaggv1.LogServiceClient) {
 	t.Helper()
+	return startCfg(t, testIngestConfig(), pub, metrics)
+}
 
-	srv, err := New(context.Background(), testIngestConfig(), pub, metrics, slog.New(slog.DiscardHandler))
+// startCfg is startWith plus a caller-supplied config, for tests that need a
+// specific buffer or publisher count.
+//
+//nolint:gocritic // hugeParam: test helper
+func startCfg(t *testing.T, cfg config.Ingest, pub queue.Publisher, metrics *Metrics) (*Server, logaggv1.LogServiceClient) {
+	t.Helper()
+
+	srv, err := New(context.Background(), cfg, pub, metrics, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
