@@ -49,18 +49,9 @@ type Client struct {
 // rejected handshake would surface much later as a confusing error on the first
 // batch, and a load generator would report it as an ingest failure.
 func Dial(ctx context.Context, cfg ClientConfig) (*Client, error) {
-	if cfg.Addr == "" {
-		return nil, errors.New("client needs a collector address")
-	}
-
-	creds, err := clientCredentials(cfg)
+	conn, err := newConn(cfg)
 	if err != nil {
 		return nil, err
-	}
-
-	conn, err := grpc.NewClient(cfg.Addr, grpc.WithTransportCredentials(creds))
-	if err != nil {
-		return nil, fmt.Errorf("dial %s: %w", cfg.Addr, err)
 	}
 
 	timeout := cfg.DialTimeout
@@ -76,6 +67,50 @@ func Dial(ctx context.Context, cfg ClientConfig) (*Client, error) {
 		return nil, err
 	}
 	return &Client{conn: conn}, nil
+}
+
+// DialLazy connects to a collector without waiting for the connection to become
+// usable.
+//
+// This is the long-lived agent's counterpart to Dial, and the difference is
+// deliberate rather than a convenience. Dial reports a transient failure instead
+// of retrying, which is right for a CLI: a typo in the address should say so now.
+// An agent started before its collector — the ordinary case in a compose stack or
+// a rolling deploy — must not treat that as fatal, and an agent that re-dialed
+// from scratch on every attempt would throw away gRPC's own connection
+// management, including its backoff. So this returns immediately and lets the
+// channel reconnect underneath; the caller retries opening the stream, spooling
+// while it cannot.
+//
+// It takes no context because nothing here blocks. Connect only moves the channel
+// out of idle so the first reconnect attempt starts now rather than on the first
+// RPC; cancellation belongs on Stream, which is where the blocking actually
+// happens.
+func DialLazy(cfg ClientConfig) (*Client, error) {
+	conn, err := newConn(cfg)
+	if err != nil {
+		return nil, err
+	}
+	conn.Connect()
+	return &Client{conn: conn}, nil
+}
+
+// newConn validates cfg and builds the channel, without connecting it.
+func newConn(cfg ClientConfig) (*grpc.ClientConn, error) {
+	if cfg.Addr == "" {
+		return nil, errors.New("client needs a collector address")
+	}
+
+	creds, err := clientCredentials(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := grpc.NewClient(cfg.Addr, grpc.WithTransportCredentials(creds))
+	if err != nil {
+		return nil, fmt.Errorf("dial %s: %w", cfg.Addr, err)
+	}
+	return conn, nil
 }
 
 // waitReady blocks until the connection is usable, ctx expires, or the attempt

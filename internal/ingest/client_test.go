@@ -139,3 +139,42 @@ func TestClientReportsAnUnreachableCollector(t *testing.T) {
 		t.Errorf("Dial took %s; a refused connection should be reported at once", elapsed)
 	}
 }
+
+// TestDialLazyDoesNotWaitForReadiness pins the one behavioral difference between
+// DialLazy and Dial: an unreachable collector is an error for the CLI-facing
+// Dial and not an error for the agent-facing DialLazy.
+//
+// This is worth a test rather than being left to the doc comment because the
+// distinction is the whole reason DialLazy exists. An agent that inherited
+// Dial's fail-fast behavior would refuse to start whenever it came up before its
+// collector, which is the ordinary case in a compose stack.
+func TestDialLazyDoesNotWaitForReadiness(t *testing.T) {
+	// Port 1 on loopback: nothing listens, and connecting is refused promptly
+	// rather than timing out, so Dial's failure is not just a slow test.
+	const dead = "127.0.0.1:1"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if c, err := Dial(ctx, ClientConfig{Addr: dead, DialTimeout: 2 * time.Second}); err == nil {
+		_ = c.Close()
+		t.Error("Dial() to an unreachable address returned no error; it is supposed to report transient failure")
+	}
+
+	start := time.Now()
+	c, err := DialLazy(ClientConfig{Addr: dead})
+	if err != nil {
+		t.Fatalf("DialLazy() error = %v, want nil for an unreachable address", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("DialLazy() took %v; it must not wait for the connection to be usable", elapsed)
+	}
+}
+
+func TestDialLazyRequiresAddress(t *testing.T) {
+	if _, err := DialLazy(ClientConfig{}); err == nil {
+		t.Error("DialLazy() with no address returned no error")
+	}
+}

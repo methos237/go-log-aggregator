@@ -23,6 +23,47 @@ const agentSubsystem = "agent"
 // that drops records from many callers.
 const reasonMissedGeneration = "missed_generation"
 
+// Shipper drop reasons, recorded against the same RecordsDropped family.
+// Each names a distinct, closed-set reason a record never made it to the
+// collector, mirroring how internal/ingest's own reasons are scoped to one
+// short constant per cause rather than a message built from the error.
+const (
+	// reasonNoLabels means a source's Labels lookup returned false: a
+	// configuration error (see ShipperConfig.Labels' doc comment), not a
+	// data problem, but one that must still be visible rather than a
+	// silent gap.
+	reasonNoLabels = "no_labels"
+	// reasonInvalidRecord means model.LogRecord.Validate rejected the
+	// record. The collector would reject it identically, so catching it
+	// here lets an operator see which source produced it.
+	reasonInvalidRecord = "invalid_record"
+	// reasonRecordTooLarge means a single record, even alone in a batch,
+	// exceeds MaxBatchBytes and so can never be shipped at all.
+	reasonRecordTooLarge = "record_too_large"
+	// reasonCorruptSpoolEntry means a spooled payload failed to unmarshal
+	// as a LogBatch on replay: corruption the spool's own checksum did not
+	// catch. Retrying it would fail identically forever.
+	reasonCorruptSpoolEntry = "corrupt_spool_entry"
+	// reasonAckInvalid means the collector returned ACK_CODE_INVALID for a
+	// batch: resending the same bytes would fail the same way, so it is
+	// dropped rather than retried.
+	reasonAckInvalid = "ack_invalid"
+	// reasonEncodeFailed means marshaling a batch this package built
+	// itself failed. Should not happen in practice; kept distinct from
+	// reasonCorruptSpoolEntry because this is an encode failure on the way
+	// out, not a decode failure on the way back in.
+	reasonEncodeFailed = "encode_failed"
+	// reasonSpoolAppendFailed means Spool.Append itself failed (disk
+	// exhaustion or similar) for a batch that could not be sent. There is
+	// nowhere else for it to go once this happens.
+	reasonSpoolAppendFailed = "spool_append_failed"
+)
+
+// shipperAckCodeNames are the metric label values for Metrics.Acks,
+// mirroring internal/ingest's ackCodeNames so the two packages' dashboards
+// read the same way.
+var shipperAckCodeNames = []string{"accepted", "overloaded", "invalid", "internal"}
+
 // Metrics is the tail source's instrumentation.
 //
 // Rotations and truncations are not drops: every byte they name was either
@@ -55,8 +96,19 @@ type Metrics struct {
 	GenerationsMissed prometheus.Counter
 	// RecordsDropped is shared with every other layer; see
 	// observability.RecordsDropped. The tail source uses it only for
-	// reasonMissedGeneration.
+	// reasonMissedGeneration; the shipper uses the reasons declared above.
 	RecordsDropped *prometheus.CounterVec
+
+	// Acks counts collector responses to shipped batches, by code — the
+	// shipper's side of the same shape internal/ingest.Metrics.Acks uses,
+	// so an operator can compare what the agent sent against what the
+	// collector recorded for it.
+	Acks *prometheus.CounterVec
+	// Reconnects counts every scheduled attempt to (re)open the ingest
+	// stream: the first one at startup, and one more each time a mid-run
+	// disconnect is detected. A steady climb here is the signal that a
+	// collector or the network between here and it is flapping.
+	Reconnects prometheus.Counter
 }
 
 // NewMetrics builds the tail source's metrics.
@@ -87,6 +139,20 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Help:      "Rotations discovered only at startup: the checkpointed file no longer exists at the path.",
 		}),
 		RecordsDropped: observability.RecordsDropped(reg),
+
+		Acks: f.NewCounterVec(prometheus.CounterOpts{
+			Namespace: observability.Namespace,
+			Subsystem: agentSubsystem,
+			Name:      "acks_total",
+			Help:      "Acknowledgements received from the collector, by code.",
+		}, []string{"code"}),
+
+		Reconnects: f.NewCounter(prometheus.CounterOpts{
+			Namespace: observability.Namespace,
+			Subsystem: agentSubsystem,
+			Name:      "reconnects_total",
+			Help:      "Attempts to (re)open the ingest stream, including the first one at startup.",
+		}),
 	}
 
 	// Pre-created at zero so an alert on this series can fire the first time
@@ -94,6 +160,15 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	// nobody has incremented yet and a counter that does not exist look
 	// identical to a dashboard, but only one of them can page anyone.
 	m.RecordsDropped.WithLabelValues(observability.ComponentAgent, reasonMissedGeneration)
+	for _, reason := range []string{
+		reasonNoLabels, reasonInvalidRecord, reasonRecordTooLarge,
+		reasonCorruptSpoolEntry, reasonAckInvalid, reasonEncodeFailed, reasonSpoolAppendFailed,
+	} {
+		m.RecordsDropped.WithLabelValues(observability.ComponentAgent, reason)
+	}
+	for _, code := range shipperAckCodeNames {
+		m.Acks.WithLabelValues(code)
+	}
 
 	return m
 }
