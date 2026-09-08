@@ -10,12 +10,13 @@ over a consistent hash ring, so nodes can join and leave while ingest continues.
 **Delivery semantics: at-least-once end to end, deduplicated at the storage layer.**
 Not exactly-once.
 
-> **Status: phase 1 of 9 complete.** Foundations (configuration, logging, metrics,
-> health probes, graceful shutdown, container image, dev stack) plus the data model,
-> schema and write path: protobuf wire format, TimescaleDB hypertable with compression
-> and continuous aggregates, and a batching writer pool that deduplicates redelivered
-> records. The gRPC ingest service, agent, query compiler and cluster layer land in
-> phases 2–5. The full plan is in [`.aidocs/ROADMAP.md`](.aidocs/ROADMAP.md).
+> **Status: phase 2 of 9 complete.** Foundations, the data model and write path, and
+> now the ingest service: a bidirectional gRPC front door under mTLS that validates,
+> fingerprints and publishes to NATS JetStream, a bounded intake channel that sheds
+> load instead of growing, and a durable pull consumer feeding the writer pool.
+> Records survive killing a collector mid-stream. The agent, query compiler and
+> cluster layer land in phases 3–5. The full plan is in
+> [`.aidocs/ROADMAP.md`](.aidocs/ROADMAP.md).
 
 ## Quickstart
 
@@ -66,7 +67,7 @@ Ports, all bound to loopback in development:
 |---|---|---|
 | 8080 | Public HTTP API | health now; query and live tail in phases 4 and 6 |
 | 9090 | Admin | Prometheus metrics and pprof. **Never expose this.** |
-| 9095 | gRPC ingest | phase 2 |
+| 9095 | gRPC ingest | mTLS when configured; plaintext by default |
 | 9096 | gRPC peer | query fan-out, phase 5 |
 | 7946 | memberlist gossip | phase 5 |
 | 5432 | TimescaleDB | development credentials only |
@@ -163,6 +164,10 @@ coordination. Log rows are narrow and reference it. `logs` is a TimescaleDB hype
 with 1 hour chunks, columnar compression segmented by stream, 30 day retention, and
 per-minute and per-hour count aggregates that the query planner will choose between in
 phase 4.
+
+The ingest path's reasoning — why the ack comes after the JetStream publish, why a full
+buffer sheds instead of waiting, and why a corrupt message is terminated rather than
+retried — is in [`ADR-0003`](docs/decisions/ADR-0003-ingest-path.md).
 
 The write path is `COPY` into a session-local staging table followed by
 `INSERT ... ON CONFLICT DO NOTHING` against a unique `(stream_id, seq, time)` index.

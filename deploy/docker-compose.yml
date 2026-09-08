@@ -76,6 +76,9 @@ services:
       # docker-compose.scale.yml override instead (`make dev-scale`).
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:9090:9090"
+      # gRPC ingest. Published so loadgen and `logctl send` can drive the stack
+      # from the host; plaintext, which is why it is on loopback like the rest.
+      - "127.0.0.1:9095:9095"
     depends_on:
       timescaledb:
         condition: service_healthy
