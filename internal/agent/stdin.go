@@ -8,8 +8,6 @@ import (
 	"io"
 	"sync"
 	"time"
-
-	"github.com/jamespolk/go-log-aggregator/internal/model"
 )
 
 // StdinSource reads newline-delimited lines from a reader.
@@ -25,9 +23,9 @@ type StdinSource struct {
 	closeOnce sync.Once
 	closeErr  error
 
-	// buf is reused by readLine on the read goroutine (no lock needed: read
-	// runs on exactly one goroutine, so no synchronization is required).
-	buf []byte
+	// assembler is driven only by the read goroutine (no lock needed: read runs
+	// on exactly one goroutine, so no synchronization is required).
+	assembler *lineAssembler
 }
 
 // NewStdinSource wraps a reader as a Source.
@@ -36,8 +34,8 @@ type StdinSource struct {
 // process plumbing; cmd/agent will pass os.Stdin.
 func NewStdinSource(r io.Reader) *StdinSource {
 	s := &StdinSource{
-		r:   r,
-		buf: make([]byte, 0, 4096),
+		r:         r,
+		assembler: newLineAssembler(),
 	}
 	// Sniff for io.Closer once at construction so Close does not allocate.
 	if c, ok := r.(io.Closer); ok {
@@ -120,7 +118,10 @@ func (s *StdinSource) read(done <-chan struct{}, lines chan<- Line, errCh chan<-
 
 	for {
 		start := offset
-		line, consumed, err := s.readLine(br)
+		// terminated is not consulted: stdin's EOF is a real end of input, so
+		// the final line is emitted whether or not it had a trailing \n. That is
+		// the one rule the tail source must NOT copy.
+		line, consumed, _, err := s.assembler.next(br)
 		offset += consumed
 
 		if consumed > 0 {
@@ -147,60 +148,6 @@ func (s *StdinSource) read(done <-chan struct{}, lines chan<- Line, errCh chan<-
 			return
 		}
 	}
-}
-
-// readLine assembles one line from br, truncating at model.MaxMessageLen.
-//
-// It returns a fresh copy of the line with the terminator stripped, the count
-// of bytes consumed from the reader (including the terminator and any discarded
-// overflow), and any error. A final line with no trailing \n is still emitted.
-func (s *StdinSource) readLine(br *bufio.Reader) (line []byte, consumed int64, err error) {
-	s.buf = s.buf[:0]
-	var totalBytes int64
-
-	for {
-		fragment, readErr := br.ReadSlice('\n')
-		totalBytes += int64(len(fragment))
-
-		// Accumulate into s.buf up to MaxMessageLen.
-		if len(s.buf) < model.MaxMessageLen {
-			space := model.MaxMessageLen - len(s.buf)
-			if len(fragment) <= space {
-				s.buf = append(s.buf, fragment...)
-			} else {
-				// This fragment would exceed the limit; take only what fits.
-				s.buf = append(s.buf, fragment[:space]...)
-				// A counter belongs here once the pipeline exists.
-			}
-		}
-		// If len(s.buf) >= MaxMessageLen, just count bytes without appending.
-
-		if readErr != nil {
-			if errors.Is(readErr, bufio.ErrBufferFull) {
-				// Buffer filled without finding \n; continue reading.
-				continue
-			}
-			// io.EOF or real error.
-			err = readErr
-			break
-		}
-
-		// Found \n; stop reading.
-		break
-	}
-
-	// Strip trailing \n and \r if present (but only from what we accumulated).
-	if len(s.buf) > 0 && s.buf[len(s.buf)-1] == '\n' {
-		s.buf = s.buf[:len(s.buf)-1]
-	}
-	if len(s.buf) > 0 && s.buf[len(s.buf)-1] == '\r' {
-		s.buf = s.buf[:len(s.buf)-1]
-	}
-
-	// Return a fresh copy; s.buf is reused.
-	line = make([]byte, len(s.buf))
-	copy(line, s.buf)
-	return line, totalBytes, err
 }
 
 // Close releases the underlying reader if it implements io.Closer.
