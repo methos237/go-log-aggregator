@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/jamespolk/go-log-aggregator/internal/observability"
 )
 
 // fixedPayload returns a 10-byte, index-distinguishable payload. Every test
@@ -412,8 +414,8 @@ func TestSpoolMaxBytesEviction(t *testing.T) {
 		}
 	}
 
-	if got, want := sp.Dropped(), int64(3); got != want {
-		t.Fatalf("Dropped() = %d, want %d", got, want)
+	if got, want := counterValue(t, sp.metrics.RecordsDropped.WithLabelValues(observability.ComponentAgent, reasonSpoolEvicted)), float64(3); got != want {
+		t.Fatalf("RecordsDropped{reason=spool_evicted} = %v, want %v", got, want)
 	}
 	if got, want := sp.Len(), 3; got != want {
 		t.Fatalf("Len() = %d, want %d", got, want)

@@ -1,11 +1,13 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -348,8 +350,8 @@ func TestDockerSource_TimestampParsedAndStripped(t *testing.T) {
 	if got.Cursor.Head != (Fingerprint{}) {
 		t.Errorf("Cursor.Head = %v, want zero", got.Cursor.Head)
 	}
-	if s.TimestampParseFailures() != 0 {
-		t.Errorf("TimestampParseFailures() = %d, want 0", s.TimestampParseFailures())
+	if got := counterValue(t, s.metrics.DockerTimestampParseFailures); got != 0 {
+		t.Errorf("DockerTimestampParseFailures = %v, want 0", got)
 	}
 }
 
@@ -392,8 +394,8 @@ func TestDockerSource_UnparseableTimestampFallsBackWithoutDropping(t *testing.T)
 			if got.Time.Before(before) || got.Time.After(after) {
 				t.Errorf("Time = %v, want within [%v, %v] (fallback to observation time)", got.Time, before, after)
 			}
-			if got := s.TimestampParseFailures(); got != 1 {
-				t.Errorf("TimestampParseFailures() = %d, want 1", got)
+			if got := counterValue(t, s.metrics.DockerTimestampParseFailures); got != 1 {
+				t.Errorf("DockerTimestampParseFailures = %v, want 1", got)
 			}
 		})
 	}
@@ -529,8 +531,71 @@ func TestDockerSource_StreamEndRetries(t *testing.T) {
 	if got := fake.callCount(); got < 2 {
 		t.Errorf("ContainerLogs called %d times, want at least 2 (a retry)", got)
 	}
-	if got := s.Reconnects(); got < 1 {
-		t.Errorf("Reconnects() = %d, want at least 1", got)
+	if got := counterValue(t, s.metrics.DockerReconnects); got < 1 {
+		t.Errorf("DockerReconnects = %v, want at least 1", got)
+	}
+}
+
+// syncBuffer is a bytes.Buffer safe for one goroutine to write (the slog
+// handler, from inside Run) while another reads (the test, polling for the
+// warning to appear).
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// TestDockerSource_ConnectFailureIsLogged pins the one case this package
+// makes an exception to "no logger reaches a Source": a container that
+// cannot be connected to at all (as opposed to one whose stream merely
+// ended) is a configuration error, not ordinary operation, and must not
+// retry forever in total silence.
+func TestDockerSource_ConnectFailureIsLogged(t *testing.T) {
+	var buf syncBuffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+
+	fake := &fakeDockerClient{
+		responses: []fakeLogsResponse{{err: errors.New("no such container")}},
+	}
+	s, err := NewDockerSource(&DockerConfig{Container: "ghost", Stream: DockerStdout, Client: fake, Logger: logger})
+	if err != nil {
+		t.Fatalf("NewDockerSource() error = %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	out := make(chan Line, 1)
+	errCh := make(chan error, 1)
+	go func() { errCh <- s.Run(ctx, out) }()
+
+	deadline := time.After(2 * time.Second)
+	for !strings.Contains(buf.String(), "connect failed") {
+		select {
+		case <-deadline:
+			t.Fatal("connect failure was never logged")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	cancel()
+	<-errCh
+
+	logged := buf.String()
+	if !strings.Contains(logged, "ghost") {
+		t.Errorf("log output = %q, want it to mention the container", logged)
+	}
+	if !strings.Contains(logged, "no such container") {
+		t.Errorf("log output = %q, want it to mention the error", logged)
 	}
 }
 

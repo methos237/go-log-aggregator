@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jamespolk/go-log-aggregator/internal/model"
+	"github.com/jamespolk/go-log-aggregator/internal/observability"
 )
 
 // mustExtractor builds an Extractor or fails the test immediately.
@@ -73,8 +74,8 @@ func TestExtractorRegexNoMatch(t *testing.T) {
 	if fields != nil {
 		t.Errorf("Fields = %v, want nil for a non-matching line", fields)
 	}
-	if e.RegexMismatches() != 1 {
-		t.Errorf("RegexMismatches() = %d, want 1", e.RegexMismatches())
+	if got := counterValue(t, e.metrics.ExtractRegexMismatches); got != 1 {
+		t.Errorf("ExtractRegexMismatches = %v, want 1", got)
 	}
 	if string(line) != string(original) {
 		t.Errorf("line bytes changed: got %q, want %q (extraction must never touch the message)", line, original)
@@ -116,8 +117,8 @@ func TestExtractorJSONInvalid(t *testing.T) {
 	if fields != nil {
 		t.Errorf("Fields = %v, want nil for invalid JSON", fields)
 	}
-	if e.JSONUnparsed() != 1 {
-		t.Errorf("JSONUnparsed() = %d, want 1", e.JSONUnparsed())
+	if got := counterValue(t, e.metrics.ExtractJSONUnparsed); got != 1 {
+		t.Errorf("ExtractJSONUnparsed = %v, want 1", got)
 	}
 }
 
@@ -189,8 +190,8 @@ func TestExtractorFieldNameLimit(t *testing.T) {
 	if _, ok := fields[tooLongName]; ok {
 		t.Errorf("field of MaxFieldNameLen+1 was kept, want skipped")
 	}
-	if e.NamesSkipped() != 1 {
-		t.Errorf("NamesSkipped() = %d, want 1", e.NamesSkipped())
+	if got := counterValue(t, e.metrics.RecordsDropped.WithLabelValues(observability.ComponentAgent, reasonFieldNameSkipped)); got != 1 {
+		t.Errorf("RecordsDropped{reason=field_name_skipped} = %v, want 1", got)
 	}
 }
 
@@ -215,8 +216,8 @@ func TestExtractorFieldValueLimit(t *testing.T) {
 	if got != longValue[:model.MaxFieldValueLen] {
 		t.Error(`fields["b"] is not a prefix-truncation of the original value`)
 	}
-	if e.ValuesTruncated() != 1 {
-		t.Errorf("ValuesTruncated() = %d, want 1", e.ValuesTruncated())
+	if got := counterValue(t, e.metrics.ExtractValuesTruncated); got != 1 {
+		t.Errorf("ExtractValuesTruncated = %v, want 1", got)
 	}
 }
 
@@ -254,8 +255,8 @@ func TestExtractorFieldOverflow(t *testing.T) {
 	if len(fields) != model.MaxFields {
 		t.Errorf("len(fields) = %d, want exactly model.MaxFields (%d)", len(fields), model.MaxFields)
 	}
-	if e.FieldsOverflowed() != int64(extra) {
-		t.Errorf("FieldsOverflowed() = %d, want %d", e.FieldsOverflowed(), extra)
+	if got := counterValue(t, e.metrics.RecordsDropped.WithLabelValues(observability.ComponentAgent, reasonFieldOverflow)); got != float64(extra) {
+		t.Errorf("RecordsDropped{reason=field_overflow} = %v, want %d", got, extra)
 	}
 }
 
@@ -269,8 +270,8 @@ func TestExtractorEmptyFieldNameSkipped(t *testing.T) {
 	if got, want := fields["b"], "y"; got != want {
 		t.Errorf(`fields["b"] = %q, want %q`, got, want)
 	}
-	if e.NamesSkipped() != 1 {
-		t.Errorf("NamesSkipped() = %d, want 1", e.NamesSkipped())
+	if got := counterValue(t, e.metrics.RecordsDropped.WithLabelValues(observability.ComponentAgent, reasonFieldNameSkipped)); got != 1 {
+		t.Errorf("RecordsDropped{reason=field_name_skipped} = %v, want 1", got)
 	}
 }
 
@@ -352,8 +353,8 @@ func TestExtractorValueTruncationKeepsUTF8Valid(t *testing.T) {
 	if !utf8.ValidString(got) {
 		t.Error("truncated value is not valid UTF-8; a rune was split at the boundary")
 	}
-	if e.ValuesTruncated() != 1 {
-		t.Errorf("ValuesTruncated() = %d, want 1", e.ValuesTruncated())
+	if got := counterValue(t, e.metrics.ExtractValuesTruncated); got != 1 {
+		t.Errorf("ExtractValuesTruncated = %v, want 1", got)
 	}
 	// The whole ASCII prefix must survive: backing up to a rune boundary should
 	// cost at most the width of one rune, not silently drop more.

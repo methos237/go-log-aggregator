@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"sync/atomic"
 	"time"
 
 	"github.com/jamespolk/go-log-aggregator/internal/model"
@@ -54,6 +53,10 @@ type MultilineConfig struct {
 	// Setting MaxBytes below the longest single line a source produces
 	// therefore disables joining for those lines rather than truncating them.
 	MaxBytes int
+	// Metrics records splits and timeout flushes. Nil builds an unregistered
+	// set via NewMetrics(nil), which is what tests want; production wiring
+	// supplies one built against the real registry.
+	Metrics *Metrics
 }
 
 // Joiner is the multiline stage: it reads Lines from one channel and emits
@@ -62,21 +65,14 @@ type MultilineConfig struct {
 //
 // A Joiner carries no per-run state itself; the held record per source and
 // the flush timer live inside Run, so one Joiner may in principle be reused
-// across Run calls. Its counters are the deliberate exception: they are
+// across Run calls. Its metrics are the deliberate exception: they are
 // cumulative across calls, which is the correct behavior for a metric.
 type Joiner struct {
 	continuation *regexp.Regexp
 	flushTimeout time.Duration
 	maxLines     int
 	maxBytes     int
-
-	// Counters kept local to this file rather than routed through
-	// internal/agent/metrics.go, which another change is adding concurrently.
-	// A later consolidation can read these through the exported accessors
-	// below instead of duplicating the bookkeeping here.
-	maxBytesSplits atomic.Int64
-	maxLinesSplits atomic.Int64
-	timeoutFlushes atomic.Int64
+	metrics      *Metrics
 }
 
 // NewJoiner validates cfg and returns a Joiner, applying defaults for zero
@@ -112,25 +108,19 @@ func NewJoiner(cfg MultilineConfig) (*Joiner, error) {
 		maxBytes = model.MaxMessageLen
 	}
 
+	metrics := cfg.Metrics
+	if metrics == nil {
+		metrics = NewMetrics(nil)
+	}
+
 	return &Joiner{
 		continuation: cfg.Continuation,
 		flushTimeout: flushTimeout,
 		maxLines:     maxLines,
 		maxBytes:     maxBytes,
+		metrics:      metrics,
 	}, nil
 }
-
-// MaxBytesSplits reports how many held records were emitted early because the
-// next line would have pushed them past MaxBytes.
-func (j *Joiner) MaxBytesSplits() int64 { return j.maxBytesSplits.Load() }
-
-// MaxLinesSplits reports how many held records were emitted early because the
-// next line would have pushed them past MaxLines.
-func (j *Joiner) MaxLinesSplits() int64 { return j.maxLinesSplits.Load() }
-
-// TimeoutFlushes reports how many held records were emitted because
-// FlushTimeout elapsed with no further line arriving.
-func (j *Joiner) TimeoutFlushes() int64 { return j.timeoutFlushes.Load() }
 
 // Run reads lines from in, emits joined records on out, and returns when in
 // is closed or ctx is canceled.
@@ -255,14 +245,14 @@ func (j *Joiner) absorb(ctx context.Context, out chan<- Line, held map[string]*h
 
 	switch {
 	case len(h.bytes)+sep+len(line.Bytes) > j.maxBytes:
-		j.maxBytesSplits.Add(1)
+		j.metrics.MultilineMaxBytesSplits.Inc()
 		if err := j.flushOne(ctx, out, h); err != nil {
 			return err
 		}
 		held[line.Source] = j.newHeld(line, now)
 
 	case h.lines+1 > j.maxLines:
-		j.maxLinesSplits.Add(1)
+		j.metrics.MultilineMaxLinesSplits.Inc()
 		if err := j.flushOne(ctx, out, h); err != nil {
 			return err
 		}
@@ -313,7 +303,7 @@ func (j *Joiner) flushDue(ctx context.Context, out chan<- Line, held map[string]
 			return err
 		}
 		delete(held, source)
-		j.timeoutFlushes.Add(1)
+		j.metrics.MultilineTimeoutFlushes.Inc()
 	}
 	return nil
 }

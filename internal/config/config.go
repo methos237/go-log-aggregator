@@ -13,6 +13,7 @@ import (
 	"math"
 	"net"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -32,6 +33,7 @@ type Config struct {
 	Queue   Queue
 	Cluster Cluster
 	Log     Log
+	Agent   Agent
 }
 
 // Node identifies this process within the cluster.
@@ -204,6 +206,98 @@ type Log struct {
 	AddSource bool
 }
 
+// Agent configures the log-shipping agent's pipeline: which sources to
+// read, how to join and extract structure from their lines, and how to
+// reach the collector. It has no default that assumes any particular
+// source — the compose stack's own agent service is what supplies FILES,
+// CONTAINERS or STDIN — but every other setting defaults to something that
+// works once at least one source is.
+type Agent struct {
+	// Files are file paths to tail, one source each.
+	Files []string
+	// Containers are Docker container names to follow. Each yields two
+	// sources — stdout and stderr — checkpointed and labeled independently;
+	// see the agent package's DockerSource.
+	Containers []string
+	// Stdin tails os.Stdin as an additional source.
+	Stdin bool
+	// Service, when set, overrides the per-source service label for every
+	// configured source. Left empty (the default), each source derives its
+	// own service label instead — a file's base name with its extension
+	// stripped, or "<container>-<stream>" — so every file and every
+	// container stream becomes its own stream. Setting this deliberately
+	// collapses every source into one stream, which is occasionally what an
+	// operator wants (one label for a fleet of otherwise-identical
+	// sidecars) and is why the override exists, but two sources sharing a
+	// label set are indistinguishable downstream, so it should be a
+	// deliberate choice.
+	Service string
+	// Env labels every record this agent ships. Defaults to Node.Env, so an
+	// agent in the same compose stack as its collector needs no separate
+	// setting.
+	Env string
+	// Host labels every record this agent ships. Defaults to the machine's
+	// hostname.
+	Host string
+
+	// IngestAddr is the collector's ingest listener.
+	IngestAddr string
+	// CertFile, KeyFile and CAFile are this agent's client TLS material,
+	// all three or none — the same rule ingest.ClientConfig enforces at
+	// dial time (see ingest.ErrPartialClientTLS), which Validate defers to
+	// rather than restating.
+	CertFile string
+	KeyFile  string
+	CAFile   string
+
+	// CheckpointPath persists acked progress per source across restarts.
+	CheckpointPath string
+	// SpoolDir, SpoolMaxBytes and SpoolSegmentBytes configure the bounded
+	// on-disk buffer used while the collector is unreachable; see the agent
+	// package's Spool.
+	SpoolDir          string
+	SpoolMaxBytes     int64
+	SpoolSegmentBytes int64
+
+	// QueueCapacity bounds the lines channel between the sources and the
+	// multiline joiner: how many lines may be read ahead of the rest of the
+	// pipeline before a source's Run blocks.
+	QueueCapacity int
+	// PollInterval is how often a tailed file is checked for new data once
+	// caught up to EOF.
+	PollInterval time.Duration
+
+	// MultilinePattern is a continuation-line regex: a line matching it is
+	// folded into the record before it. Empty disables joining, which is
+	// the right default for a source that already emits one line per
+	// record.
+	MultilinePattern string
+	// MultilineTimeout flushes a held record when no further continuation
+	// line arrives within it.
+	MultilineTimeout time.Duration
+
+	// ExtractJSON parses each line as a JSON object into fields.
+	ExtractJSON bool
+	// ExtractPattern extracts fields from named capture groups. Empty
+	// disables regex extraction.
+	ExtractPattern string
+
+	// BatchRecords and BatchBytes bound one batch shipped to the collector.
+	// BatchDelay bounds how long a partially-filled batch waits before
+	// shipping anyway.
+	BatchRecords int
+	BatchBytes   int
+	BatchDelay   time.Duration
+	// AckWindow bounds how many batches may be outstanding — sent but not
+	// yet acknowledged — before the shipper stops sending and spools
+	// instead.
+	AckWindow int
+	// MinBackoff and MaxBackoff bound the full-jitter backoff used both to
+	// reopen a dropped ingest stream and to pause after an OVERLOADED ack.
+	MinBackoff time.Duration
+	MaxBackoff time.Duration
+}
+
 // Load reads configuration from the environment and validates it.
 func Load() (*Config, error) {
 	e := &env{}
@@ -299,6 +393,48 @@ func Load() (*Config, error) {
 			Format:    e.str("LOG_FORMAT", "json"),
 			AddSource: e.bool("LOG_ADD_SOURCE", false),
 		},
+	}
+
+	// Agent.Env and Agent.Host default from values Load has already resolved
+	// above, not from a literal, so an agent sharing a compose stack with its
+	// collector needs no separate setting for either.
+	cfg.Agent = Agent{
+		Files:      e.list("AGENT_FILES", nil),
+		Containers: e.list("AGENT_CONTAINERS", nil),
+		Stdin:      e.bool("AGENT_STDIN", false),
+		Service:    e.str("AGENT_SERVICE", ""),
+		Env:        e.str("AGENT_ENV", cfg.Node.Env),
+		Host:       e.str("AGENT_HOST", hostname),
+
+		// Loopback, matching Ingest.Addr's own default: this is where a bare
+		// `go run ./cmd/agent` on the same host as `make dev` finds its
+		// collector. A container overrides it to the collector's compose
+		// service name.
+		IngestAddr: e.str("AGENT_INGEST_ADDR", "127.0.0.1:9095"),
+		CertFile:   e.str("AGENT_CERT_FILE", ""),
+		KeyFile:    e.str("AGENT_KEY_FILE", ""),
+		CAFile:     e.str("AGENT_CA_FILE", ""),
+
+		CheckpointPath:    e.str("AGENT_CHECKPOINT_PATH", "/var/lib/logagg/checkpoint.json"),
+		SpoolDir:          e.str("AGENT_SPOOL_DIR", "/var/lib/logagg/spool"),
+		SpoolMaxBytes:     e.bytes64("AGENT_SPOOL_MAX_BYTES", 256<<20),
+		SpoolSegmentBytes: e.bytes64("AGENT_SPOOL_SEGMENT_BYTES", 8<<20),
+
+		QueueCapacity: e.int("AGENT_QUEUE_CAPACITY", 4096),
+		PollInterval:  e.dur("AGENT_POLL_INTERVAL", 250*time.Millisecond),
+
+		MultilinePattern: e.str("AGENT_MULTILINE_PATTERN", ""),
+		MultilineTimeout: e.dur("AGENT_MULTILINE_TIMEOUT", 5*time.Second),
+
+		ExtractJSON:    e.bool("AGENT_EXTRACT_JSON", false),
+		ExtractPattern: e.str("AGENT_EXTRACT_PATTERN", ""),
+
+		BatchRecords: e.int("AGENT_BATCH_RECORDS", 500),
+		BatchBytes:   e.bytes("AGENT_BATCH_BYTES", 512<<10),
+		BatchDelay:   e.dur("AGENT_BATCH_DELAY", time.Second),
+		AckWindow:    e.int("AGENT_ACK_WINDOW", 64),
+		MinBackoff:   e.dur("AGENT_MIN_BACKOFF", 250*time.Millisecond),
+		MaxBackoff:   e.dur("AGENT_MAX_BACKOFF", 30*time.Second),
 	}
 
 	if err := e.err(); err != nil {
@@ -434,6 +570,12 @@ func (c *Config) Validate() error {
 	if c.Log.Format != "json" && c.Log.Format != "text" {
 		bad("log format must be json or text, got %q", c.Log.Format)
 	}
+	// Agent is deliberately not validated here: a collector process never
+	// sets any LOGAGG_AGENT_* variable and must stay valid regardless, while
+	// an agent process's own "no sources configured" rule would reject that
+	// same all-defaults config. cmd/agent calls Agent.Validate directly,
+	// the same way storage.NewWriter can call Writer.Validate directly on a
+	// hand-built config without going through Config.Validate.
 
 	return errors.Join(errs...)
 }
@@ -477,6 +619,91 @@ func (w *Writer) Validate() error {
 	}
 	if w.StreamRefreshInterval <= 0 {
 		bad("writer stream refresh interval must be positive, got %s", w.StreamRefreshInterval)
+	}
+
+	return errors.Join(errs...)
+}
+
+// Validate reports every invalid agent setting at once.
+//
+// A method on Agent rather than inline in Config.Validate, and deliberately
+// not called from Config.Validate, for the same reason Writer.Validate is its
+// own method: cmd/agent needs to enforce this on its own, without forcing a
+// collector process — which never sets any LOGAGG_AGENT_* variable and has
+// no sources to configure — to fail its own, otherwise-valid default
+// config.
+func (a *Agent) Validate() error {
+	var errs []error
+	bad := func(format string, args ...any) {
+		errs = append(errs, fmt.Errorf(format, args...))
+	}
+
+	// An agent with nothing to read is a misconfiguration, not a no-op: it
+	// would start, connect to nothing useful, and sit idle forever, which is
+	// worth catching at startup rather than discovering as "why is this
+	// agent shipping zero records".
+	if len(a.Files) == 0 && len(a.Containers) == 0 && !a.Stdin {
+		bad("agent has no sources configured: set %sAGENT_FILES, %sAGENT_CONTAINERS, or %sAGENT_STDIN",
+			EnvPrefix, EnvPrefix, EnvPrefix)
+	}
+
+	if a.MultilinePattern != "" {
+		if _, err := regexp.Compile(a.MultilinePattern); err != nil {
+			bad("agent multiline pattern %q does not compile: %v", a.MultilinePattern, err)
+		}
+	}
+	if a.ExtractPattern != "" {
+		if _, err := regexp.Compile(a.ExtractPattern); err != nil {
+			bad("agent extract pattern %q does not compile: %v", a.ExtractPattern, err)
+		}
+	}
+
+	// Client TLS is all three files or none — the same rule
+	// ingest.ClientConfig enforces at dial time (ErrPartialClientTLS) — so
+	// this checks exactly that shape rather than restating ingest's own,
+	// more elaborate server-side rules for the collector's Ingest section
+	// above, which allow a cert+key pair with no client CA.
+	certSet, keySet, caSet := a.CertFile != "", a.KeyFile != "", a.CAFile != ""
+	if certSet != keySet || keySet != caSet {
+		bad("agent client TLS needs all three of cert, key and CA files, or none, got cert=%q key=%q ca=%q",
+			a.CertFile, a.KeyFile, a.CAFile)
+	}
+
+	if a.SpoolMaxBytes <= 0 {
+		bad("agent spool max bytes must be positive, got %d", a.SpoolMaxBytes)
+	}
+	if a.SpoolSegmentBytes <= 0 {
+		bad("agent spool segment bytes must be positive, got %d", a.SpoolSegmentBytes)
+	}
+	if a.QueueCapacity <= 0 {
+		bad("agent queue capacity must be positive, got %d", a.QueueCapacity)
+	}
+	if a.PollInterval <= 0 {
+		bad("agent poll interval must be positive, got %s", a.PollInterval)
+	}
+	if a.MultilineTimeout <= 0 {
+		bad("agent multiline timeout must be positive, got %s", a.MultilineTimeout)
+	}
+	if a.BatchRecords <= 0 {
+		bad("agent batch records must be positive, got %d", a.BatchRecords)
+	}
+	if a.BatchBytes <= 0 {
+		bad("agent batch bytes must be positive, got %d", a.BatchBytes)
+	}
+	if a.BatchDelay <= 0 {
+		bad("agent batch delay must be positive, got %s", a.BatchDelay)
+	}
+	if a.AckWindow <= 0 {
+		bad("agent ack window must be positive, got %d", a.AckWindow)
+	}
+	if a.MinBackoff <= 0 {
+		bad("agent min backoff must be positive, got %s", a.MinBackoff)
+	}
+	if a.MaxBackoff <= 0 {
+		bad("agent max backoff must be positive, got %s", a.MaxBackoff)
+	}
+	if a.MinBackoff > 0 && a.MaxBackoff > 0 && a.MaxBackoff < a.MinBackoff {
+		bad("agent max backoff %s is below min backoff %s", a.MaxBackoff, a.MinBackoff)
 	}
 
 	return errors.Join(errs...)

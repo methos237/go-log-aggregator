@@ -11,7 +11,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
-	"sync/atomic"
+
+	"github.com/jamespolk/go-log-aggregator/internal/observability"
 )
 
 // byteOrder is the explicit encoding for every on-disk integer in a segment
@@ -88,6 +89,10 @@ type SpoolConfig struct {
 	MaxBytes int64
 	// SegmentBytes is the size past which Append rolls to a new segment file.
 	SegmentBytes int64
+	// Metrics records MaxBytes evictions. Nil builds an unregistered set via
+	// NewMetrics(nil), which is what tests want; production wiring supplies
+	// one built against the real registry.
+	Metrics *Metrics
 }
 
 // segmentInfo is one segment file's bookkeeping: how many whole valid
@@ -170,12 +175,10 @@ type Spool struct {
 	// persist, and is what cursorDurableInterval bounds.
 	releasesSincePersist int
 
-	// dropped counts entries discarded by MaxBytes eviction. Kept local to
-	// this file rather than routed through internal/agent/metrics.go, which a
-	// separate change is adding concurrently — the same stopgap multiline.go
-	// and extract.go already use for their counters. A later consolidation
-	// can read this through Dropped instead of duplicating the bookkeeping.
-	dropped atomic.Int64
+	// metrics records entries MaxBytes eviction discards as a genuine drop
+	// (see enforceMaxBytesLocked): an outage that outlasted the configured
+	// spool size, and those entries' records are gone for good.
+	metrics *Metrics
 }
 
 // NewSpool opens or creates the spool rooted at cfg.Dir.
@@ -200,11 +203,17 @@ func NewSpool(cfg SpoolConfig) (*Spool, error) {
 		return nil, fmt.Errorf("spool: create dir %s: %w", cfg.Dir, err)
 	}
 
+	metrics := cfg.Metrics
+	if metrics == nil {
+		metrics = NewMetrics(nil)
+	}
+
 	s := &Spool{
 		dir:          cfg.Dir,
 		maxBytes:     cfg.MaxBytes,
 		segmentBytes: cfg.SegmentBytes,
 		cursorPath:   filepath.Join(cfg.Dir, cursorFileName),
+		metrics:      metrics,
 	}
 
 	if err := s.recover(); err != nil {
@@ -444,7 +453,8 @@ func (s *Spool) reopenTailLocked() error {
 func (s *Spool) enforceMaxBytesLocked() {
 	for s.totalBytesLocked() > s.maxBytes && len(s.segments) > 1 {
 		victim := s.segments[0]
-		s.dropped.Add(int64(victim.entries - s.consumedEntries))
+		lost := victim.entries - s.consumedEntries
+		s.metrics.RecordsDropped.WithLabelValues(observability.ComponentAgent, reasonSpoolEvicted).Add(float64(lost))
 		s.segments = s.segments[1:]
 		s.consumedEntries = 0
 		s.consumedBytes = 0
@@ -637,14 +647,6 @@ func (s *Spool) Bytes() int64 {
 	defer s.mu.Unlock()
 	return s.totalBytesLocked()
 }
-
-// Dropped reports how many entries MaxBytes eviction has discarded because
-// they were still unreleased when their segment aged out. It is not part of
-// the sketch this type was specified from, but the spec requires counting
-// dropped entries and testing that count, so an accessor is unavoidable; it
-// follows the same local-counter convention as multiline.go and extract.go
-// (see the dropped field) rather than inventing a different shape.
-func (s *Spool) Dropped() int64 { return s.dropped.Load() }
 
 // Close persists the read cursor durably and releases the open tail handle.
 // It is safe to call more than once.

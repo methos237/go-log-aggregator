@@ -7,9 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/rand/v2"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
@@ -52,6 +52,18 @@ type DockerConfig struct {
 	// resuming can produce). The zero Cursor starts from the beginning of
 	// whatever log history the daemon has retained for the container.
 	Resume Cursor
+	// Metrics records timestamp fallbacks and reconnects. Nil builds an
+	// unregistered set via NewMetrics(nil), which is what tests want;
+	// production wiring supplies one built against the real registry.
+	Metrics *Metrics
+	// Logger reports connect failures at warn level, including the
+	// container and the error. Nil means no logging, which is what tests
+	// want; production wiring supplies the process logger. A permanently
+	// wrong container name would otherwise retry forever in total silence —
+	// no logger reaches a Source anywhere else in this package, since
+	// reconnects is normally the visible signal, but a container that never
+	// existed is a configuration error the operator needs to see directly.
+	Logger *slog.Logger
 }
 
 // DockerClient is the slice of the Docker API this source needs, so tests
@@ -113,14 +125,10 @@ type DockerSource struct {
 	closeOnce sync.Once
 	closeErr  error
 
-	// Counters kept local to this file rather than routed through
-	// internal/agent/metrics.go, which another change (spool.go) is editing
-	// concurrently -- see extract.go's Extractor and multiline.go's Joiner
-	// for the same stopgap and the reasoning behind it. A later
-	// consolidation can read these through the accessors below instead of
-	// duplicating the bookkeeping.
-	timestampParseFailures atomic.Int64
-	reconnects             atomic.Int64
+	metrics *Metrics
+	// logger reports connect failures; nil means no logging. See
+	// DockerConfig.Logger.
+	logger *slog.Logger
 }
 
 // NewDockerSource validates cfg and returns a DockerSource ready to Run.
@@ -153,6 +161,11 @@ func NewDockerSource(cfg *DockerConfig) (*DockerSource, error) {
 		ownsClient = true
 	}
 
+	metrics := cfg.Metrics
+	if metrics == nil {
+		metrics = NewMetrics(nil)
+	}
+
 	return &DockerSource{
 		container:  cfg.Container,
 		stream:     cfg.Stream,
@@ -160,6 +173,8 @@ func NewDockerSource(cfg *DockerConfig) (*DockerSource, error) {
 		ownsClient: ownsClient,
 		resume:     cfg.Resume,
 		assembler:  newLineAssembler(),
+		metrics:    metrics,
+		logger:     cfg.Logger,
 	}, nil
 }
 
@@ -199,10 +214,19 @@ func (s *DockerSource) Run(ctx context.Context, out chan<- Line) error {
 	for {
 		newSince, connected, err := s.readOnce(ctx, out, since)
 		since = newSince
-		_ = err // no logger reaches a Source; reconnects is the visible signal.
 
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+
+		if err != nil && !connected && s.logger != nil {
+			// A connect failure, not an ordinary disconnect after a stream
+			// that worked for a while: see DockerConfig.Logger's doc comment
+			// on why this is the one case in this package worth logging.
+			s.logger.Warn("docker source: connect failed",
+				slog.String("container", s.container),
+				slog.String("stream", string(s.stream)),
+				slog.Any("error", err))
 		}
 
 		if connected {
@@ -212,7 +236,7 @@ func (s *DockerSource) Run(ctx context.Context, out chan<- Line) error {
 			attempt = 0
 		}
 		attempt++
-		s.reconnects.Add(1)
+		s.metrics.DockerReconnects.Inc()
 
 		if !dockerSleep(ctx, dockerBackoff(attempt, dockerBackoffBase, dockerBackoffMax)) {
 			return ctx.Err()
@@ -404,7 +428,7 @@ func (s *DockerSource) toLine(raw []byte) Line {
 		// a misconfigured log driver (or a daemon that ignored
 		// Timestamps) from ordinary operation.
 		ts = time.Now()
-		s.timestampParseFailures.Add(1)
+		s.metrics.DockerTimestampParseFailures.Inc()
 		rest = raw
 	}
 
@@ -522,14 +546,3 @@ func (s *DockerSource) Close() error {
 	})
 	return s.closeErr
 }
-
-// TimestampParseFailures reports how many lines arrived without a timestamp
-// this source could parse. Each one still shipped, with observation time in
-// place of the line's own -- see toLine.
-func (s *DockerSource) TimestampParseFailures() int64 { return s.timestampParseFailures.Load() }
-
-// Reconnects reports how many times the underlying log stream ended, or
-// failed to open, and this source reconnected. A healthy, long-running
-// container should show this rarely; a value climbing steadily says the
-// container is restart-looping or the daemon connection is unstable.
-func (s *DockerSource) Reconnects() int64 { return s.reconnects.Load() }

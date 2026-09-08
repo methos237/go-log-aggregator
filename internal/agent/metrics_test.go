@@ -24,6 +24,16 @@ func TestNewMetrics_NilRegistererDoesNotPanic(t *testing.T) {
 	m.TruncationsDetected.Inc()
 	m.GenerationsMissed.Inc()
 	m.RecordsDropped.WithLabelValues(observability.ComponentAgent, reasonMissedGeneration).Inc()
+	m.MultilineMaxBytesSplits.Inc()
+	m.MultilineMaxLinesSplits.Inc()
+	m.MultilineTimeoutFlushes.Inc()
+	m.ExtractRegexMismatches.Inc()
+	m.ExtractJSONUnparsed.Inc()
+	m.ExtractValuesTruncated.Inc()
+	m.DockerTimestampParseFailures.Inc()
+	m.DockerReconnects.Inc()
+	m.Acks.WithLabelValues("accepted").Inc()
+	m.Reconnects.Inc()
 }
 
 // TestNewMetrics_PreCreatesMissedGenerationReason checks the house rule that
@@ -90,6 +100,45 @@ func TestNewMetrics_SharesRecordsDroppedAcrossLayers(t *testing.T) {
 					t.Errorf("records_dropped_total{missed_generation} = %v, want 2 (both handles share one collector)", got)
 				}
 			}
+		}
+	}
+}
+
+// TestNewMetrics_PreCreatesEveryDropReason checks the house rule generally:
+// every closed-set reason this package can record on the shared
+// RecordsDropped family exists at zero the moment Metrics is built, not only
+// reasonMissedGeneration (see the more targeted test above).
+func TestNewMetrics_PreCreatesEveryDropReason(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	NewMetrics(reg)
+
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("Gather: %v", err)
+	}
+
+	reasons := []string{
+		reasonMissedGeneration, reasonNoLabels, reasonInvalidRecord, reasonRecordTooLarge,
+		reasonCorruptSpoolEntry, reasonAckInvalid, reasonEncodeFailed, reasonSpoolAppendFailed,
+		reasonFieldNameSkipped, reasonFieldOverflow, reasonSpoolEvicted,
+	}
+	for _, reason := range reasons {
+		found := false
+		for _, fam := range families {
+			if fam.GetName() != "logagg_records_dropped_total" {
+				continue
+			}
+			for _, metric := range fam.GetMetric() {
+				if labelsMatch(metric, observability.ComponentAgent, reason) {
+					found = true
+					if got := metric.GetCounter().GetValue(); got != 0 {
+						t.Errorf("pre-created %s counter = %v, want 0", reason, got)
+					}
+				}
+			}
+		}
+		if !found {
+			t.Errorf("records_dropped_total{component=agent,reason=%s} was not pre-created", reason)
 		}
 	}
 }

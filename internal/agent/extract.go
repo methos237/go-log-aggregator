@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
-	"sync/atomic"
 	"unicode/utf8"
 
 	"github.com/jamespolk/go-log-aggregator/internal/model"
+	"github.com/jamespolk/go-log-aggregator/internal/observability"
 )
 
 // ExtractConfig configures an Extractor.
@@ -18,6 +18,10 @@ type ExtractConfig struct {
 	Pattern *regexp.Regexp
 	// JSON parses the line as a JSON object into fields.
 	JSON bool
+	// Metrics records mismatches, truncations and dropped fields. Nil builds
+	// an unregistered set via NewMetrics(nil), which is what tests want;
+	// production wiring supplies one built against the real registry.
+	Metrics *Metrics
 }
 
 // Extractor pulls structured fields out of a line's bytes, honoring the
@@ -30,25 +34,7 @@ type ExtractConfig struct {
 type Extractor struct {
 	pattern *regexp.Regexp
 	json    bool
-
-	// Counters kept local to this file rather than routed through
-	// internal/agent/metrics.go, which another change is editing
-	// concurrently (see multiline.go's Joiner for the same pattern). A later
-	// consolidation can read these through the exported accessors below
-	// instead of duplicating the bookkeeping here.
-	//
-	// Three of these — namesSkipped, valuesTruncated, fieldsOverflowed —
-	// are kept separate rather than combined into one "fields discarded"
-	// counter because they demand different operator responses: a skipped
-	// name means the producer's field naming needs fixing, a truncated value
-	// means the value itself is too big, and an overflow means the line
-	// simply carries more fields than the limit allows. One counter cannot
-	// tell those apart.
-	regexMismatches  atomic.Int64
-	jsonUnparsed     atomic.Int64
-	namesSkipped     atomic.Int64
-	valuesTruncated  atomic.Int64
-	fieldsOverflowed atomic.Int64
+	metrics *Metrics
 }
 
 // NewExtractor validates cfg and returns an Extractor.
@@ -63,7 +49,13 @@ func NewExtractor(cfg ExtractConfig) (*Extractor, error) {
 	if cfg.Pattern != nil && !hasNamedGroup(cfg.Pattern) {
 		return nil, fmt.Errorf("extract: pattern %q has no named capture groups, so it would never extract a field", cfg.Pattern.String())
 	}
-	return &Extractor{pattern: cfg.Pattern, json: cfg.JSON}, nil
+
+	metrics := cfg.Metrics
+	if metrics == nil {
+		metrics = NewMetrics(nil)
+	}
+
+	return &Extractor{pattern: cfg.Pattern, json: cfg.JSON, metrics: metrics}, nil
 }
 
 func hasNamedGroup(re *regexp.Regexp) bool {
@@ -74,31 +66,6 @@ func hasNamedGroup(re *regexp.Regexp) bool {
 	}
 	return false
 }
-
-// RegexMismatches reports how many lines the configured Pattern did not
-// match. This is not a failure of the line — see Fields's doc comment — only
-// a count of how often regex extraction found nothing to contribute.
-func (e *Extractor) RegexMismatches() int64 { return e.regexMismatches.Load() }
-
-// JSONUnparsed reports how many lines JSON extraction could not use, either
-// because they were not valid JSON or because the top-level value was not an
-// object.
-func (e *Extractor) JSONUnparsed() int64 { return e.jsonUnparsed.Load() }
-
-// NamesSkipped reports how many candidate fields were dropped because their
-// name was empty or longer than model.MaxFieldNameLen. The value that would
-// have gone with that name is dropped too, since a field cannot exist
-// without one.
-func (e *Extractor) NamesSkipped() int64 { return e.namesSkipped.Load() }
-
-// ValuesTruncated reports how many field values were cut down to
-// model.MaxFieldValueLen and kept rather than dropped.
-func (e *Extractor) ValuesTruncated() int64 { return e.valuesTruncated.Load() }
-
-// FieldsOverflowed reports how many candidate fields were dropped because a
-// line, once model.MaxFields fields had already been collected for it,
-// offered more.
-func (e *Extractor) FieldsOverflowed() int64 { return e.fieldsOverflowed.Load() }
 
 // Fields extracts structured fields from a line's bytes. It returns nil when
 // there is nothing to extract or extraction did not apply.
@@ -142,7 +109,7 @@ func (e *Extractor) Fields(b []byte) map[string]string {
 func (e *Extractor) extractRegex(b []byte, fields map[string]string) map[string]string {
 	loc := e.pattern.FindSubmatchIndex(b)
 	if loc == nil {
-		e.regexMismatches.Add(1)
+		e.metrics.ExtractRegexMismatches.Inc()
 		return fields
 	}
 
@@ -180,7 +147,7 @@ func (e *Extractor) extractJSON(b []byte, fields map[string]string) map[string]s
 
 	tok, err := dec.Token()
 	if err != nil {
-		e.jsonUnparsed.Add(1)
+		e.metrics.ExtractJSONUnparsed.Inc()
 		return fields
 	}
 	delim, ok := tok.(json.Delim)
@@ -189,7 +156,7 @@ func (e *Extractor) extractJSON(b []byte, fields map[string]string) map[string]s
 		// number, a bool, null — has no keys to name, so it is counted the
 		// same as unparseable input: in both cases JSON extraction found
 		// nothing to contribute.
-		e.jsonUnparsed.Add(1)
+		e.metrics.ExtractJSONUnparsed.Inc()
 		return fields
 	}
 
@@ -198,7 +165,7 @@ func (e *Extractor) extractJSON(b []byte, fields map[string]string) map[string]s
 	for dec.More() {
 		keyTok, err := dec.Token()
 		if err != nil {
-			e.jsonUnparsed.Add(1)
+			e.metrics.ExtractJSONUnparsed.Inc()
 			return fields
 		}
 		key, ok := keyTok.(string)
@@ -208,18 +175,18 @@ func (e *Extractor) extractJSON(b []byte, fields map[string]string) map[string]s
 			// rather than asserted, since a bare type assertion here would
 			// panic on any future decoder behavior this file does not
 			// control.
-			e.jsonUnparsed.Add(1)
+			e.metrics.ExtractJSONUnparsed.Inc()
 			return fields
 		}
 		var raw json.RawMessage
 		if err := dec.Decode(&raw); err != nil {
-			e.jsonUnparsed.Add(1)
+			e.metrics.ExtractJSONUnparsed.Inc()
 			return fields
 		}
 		pairs = append(pairs, pair{key, jsonValueString(raw)})
 	}
 	if _, err := dec.Token(); err != nil { // the closing '}'
-		e.jsonUnparsed.Add(1)
+		e.metrics.ExtractJSONUnparsed.Inc()
 		return fields
 	}
 
@@ -305,22 +272,29 @@ func truncateAtRuneBoundary(s string, limit int) string {
 // could collide with another field's name and silently overwrite real data;
 // a too-long value is truncated rather than dropped, because a truncated
 // value still carries information and a dropped one carries none.
+//
+// A skipped name and a MaxFields overflow both discard a candidate field
+// outright — nothing about it survives — so both are recorded on the shared
+// observability.RecordsDropped family (reasonFieldNameSkipped,
+// reasonFieldOverflow) rather than on a package-local counter. A truncated
+// value is different: the field still exists, just shortened, so it gets its
+// own Metrics.ExtractValuesTruncated instead of counting as a drop.
 func (e *Extractor) addField(fields map[string]string, name, value string) map[string]string {
 	if name == "" || len(name) > model.MaxFieldNameLen {
-		e.namesSkipped.Add(1)
+		e.metrics.RecordsDropped.WithLabelValues(observability.ComponentAgent, reasonFieldNameSkipped).Inc()
 		return fields
 	}
 
 	// A collision (name already present) always overwrites: it never
 	// consumes a new slot, so it is exempt from the MaxFields cap below.
 	if _, exists := fields[name]; !exists && len(fields) >= model.MaxFields {
-		e.fieldsOverflowed.Add(1)
+		e.metrics.RecordsDropped.WithLabelValues(observability.ComponentAgent, reasonFieldOverflow).Inc()
 		return fields
 	}
 
 	if len(value) > model.MaxFieldValueLen {
 		value = truncateAtRuneBoundary(value, model.MaxFieldValueLen)
-		e.valuesTruncated.Add(1)
+		e.metrics.ExtractValuesTruncated.Inc()
 	}
 
 	if fields == nil {

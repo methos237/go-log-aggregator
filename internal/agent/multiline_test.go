@@ -228,8 +228,8 @@ func TestJoinerMaxBytesSplits(t *testing.T) {
 		t.Errorf("total emitted payload bytes = %d, want %d (input bytes, none lost)", totalOut, totalIn)
 	}
 
-	if got := j.MaxBytesSplits(); got != 1 {
-		t.Errorf("MaxBytesSplits() = %d, want 1", got)
+	if got := counterValue(t, j.metrics.MultilineMaxBytesSplits); got != 1 {
+		t.Errorf("MultilineMaxBytesSplits = %v, want 1", got)
 	}
 }
 
@@ -266,8 +266,8 @@ func TestJoinerMaxLinesSplits(t *testing.T) {
 	if string(second.Bytes) != " c\n d" {
 		t.Errorf("second record = %q, want %q", second.Bytes, " c\n d")
 	}
-	if got := j.MaxLinesSplits(); got != 1 {
-		t.Errorf("MaxLinesSplits() = %d, want 1", got)
+	if got := counterValue(t, j.metrics.MultilineMaxLinesSplits); got != 1 {
+		t.Errorf("MultilineMaxLinesSplits = %v, want 1", got)
 	}
 }
 
@@ -289,8 +289,8 @@ func TestJoinerFlushTimeout(t *testing.T) {
 	if string(got.Bytes) != "only line" {
 		t.Errorf("Bytes = %q, want %q", got.Bytes, "only line")
 	}
-	if got := j.TimeoutFlushes(); got != 1 {
-		t.Errorf("TimeoutFlushes() = %d, want 1", got)
+	if got := counterValue(t, j.metrics.MultilineTimeoutFlushes); got != 1 {
+		t.Errorf("MultilineTimeoutFlushes = %v, want 1", got)
 	}
 }
 
