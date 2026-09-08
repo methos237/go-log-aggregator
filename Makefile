@@ -159,6 +159,10 @@ dev-agent: ## Start the dev stack plus the agent and its log-writing sidecar
 	@echo "  agent logs    make dev-logs (or: $(COMPOSE) logs -f agent)"
 	@echo "  demo events   make demo-restart-collector / make demo-rotate-log"
 
+.PHONY: e2e-agent
+e2e-agent: ## Phase 3 exit criteria on the real stack: restart + rotation, assert no gaps
+	bash deploy/e2e-agent.sh
+
 .PHONY: demo-restart-collector
 demo-restart-collector: ## Exit-criteria demo: restart the collector under the running agent
 	$(COMPOSE) restart collector
