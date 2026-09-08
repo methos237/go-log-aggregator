@@ -39,6 +39,18 @@ curl -s http://127.0.0.1:9090/metrics | head   # Prometheus metrics
 
 `make help` lists every target.
 
+Push some records through it:
+
+```bash
+make build
+echo "hello from logctl" | ./bin/logctl send -addr 127.0.0.1:9095 -service demo
+./bin/loadgen -addr 127.0.0.1:9095 -records 200000    # synthetic load
+```
+
+`loadgen` prints accepted/rejected counts and exits non-zero if anything was
+rejected, so it works as a check and not only as a demo. Both are deliberately
+minimal this phase; the configurable-rate load generator arrives in phase 8.
+
 ## Architecture
 
 ```
