@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -136,6 +137,18 @@ type Queue struct {
 	// MaxAckPending bounds unacknowledged messages per consumer, which is how
 	// storage-side slowness propagates back into ingest as backpressure.
 	MaxAckPending int
+	// PublishTimeout bounds one publish, including waiting for the JetStream ack.
+	// The ingest handler acks the agent only after that ack arrives, so this is
+	// also the ceiling on how long a batch can hold a gRPC handler.
+	PublishTimeout time.Duration
+	// StreamMaxBytes caps the stream on disk. Reaching it rejects new publishes
+	// rather than discarding queued records, which pushes backpressure back to the
+	// agent instead of losing data (see queue.streamConfig).
+	StreamMaxBytes int64
+	// StreamMaxAge is the age at which an unconsumed record is dropped. This is a
+	// safety valve for a writer that has been down long enough that catching up is
+	// hopeless, not a retention policy: TimescaleDB is the archive.
+	StreamMaxAge time.Duration
 }
 
 // Cluster is the gossip membership and hash ring.
@@ -227,6 +240,12 @@ func Load() (*Config, error) {
 			SubjectPrefix:  e.str("QUEUE_SUBJECT_PREFIX", "logs"),
 			ConnectTimeout: e.dur("QUEUE_CONNECT_TIMEOUT", 10*time.Second),
 			MaxAckPending:  e.int("QUEUE_MAX_ACK_PENDING", 4096),
+			// Well under the gRPC handler's patience: a publish that has not been
+			// acked in five seconds means JetStream is unhealthy, and telling the
+			// agent to retry beats holding its stream open.
+			PublishTimeout: e.dur("QUEUE_PUBLISH_TIMEOUT", 5*time.Second),
+			StreamMaxBytes: e.bytes64("QUEUE_STREAM_MAX_BYTES", 8<<30),
+			StreamMaxAge:   e.dur("QUEUE_STREAM_MAX_AGE", 24*time.Hour),
 		},
 		Cluster: Cluster{
 			Enabled:       e.bool("CLUSTER_ENABLED", false),
@@ -325,6 +344,15 @@ func (c *Config) Validate() error {
 	}
 	if c.Queue.MaxAckPending < 1 {
 		bad("queue max ack pending must be at least 1, got %d", c.Queue.MaxAckPending)
+	}
+	if c.Queue.PublishTimeout <= 0 {
+		bad("queue publish timeout must be positive, got %s", c.Queue.PublishTimeout)
+	}
+	if c.Queue.StreamMaxBytes < 1 {
+		bad("queue stream max bytes must be positive, got %d", c.Queue.StreamMaxBytes)
+	}
+	if c.Queue.StreamMaxAge <= 0 {
+		bad("queue stream max age must be positive, got %s", c.Queue.StreamMaxAge)
 	}
 	if c.Cluster.Enabled {
 		if c.Cluster.BindAddr == "" {
@@ -434,11 +462,22 @@ func (e *env) int(key string, def int) int {
 // bytes accepts a plain byte count or a KB/MB/GB suffix, so operators can write
 // 8MB instead of counting zeros.
 func (e *env) bytes(key string, def int) int {
+	v := e.bytes64(key, int64(def))
+	if v > math.MaxInt || v < math.MinInt {
+		e.fail(key, strconv.FormatInt(v, 10), errors.New("byte size does not fit in an int"))
+		return def
+	}
+	return int(v)
+}
+
+// bytes64 is bytes for the settings that are legitimately larger than a 32-bit
+// int, such as an on-disk stream ceiling measured in gigabytes.
+func (e *env) bytes64(key string, def int64) int64 {
 	raw, ok := e.lookup(key)
 	if !ok {
 		return def
 	}
-	mult := 1
+	var mult int64 = 1
 	num := raw
 	switch {
 	case strings.HasSuffix(strings.ToUpper(raw), "GB"):
@@ -448,7 +487,7 @@ func (e *env) bytes(key string, def int) int {
 	case strings.HasSuffix(strings.ToUpper(raw), "KB"):
 		mult, num = 1<<10, raw[:len(raw)-2]
 	}
-	v, err := strconv.Atoi(strings.TrimSpace(num))
+	v, err := strconv.ParseInt(strings.TrimSpace(num), 10, 64)
 	if err != nil {
 		e.fail(key, raw, errors.New("not a byte size (e.g. 4194304, 4MB)"))
 		return def

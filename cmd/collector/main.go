@@ -27,6 +27,7 @@ import (
 	"github.com/jamespolk/go-log-aggregator/internal/config"
 	"github.com/jamespolk/go-log-aggregator/internal/httpapi"
 	"github.com/jamespolk/go-log-aggregator/internal/observability"
+	"github.com/jamespolk/go-log-aggregator/internal/queue"
 	"github.com/jamespolk/go-log-aggregator/internal/storage"
 	"github.com/jamespolk/go-log-aggregator/internal/version"
 )
@@ -160,18 +161,35 @@ func run(dsnOverride string) error {
 	// bring Postgres back, and phase 2's JetStream buffer is what absorbs the outage.
 	health.Register("database", storage.HealthCheck(pool))
 
-	// Started with no producer yet: phase 2's JetStream consumer is what will call
-	// Submit. Wiring it now means the pool sizing, the metric registration and the
-	// drain-on-shutdown path are exercised by `make dev` and by the compose smoke
-	// test before there is any ingest traffic to debug at the same time.
+	// Started with no producer yet: the JetStream consumer that will call Submit
+	// lands later in phase 2. Wiring it now means the pool sizing, the metric
+	// registration and the drain-on-shutdown path are exercised by `make dev` and by
+	// the compose smoke test before there is any ingest traffic to debug at the same
+	// time.
 	writer, err := storage.NewWriter(pool, cfg.Writer, storage.NewMetrics(metrics.Registerer), log)
 	if err != nil {
 		return fmt.Errorf("create writer: %w", err)
 	}
 	writer.Start(ctx)
 
-	// Phase 2 adds a JetStream check. /readyz reports ready only once every
-	// registered dependency answers.
+	// The queue is connected before any listener comes up: a node that cannot reach
+	// JetStream cannot durably accept a batch, so there is nothing useful for it to
+	// serve. An outage *after* startup is different — that is a readiness failure
+	// with automatic reconnection, not a reason to exit.
+	q, err := queue.Connect(ctx, cfg.Queue, queue.NewMetrics(metrics.Registerer), log)
+	if err != nil {
+		return fmt.Errorf("connect queue: %w", err)
+	}
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cfg.Node.ShutdownTimeout)
+		defer cancel()
+		if closeErr := q.Close(closeCtx); closeErr != nil {
+			log.Error("queue close failed", slog.Any("error", closeErr))
+		}
+	}()
+	health.Register("queue", queue.HealthCheck(q))
+
+	// /readyz reports ready only once every registered dependency answers.
 	apiSrv := httpapi.New(cfg.HTTP, health, log)
 	adminSrv := observability.NewAdminServer(cfg.Admin, metrics, log)
 
@@ -208,11 +226,12 @@ func run(dsnOverride string) error {
 		// down admin. Order matters: the writer must flush after nothing new can
 		// arrive, and metrics stay scrapeable throughout so the drain is observable.
 		//
-		// The database check is deregistered up front so a shutting-down node reports
-		// unready to a load balancer instead of failing requests it has already
-		// stopped serving.
+		// The dependency checks are deregistered up front so a shutting-down node
+		// reports unready to a load balancer instead of failing requests it has
+		// already stopped serving.
 		var errs []error
 		health.Deregister("database")
+		health.Deregister("queue")
 		if apiErr := apiSrv.Shutdown(shutdownCtx); apiErr != nil {
 			errs = append(errs, fmt.Errorf("http shutdown: %w", apiErr))
 		}
