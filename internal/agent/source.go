@@ -24,6 +24,50 @@ type FileID struct {
 // IsZero reports whether the ID refers to no file at all.
 func (f FileID) IsZero() bool { return f == FileID{} }
 
+// Fingerprint is a hash of a file's first bytes, used to notice that a file was
+// truncated and rewritten rather than appended to.
+//
+// It exists because size alone cannot detect that under polling. A writer that
+// truncates a file and rewrites past the old offset inside one poll interval
+// never appears to shrink, so an agent comparing sizes resumes partway into
+// unrelated new content and emits corrupted lines with no error at all — a
+// silent-corruption failure, which is worse than a gap because nothing reports
+// it.
+//
+// Len is the number of bytes hashed and is the field that says whether the
+// fingerprint means anything: zero means "not fingerprinted", which is the
+// honest answer for a file shorter than the fixed prefix length and for a cursor
+// written by a build that predates this field. Comparing hashes taken over
+// different lengths is meaningless, which is why the length is stored rather
+// than assumed — a fingerprint over min(prefix, size) would change every time a
+// short file grew and would report truncation on ordinary appends.
+type Fingerprint struct {
+	Len  int64
+	Hash uint64
+}
+
+// IsZero reports whether no fingerprint was taken.
+func (f Fingerprint) IsZero() bool { return f.Len == 0 }
+
+// Matches reports whether two fingerprints were taken over the same length and
+// agree. Two fingerprints of differing length are not comparable, so this
+// reports false rather than guessing; a caller that cannot compare should fall
+// back to size and inode rather than treat a mismatch as truncation.
+func (f Fingerprint) Matches(other Fingerprint) bool {
+	if f.IsZero() || other.IsZero() || f.Len != other.Len {
+		return false
+	}
+	return f.Hash == other.Hash
+}
+
+// Comparable reports whether two fingerprints can be compared at all: both
+// taken, and over the same number of bytes. It is separate from Matches because
+// "cannot tell" and "definitely different" call for opposite responses — the
+// first falls back to size, the second means the file was rewritten.
+func (f Fingerprint) Comparable(other Fingerprint) bool {
+	return !f.IsZero() && !other.IsZero() && f.Len == other.Len
+}
+
 // Cursor is where a Line came from, expressed in terms the checkpoint store can
 // persist and a restarted process can trust.
 //
@@ -46,6 +90,11 @@ type Cursor struct {
 	// File identifies the backing file. A change here under an unchanged Source
 	// name is a rotation; see the tail source for how truncation is told apart.
 	File FileID
+	// Head fingerprints the start of the file this cursor points into. It is
+	// persisted so that a restart can tell "the same file, resume at Offset" from
+	// "the same inode, but its contents were replaced while we were down", which
+	// inode and size together cannot distinguish.
+	Head Fingerprint
 }
 
 // Line is one unparsed log line with its provenance.

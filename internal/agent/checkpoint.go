@@ -30,15 +30,30 @@ type checkpointFile struct {
 // shape (say, adding an in-memory-only field) does not silently change the
 // file format.
 type checkpointDisk struct {
-	Start  int64      `json:"start"`
-	Offset int64      `json:"offset"`
-	File   fileIDDisk `json:"file"`
+	Start  int64           `json:"start"`
+	Offset int64           `json:"offset"`
+	File   fileIDDisk      `json:"file"`
+	Head   fingerprintDisk `json:"head,omitempty"`
 }
 
 // fileIDDisk is FileID's on-disk shape.
 type fileIDDisk struct {
 	Dev uint64 `json:"dev"`
 	Ino uint64 `json:"ino"`
+}
+
+// fingerprintDisk is Fingerprint's on-disk shape.
+//
+// "omitempty" on the field above, plus this being the JSON zero value when
+// absent, is what makes a checkpoint written by a build before Head existed
+// load cleanly: an absent "head" key unmarshals to the zero fingerprintDisk,
+// which is exactly the zero Fingerprint — "unknown, fall back to size" — not
+// a parse error. A file written by an older build is not corrupt; it simply
+// predates a field, and Load must not treat that as the same failure as
+// hand-edited garbage.
+type fingerprintDisk struct {
+	Len  int64  `json:"len"`
+	Hash uint64 `json:"hash"`
 }
 
 // CheckpointStore persists per-source cursors so a restarted agent knows
@@ -121,9 +136,10 @@ func (s *CheckpointStore) Load() error {
 // validateCursor rejects the cases a corrupt or hand-edited file could
 // produce that would otherwise resume a source silently in the wrong place:
 // a negative offset reads before the start of the file, Start greater than
-// Offset describes a line that ends before it begins, and an empty source
-// name collides with every other unnamed source instead of failing to look
-// up.
+// Offset describes a line that ends before it begins, an empty source name
+// collides with every other unnamed source instead of failing to look up,
+// and a negative Head.Len is not a length any fingerprintHead call could
+// have produced.
 func validateCursor(source string, c checkpointDisk) (Cursor, error) {
 	if source == "" {
 		return Cursor{}, errors.New("empty source name")
@@ -137,10 +153,14 @@ func validateCursor(source string, c checkpointDisk) (Cursor, error) {
 	if c.Start > c.Offset {
 		return Cursor{}, fmt.Errorf("source %q: start %d is greater than offset %d", source, c.Start, c.Offset)
 	}
+	if c.Head.Len < 0 {
+		return Cursor{}, fmt.Errorf("source %q: negative head length %d", source, c.Head.Len)
+	}
 	return Cursor{
 		Start:  c.Start,
 		Offset: c.Offset,
 		File:   FileID{Dev: c.File.Dev, Ino: c.File.Ino},
+		Head:   Fingerprint{Len: c.Head.Len, Hash: c.Head.Hash},
 	}, nil
 }
 
@@ -186,6 +206,7 @@ func (s *CheckpointStore) Commit() error {
 			Start:  c.Start,
 			Offset: c.Offset,
 			File:   fileIDDisk{Dev: c.File.Dev, Ino: c.File.Ino},
+			Head:   fingerprintDisk{Len: c.Head.Len, Hash: c.Head.Hash},
 		}
 	}
 	s.mu.Unlock()
