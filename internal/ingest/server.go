@@ -167,6 +167,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}()
 
 	var errs []error
+	closeCtx := ctx
 	select {
 	case <-stopped:
 		s.log.Info("ingest server stopped")
@@ -174,10 +175,24 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		s.grpc.Stop()
 		<-stopped
 		errs = append(errs, fmt.Errorf("ingest server did not drain in time: %w", ctx.Err()))
+
+		// The deadline is already spent, and reusing it would give the pipeline zero
+		// budget: close would take its own ctx.Done path immediately, report a
+		// pipeline failure that is really this timeout, and leave publishers draining
+		// after Shutdown returned — racing the queue connection being closed. A small
+		// independent budget lets the drain actually happen.
+		var cancel context.CancelFunc
+		closeCtx, cancel = context.WithTimeout(context.WithoutCancel(ctx), pipelineDrainGrace)
+		defer cancel()
 	}
 
-	if err := s.pipeline.close(ctx); err != nil {
+	if err := s.pipeline.close(closeCtx); err != nil {
 		errs = append(errs, fmt.Errorf("ingest pipeline: %w", err))
 	}
 	return errors.Join(errs...)
 }
+
+// pipelineDrainGrace is how long the publishers get after the gRPC server was forced
+// to stop. Short, because at this point every remaining batch is unacknowledged and
+// the queue will redeliver whatever does not make it.
+const pipelineDrainGrace = 2 * time.Second

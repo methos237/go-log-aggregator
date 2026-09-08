@@ -193,6 +193,17 @@ func run(dsnOverride string) error {
 			log.Error("queue close failed", slog.Any("error", closeErr))
 		}
 	}()
+	// Checked against the broker rather than assumed: a gRPC ceiling above the
+	// broker's max_payload turns an oversized-but-valid batch into a permanent drop,
+	// after the agent has already been told nothing about it. Refused at startup
+	// because the alternative is discovering it as records_dropped_total climbing
+	// under a reason nobody expected.
+	if maxPayload := q.MaxPayload(); int64(cfg.Ingest.MaxRecvMsgBytes) > maxPayload {
+		return fmt.Errorf(
+			"ingest accepts messages up to %d bytes but the broker accepts %d: lower %sINGEST_MAX_RECV_BYTES or raise the broker's max_payload",
+			cfg.Ingest.MaxRecvMsgBytes, maxPayload, config.EnvPrefix)
+	}
+
 	health.Register("queue", queue.HealthCheck(q))
 
 	// /readyz reports ready only once every registered dependency answers.

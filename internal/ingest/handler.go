@@ -195,6 +195,13 @@ func (s *service) publishFailed(id, subject string, streamID model.StreamID, rec
 	reason := reasonQueueRefused
 	detail := "queue rejected the batch"
 
+	// The queue kinds are tested before the context cases, and the order is
+	// load-bearing. Conn.Publish bounds itself with the publish timeout and wraps both
+	// ErrUnavailable and context.DeadlineExceeded, so a slow broker looks exactly like
+	// a client that hung up if DeadlineExceeded is matched first — and the drop would
+	// be counted against the agent instead of the broker. A genuine client cancel
+	// arrives as context.Canceled from the pipeline's own select, with no queue kind
+	// attached.
 	switch {
 	case errors.Is(err, errShed):
 		code = logaggv1.AckCode_ACK_CODE_OVERLOADED
@@ -203,16 +210,18 @@ func (s *service) publishFailed(id, subject string, streamID model.StreamID, rec
 	case errors.Is(err, errPipelineClosed):
 		reason = reasonShutdown
 		detail = "collector is shutting down"
-	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
-		// The agent hung up mid-batch. Nothing to tell it, but the records are still
-		// unaccounted for from this node's point of view.
-		reason = reasonClientGone
-		detail = "client went away"
 	case errors.Is(err, queue.ErrOverloaded):
 		code = logaggv1.AckCode_ACK_CODE_OVERLOADED
 	case errors.Is(err, queue.ErrTooLarge):
 		code = logaggv1.AckCode_ACK_CODE_INVALID
 		reason = reasonQueueTooLarge
+	case errors.Is(err, queue.ErrUnavailable), errors.Is(err, queue.ErrNotConnected):
+		reason = reasonQueueRefused
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		// The agent hung up mid-batch. Nothing to tell it, but the records are still
+		// unaccounted for from this node's point of view.
+		reason = reasonClientGone
+		detail = "client went away"
 	}
 
 	// Warn rather than error: a refused publish is the backpressure chain working,
@@ -286,6 +295,12 @@ func truncate(s string, maxLen int) string {
 	}
 
 	const ellipsis = "..."
+	if maxLen <= len(ellipsis) {
+		// No room for content and a marker both. A helper whose job is defensive
+		// truncation must not have a lower bound its callers are expected to know.
+		return ellipsis[:maxLen]
+	}
+
 	cut := maxLen - len(ellipsis)
 	for cut > 0 && !utf8.RuneStart(s[cut]) {
 		cut--

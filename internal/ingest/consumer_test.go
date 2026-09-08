@@ -273,11 +273,14 @@ func TestConsumerAcksABatchTheWriterAcceptedNothingFrom(t *testing.T) {
 	if got := msg.terminals(); len(got) != 1 || got[0] != ack {
 		t.Fatalf("terminals = %v, want one ack", got)
 	}
+	// Not counted here on purpose: Submit already counted these records under the
+	// writer's own invalid reason, and RecordsDropped is one family meant to be summed
+	// across components, so counting again would report double.
 	if got := counter(t, reg, "logagg_records_dropped_total", map[string]string{
 		"component": observability.ComponentIngest,
 		"reason":    reasonInvalidRecord,
-	}); got != 3 {
-		t.Errorf("records_dropped_total{ingest,invalid_record} = %v, want 3", got)
+	}); got != 0 {
+		t.Errorf("records_dropped_total{ingest,invalid_record} = %v, want 0: the writer already counted them", got)
 	}
 }
 

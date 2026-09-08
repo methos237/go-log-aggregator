@@ -37,6 +37,24 @@ var (
 	ErrUnavailable = errors.New("queue is unavailable")
 )
 
+// JetStream API error codes this package classifies.
+//
+// Named here rather than taken from nats.go because the library does not export a
+// constant for them, and matching on jetstream.ErrMaxBytesExceeded does not work: that
+// sentinel carries no APIError, so errors.Is can never match the *APIError a rejected
+// publish returns. Verified against the broker rather than assumed — a full stream with
+// DiscardNew answers:
+//
+//	nats: API error: code=503 err_code=10077 description=maximum bytes exceeded
+const (
+	// jsErrCodeMaxBytesExceeded is a publish refused because the stream is at its
+	// MaxBytes ceiling. With DiscardNew that is the backpressure signal, not a fault.
+	jsErrCodeMaxBytesExceeded = 10077
+	// jsErrCodeMaxMessagesExceeded is the same condition against a MaxMsgs ceiling.
+	// Not configured by this project today, but a stream edited by hand could have one.
+	jsErrCodeMaxMessagesExceeded = 10054
+)
+
 // classify maps a publish failure onto one of the kinds above.
 //
 // The default is ErrUnavailable rather than ErrOverloaded because an unrecognized
@@ -44,9 +62,15 @@ var (
 // agent to slow down when the broker is merely unreachable would make it spool
 // while the real fix is a reconnect it is already doing.
 func classify(err error) error {
+	var apiErr *jetstream.APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.ErrorCode {
+		case jsErrCodeMaxBytesExceeded, jsErrCodeMaxMessagesExceeded:
+			return ErrOverloaded
+		}
+	}
+
 	switch {
-	case errors.Is(err, jetstream.ErrMaxBytesExceeded):
-		return ErrOverloaded
 	case errors.Is(err, nats.ErrMaxPayload), errors.Is(err, nats.ErrInvalidMsg):
 		return ErrTooLarge
 	default:
@@ -231,6 +255,14 @@ func (c *Conn) Publish(ctx context.Context, subject string, payload []byte) (Pub
 	c.observePublish(outcomeSuccess, elapsed, len(payload))
 	return PubAck{Stream: ack.Stream, Sequence: ack.Sequence, Duplicate: ack.Duplicate}, nil
 }
+
+// MaxPayload is the largest message this broker will accept, as it reported during
+// the handshake.
+//
+// Exposed because the ingest listener has its own message ceiling, and a ceiling above
+// this one means a batch that gRPC accepts is one the broker refuses — a well-formed
+// batch permanently dropped as unsendable. cmd/collector compares the two at startup.
+func (c *Conn) MaxPayload() int64 { return c.nc.MaxPayload() }
 
 // Subject renders the subject for a label set.
 func (c *Conn) Subject(env, service string) string {

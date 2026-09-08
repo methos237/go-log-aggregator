@@ -256,6 +256,15 @@ func TestStreamMapsQueueFailuresToAckCodes(t *testing.T) {
 			want: logaggv1.AckCode_ACK_CODE_INTERNAL,
 		},
 		{
+			// The shape Conn.Publish actually returns on a publish timeout: it bounds
+			// itself with the publish timeout, so the error carries both the queue kind
+			// and DeadlineExceeded. Matching the context first would report a slow
+			// broker as a client that hung up, and count the drop against the agent.
+			name: "a publish timeout is the broker's fault, not the client's",
+			err:  fmt.Errorf("publish: %w: %w", queue.ErrUnavailable, context.DeadlineExceeded),
+			want: logaggv1.AckCode_ACK_CODE_INTERNAL,
+		},
+		{
 			name: "an unclassified failure is internal, not overload",
 			err:  errors.New("something unexpected"),
 			want: logaggv1.AckCode_ACK_CODE_INTERNAL,

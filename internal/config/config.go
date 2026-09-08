@@ -67,6 +67,12 @@ type Ingest struct {
 	Addr string
 	// MaxRecvMsgBytes caps a single gRPC message. Agents batch, so this bounds
 	// batch size on the wire and is a first-line defense against memory abuse.
+	//
+	// It must not exceed the broker's max_payload. A batch above that is accepted
+	// here, validated, re-marshaled and then refused by NATS as unsendable — a
+	// well-formed batch permanently dropped. cmd/collector checks the two against
+	// each other at startup, and the default matches the NATS server default (1MB)
+	// rather than gRPC's (4MB) so a stock stack is coherent.
 	MaxRecvMsgBytes int
 	// BufferSize is the depth of the bounded channel between the gRPC handler
 	// and the queue publisher, in batches. Full buffer means shed load, never grow.
@@ -231,7 +237,7 @@ func Load() (*Config, error) {
 			// ":9095" and opts in below, because inside a container the listener has to
 			// bind every interface for the runtime to forward to it.
 			Addr:            e.str("INGEST_ADDR", "127.0.0.1:9095"),
-			MaxRecvMsgBytes: e.bytes("INGEST_MAX_RECV_BYTES", 4<<20),
+			MaxRecvMsgBytes: e.bytes("INGEST_MAX_RECV_BYTES", 1<<20),
 			BufferSize:      e.int("INGEST_BUFFER_SIZE", 8192),
 			PublishWorkers:  e.int("INGEST_PUBLISH_WORKERS", 8),
 			TLSCertFile:     e.str("INGEST_TLS_CERT_FILE", ""),

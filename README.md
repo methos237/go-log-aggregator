@@ -87,9 +87,16 @@ port in front of the cluster.
 
 Every setting has a default that makes the compose stack work unconfigured. Override
 with `LOGAGG_`-prefixed environment variables — for example `LOGAGG_LOG_LEVEL=debug`,
-`LOGAGG_HTTP_ADDR=:9000`, `LOGAGG_INGEST_MAX_RECV_BYTES=8MB`. See
+`LOGAGG_HTTP_ADDR=:9000`, `LOGAGG_WRITER_BATCH_SIZE=10000`. See
 [`internal/config/config.go`](internal/config/config.go) for the full list; invalid
 values are reported all at once at startup rather than one per restart.
+
+Two settings are checked against each other rather than in isolation, because getting
+them wrong is silent: `LOGAGG_INGEST_MAX_RECV_BYTES` must not exceed the broker's
+`max_payload` (a batch above it would be accepted, validated, then refused as
+unsendable), and `LOGAGG_QUEUE_ACK_WAIT` must exceed the writer's worst case (or a
+batch still being written gets redelivered). The first is verified against the live
+broker at startup; the second in configuration validation.
 
 ### mTLS on the ingest port
 

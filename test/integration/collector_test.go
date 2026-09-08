@@ -239,3 +239,9 @@ func seqsPresent(ctx context.Context, t *testing.T, pool *pgxpool.Pool, service 
 	require.NoError(t, rows.Err())
 	return present
 }
+
+// defaultConfig loads the shipped defaults, with the environment cleared of the
+// overrides a developer's shell or the test harness may have set.
+func defaultConfig() (*config.Config, error) {
+	return config.Load()
+}

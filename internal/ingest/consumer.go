@@ -89,10 +89,16 @@ func NewConsumer(q Consumable, w Submitter, metrics *Metrics, log *slog.Logger) 
 
 // Start subscribes and begins delivering messages to the writer.
 //
-// ctx is the process context. It bounds the subscription setup and is what the
-// handler passes to Submit, so a shutdown stops the handler blocking on a writer
-// queue that is no longer being drained.
+// ctx bounds the subscription setup. What it deliberately does not do is bound
+// Submit: on SIGTERM the process context is canceled immediately, long before the
+// ordered shutdown reaches Stop, and Submit selects between "queue the shipment" and
+// "context is done" — so a canceled context would make it a coin flip whether an
+// in-flight batch got queued or was naked and counted as queue_full, on every clean
+// shutdown. Submit therefore gets the context with cancellation stripped, and the
+// writer's own Close is what stops it accepting work.
 func (c *Consumer) Start(ctx context.Context) error {
+	submitCtx := context.WithoutCancel(ctx)
+
 	sub, err := c.queue.Consume(ctx, func(msg queue.Message) {
 		if !c.enter() {
 			// Arrived after Stop began. Naked rather than held: the batch goes back to
@@ -101,7 +107,7 @@ func (c *Consumer) Start(ctx context.Context) error {
 			return
 		}
 		defer c.leave()
-		c.handle(ctx, msg)
+		c.handle(submitCtx, msg)
 	})
 	if err != nil {
 		return err
@@ -248,12 +254,15 @@ func (c *Consumer) handle(ctx context.Context, msg queue.Message) {
 	// then be redelivered forever. Nothing is durable, but nothing ever will be, so
 	// this is an ack rather than a nak.
 	if accepted == 0 {
+		// Not counted as dropped here: Submit already counted every one of these
+		// records under the writer's own invalid reason, and RecordsDropped is a
+		// single family meant to be summed across components — counting again would
+		// make it report double.
 		c.log.Warn("batch had no acceptable records",
 			slog.String("batch_id", batch.GetBatchId()),
 			slog.Int64("stream_id", int64(stream.ID)),
 			slog.Int("records", len(records)),
 		)
-		c.drop(reasonInvalidRecord, len(records))
 		c.terminate(msg, ack)
 	}
 }

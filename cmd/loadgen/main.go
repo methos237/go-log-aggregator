@@ -96,9 +96,11 @@ func run() error {
 	tally.report(time.Since(started))
 
 	// A non-zero exit on rejections makes this usable as a check rather than as
-	// something whose output has to be read.
-	if rejected := tally.rejected.Load(); rejected > 0 {
-		return fmt.Errorf("%d records were not accepted", rejected)
+	// something whose output has to be read. Shed records are excluded: overload is
+	// the backpressure chain working as designed, and failing the run for it would
+	// make the correct behavior indistinguishable from a broken collector.
+	if refused := tally.refused.Load(); refused > 0 {
+		return fmt.Errorf("%d records were refused for reasons other than backpressure", refused)
 	}
 	return nil
 }
@@ -284,8 +286,13 @@ func message(seq int64, size int) string {
 
 // tally counts acks by code.
 type tally struct {
-	accepted   atomic.Int64
-	rejected   atomic.Int64
+	accepted atomic.Int64
+	rejected atomic.Int64
+	// shed and refused split the rejected records by whether the collector was
+	// applying backpressure or actually failing, because only the second is a reason
+	// for this tool to exit non-zero.
+	shed       atomic.Int64
+	refused    atomic.Int64
 	overloaded atomic.Int64
 	invalid    atomic.Int64
 	internal   atomic.Int64
@@ -301,10 +308,13 @@ func (t *tally) record(ack *logaggv1.Ack) {
 	case logaggv1.AckCode_ACK_CODE_ACCEPTED:
 	case logaggv1.AckCode_ACK_CODE_OVERLOADED:
 		t.overloaded.Add(1)
+		t.shed.Add(int64(ack.GetRejected()))
 	case logaggv1.AckCode_ACK_CODE_INVALID:
 		t.invalid.Add(1)
+		t.refused.Add(int64(ack.GetRejected()))
 	case logaggv1.AckCode_ACK_CODE_INTERNAL, logaggv1.AckCode_ACK_CODE_UNSPECIFIED:
 		t.internal.Add(1)
+		t.refused.Add(int64(ack.GetRejected()))
 	}
 }
 
@@ -314,7 +324,8 @@ func (t *tally) report(took time.Duration) {
 
 	fmt.Printf("\n%d batches acked in %s\n", t.batches.Load(), took.Round(time.Millisecond))
 	fmt.Printf("  accepted  %d records (%.0f/sec)\n", accepted, rate)
-	fmt.Printf("  rejected  %d records\n", t.rejected.Load())
+	fmt.Printf("  rejected  %d records (%d shed under backpressure, %d refused)\n",
+		t.rejected.Load(), t.shed.Load(), t.refused.Load())
 	// Overloaded is not a failure of this tool, it is the backpressure chain
 	// working, so it is reported separately from genuine errors.
 	fmt.Printf("  acks      overloaded=%d invalid=%d internal=%d\n",

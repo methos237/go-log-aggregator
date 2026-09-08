@@ -96,6 +96,18 @@ would bound disk by discarding batches agents already consider delivered — dat
 dressed as a limit. Rejecting propagates pressure up the chain instead: ingest answers
 OVERLOADED, the agent backs off and spools.
 
+Classifying a refused publish takes care: `jetstream.ErrMaxBytesExceeded` carries no
+`APIError`, so `errors.Is` against it never matches what a rejected publish actually
+returns, and the classification degrades silently to "unavailable" — reporting a
+collector fault for the one condition this design exists to signal. The code matches the
+API error code instead (`err_code=10077`), verified against a real broker by an
+integration test that fails against the sentinel version.
+
+The ingest message ceiling is checked against the broker's advertised `max_payload` at
+startup, and defaults to the broker's own default rather than gRPC's, because a ceiling
+above it means a valid batch is accepted, validated, re-marshaled and then permanently
+dropped as unsendable — after the agent has been told nothing.
+
 No deduplication window on the stream. Publish-side dedup cannot cover a redelivery to
 the writer, so deduplication stays where it can be complete: the `logs_dedup` index
 (ADR-0002, decision 2).
