@@ -1,0 +1,122 @@
+// Package ingest is the gRPC front door: agents stream batches in, records are
+// validated and fingerprinted, and the batch is published to the queue before the
+// agent is told it is safe.
+//
+// The ordering in that last sentence is the whole correctness argument. An ack
+// means "this batch is durable, you may drop it from your spool", so sending one
+// before JetStream has acknowledged the publish would turn a collector crash into
+// data loss that nothing can detect. Everything in this package is arranged around
+// keeping the ack last.
+package ingest
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net"
+
+	"google.golang.org/grpc"
+
+	logaggv1 "github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1"
+	"github.com/jamespolk/go-log-aggregator/internal/config"
+)
+
+// Server is the gRPC listener that agents stream into.
+type Server struct {
+	grpc *grpc.Server
+	lis  net.Listener
+	log  *slog.Logger
+}
+
+// service implements logaggv1.LogServiceServer.
+//
+// The embedded Unimplemented type is what makes this compile before the handler
+// exists, and it keeps compiling when the proto gains a method: an unimplemented
+// RPC answers Unimplemented instead of failing the build. The handler lands in the
+// next subtask.
+type service struct {
+	logaggv1.UnimplementedLogServiceServer
+}
+
+// New binds the ingest listener and registers the service.
+//
+// Binding here rather than in Serve is deliberate: a port that is already in use
+// is a startup error, and reporting it before the process registers health checks
+// and starts draining is the difference between "failed to start" and "started,
+// then mysteriously shut down".
+//
+// ctx bounds binding the socket only, not the listener's lifetime; Shutdown is
+// what stops serving.
+//
+//nolint:gocritic // hugeParam: one copy per process; by value keeps it immutable
+func New(ctx context.Context, cfg config.Ingest, log *slog.Logger) (*Server, error) {
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
+	log = log.With(slog.String("component", "ingest"))
+
+	var lc net.ListenConfig
+	lis, err := lc.Listen(ctx, "tcp", cfg.Addr)
+	if err != nil {
+		return nil, fmt.Errorf("listen on %s: %w", cfg.Addr, err)
+	}
+
+	srv := grpc.NewServer(serverOptions(cfg)...)
+	logaggv1.RegisterLogServiceServer(srv, &service{})
+
+	return &Server{grpc: srv, lis: lis, log: log}, nil
+}
+
+// serverOptions is the server's resource envelope.
+//
+// MaxRecvMsgSize is the first line of defense on an untrusted boundary: agents
+// batch, so it bounds how much memory one unauthenticated peer can make this
+// process allocate for a single message. gRPC's own default is 4MB, but leaving it
+// implicit would mean the limit silently changed with a dependency bump.
+//
+//nolint:gocritic // hugeParam: called once per process
+func serverOptions(cfg config.Ingest) []grpc.ServerOption {
+	return []grpc.ServerOption{
+		grpc.MaxRecvMsgSize(cfg.MaxRecvMsgBytes),
+	}
+}
+
+// Addr reports the address actually bound, which is what a test that asked for
+// port 0 needs.
+func (s *Server) Addr() string { return s.lis.Addr().String() }
+
+// Serve blocks until the server stops. A clean Shutdown returns nil.
+func (s *Server) Serve() error {
+	s.log.Info("ingest server listening", slog.String("addr", s.Addr()))
+	if err := s.grpc.Serve(s.lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+		return err
+	}
+	return nil
+}
+
+// Shutdown stops accepting new streams and waits for in-flight ones, giving up
+// when ctx expires.
+//
+// GracefulStop on its own has no deadline, and a bidirectional stream is held open
+// by the client rather than by a request that ends on its own — an idle agent that
+// never closes its stream would block shutdown forever. So the wait is bounded and
+// the fallback is a hard Stop, which kills the remaining streams. That is safe by
+// construction: a batch that has not been acked yet is one the agent will resend.
+func (s *Server) Shutdown(ctx context.Context) error {
+	stopped := make(chan struct{})
+	go func() {
+		s.grpc.GracefulStop()
+		close(stopped)
+	}()
+
+	select {
+	case <-stopped:
+		s.log.Info("ingest server stopped")
+		return nil
+	case <-ctx.Done():
+		s.grpc.Stop()
+		<-stopped
+		return fmt.Errorf("ingest server did not drain in time: %w", ctx.Err())
+	}
+}

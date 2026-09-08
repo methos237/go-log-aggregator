@@ -26,6 +26,7 @@ import (
 
 	"github.com/jamespolk/go-log-aggregator/internal/config"
 	"github.com/jamespolk/go-log-aggregator/internal/httpapi"
+	"github.com/jamespolk/go-log-aggregator/internal/ingest"
 	"github.com/jamespolk/go-log-aggregator/internal/observability"
 	"github.com/jamespolk/go-log-aggregator/internal/queue"
 	"github.com/jamespolk/go-log-aggregator/internal/storage"
@@ -137,6 +138,7 @@ func run(dsnOverride string) error {
 		slog.String("commit", version.Commit),
 		slog.String("http_addr", cfg.HTTP.Addr),
 		slog.String("admin_addr", cfg.Admin.Addr),
+		slog.String("ingest_addr", cfg.Ingest.Addr),
 		slog.Bool("cluster_enabled", cfg.Cluster.Enabled),
 	)
 
@@ -193,6 +195,13 @@ func run(dsnOverride string) error {
 	apiSrv := httpapi.New(cfg.HTTP, health, log)
 	adminSrv := observability.NewAdminServer(cfg.Admin, metrics, log)
 
+	// Binds its port here, so a conflict fails startup rather than surfacing as a
+	// listener dying a moment after the node reports itself healthy.
+	ingestSrv, err := ingest.New(ctx, cfg.Ingest, log)
+	if err != nil {
+		return fmt.Errorf("create ingest server: %w", err)
+	}
+
 	g, gctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
@@ -204,6 +213,12 @@ func run(dsnOverride string) error {
 	g.Go(func() error {
 		if serveErr := adminSrv.ListenAndServe(); serveErr != nil {
 			return fmt.Errorf("admin server: %w", serveErr)
+		}
+		return nil
+	})
+	g.Go(func() error {
+		if serveErr := ingestSrv.Serve(); serveErr != nil {
+			return fmt.Errorf("ingest server: %w", serveErr)
 		}
 		return nil
 	})
@@ -222,9 +237,10 @@ func run(dsnOverride string) error {
 
 		log.Info("shutting down", slog.Duration("timeout", cfg.Node.ShutdownTimeout))
 
-		// Stop serving new public traffic first, then drain the writer, then tear
-		// down admin. Order matters: the writer must flush after nothing new can
-		// arrive, and metrics stay scrapeable throughout so the drain is observable.
+		// Ingest first, then the public API, then drain the writer, then tear down
+		// admin. Order matters in both directions: nothing new may arrive before the
+		// writer flushes, and metrics stay scrapeable throughout so the drain is
+		// observable rather than a silent gap.
 		//
 		// The dependency checks are deregistered up front so a shutting-down node
 		// reports unready to a load balancer instead of failing requests it has
@@ -232,6 +248,9 @@ func run(dsnOverride string) error {
 		var errs []error
 		health.Deregister("database")
 		health.Deregister("queue")
+		if ingestErr := ingestSrv.Shutdown(shutdownCtx); ingestErr != nil {
+			errs = append(errs, fmt.Errorf("ingest shutdown: %w", ingestErr))
+		}
 		if apiErr := apiSrv.Shutdown(shutdownCtx); apiErr != nil {
 			errs = append(errs, fmt.Errorf("http shutdown: %w", apiErr))
 		}
