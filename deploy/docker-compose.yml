@@ -66,6 +66,13 @@ services:
       LOGAGG_LOG_FORMAT: json
       LOGAGG_DB_DSN: postgres://logagg:logagg@timescaledb:5432/logagg?sslmode=disable
       LOGAGG_QUEUE_URL: nats://nats:4222
+      # Inside the container the listener must bind every interface for Compose to
+      # forward to it, which the loopback default deliberately does not. Plaintext is
+      # opted into explicitly here: the published port is bound to 127.0.0.1 on the
+      # host (see ports below), so nothing off-box can reach it. A deployment beyond
+      # a laptop sets the three LOGAGG_INGEST_TLS_* files instead — see `make certs`.
+      LOGAGG_INGEST_ADDR: ":9095"
+      LOGAGG_INGEST_ALLOW_PLAINTEXT: "true"
       # Phase 5 flips this on; until then each replica runs standalone.
       LOGAGG_CLUSTER_ENABLED: "false"
       LOGAGG_CLUSTER_PEERS: collector:7946
@@ -76,6 +83,9 @@ services:
       # docker-compose.scale.yml override instead (`make dev-scale`).
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:9090:9090"
+      # gRPC ingest. Published so loadgen and `logctl send` can drive the stack
+      # from the host; plaintext, which is why it is on loopback like the rest.
+      - "127.0.0.1:9095:9095"
     depends_on:
       timescaledb:
         condition: service_healthy

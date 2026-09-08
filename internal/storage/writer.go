@@ -18,6 +18,7 @@ import (
 
 	"github.com/jamespolk/go-log-aggregator/internal/config"
 	"github.com/jamespolk/go-log-aggregator/internal/model"
+	"github.com/jamespolk/go-log-aggregator/internal/observability"
 )
 
 // Writer errors.
@@ -634,13 +635,13 @@ func (w *Writer) observeQueueWait(sh *Shipment) {
 	if w.metrics == nil || sh.enqueued.IsZero() {
 		return
 	}
-	w.metrics.QueueWait.WithLabelValues(queueWriter).Observe(w.now().Sub(sh.enqueued).Seconds())
+	w.metrics.QueueWait.WithLabelValues(observability.QueueWriter).Observe(w.now().Sub(sh.enqueued).Seconds())
 }
 
 func (w *Writer) addDepth(delta int) {
 	depth := w.depth.Add(int64(delta))
 	if w.metrics != nil {
-		w.metrics.QueueDepth.WithLabelValues(queueWriter).Set(float64(depth))
+		w.metrics.QueueDepth.WithLabelValues(observability.QueueWriter).Set(float64(depth))
 	}
 }
 
@@ -648,7 +649,7 @@ func (w *Writer) drop(reason string, n int) {
 	if n <= 0 || w.metrics == nil {
 		return
 	}
-	w.metrics.RecordsDropped.WithLabelValues(reason).Add(float64(n))
+	w.metrics.RecordsDropped.WithLabelValues(observability.ComponentWriter, reason).Add(float64(n))
 }
 
 func (w *Writer) ack(sh *Shipment, err error) {

@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -65,15 +67,32 @@ type Ingest struct {
 	Addr string
 	// MaxRecvMsgBytes caps a single gRPC message. Agents batch, so this bounds
 	// batch size on the wire and is a first-line defense against memory abuse.
+	//
+	// It must not exceed the broker's max_payload. A batch above that is accepted
+	// here, validated, re-marshaled and then refused by NATS as unsendable — a
+	// well-formed batch permanently dropped. cmd/collector checks the two against
+	// each other at startup, and the default matches the NATS server default (1MB)
+	// rather than gRPC's (4MB) so a stock stack is coherent.
 	MaxRecvMsgBytes int
 	// BufferSize is the depth of the bounded channel between the gRPC handler
-	// and the queue publisher. Full buffer means shed load, never grow.
+	// and the queue publisher, in batches. Full buffer means shed load, never grow.
 	BufferSize int
+	// PublishWorkers is how many batches may be in flight to the queue at once.
+	// Publishing is a network round trip, so this is what keeps one slow ack from
+	// serializing every agent behind it.
+	PublishWorkers int
 	// TLS is off by default so `make dev` works without certificates. Enable it
 	// (and require client certs) for anything reachable beyond localhost.
 	TLSCertFile     string
 	TLSKeyFile      string
 	TLSClientCAFile string
+	// AllowPlaintext permits serving ingest without TLS on an address that is not
+	// loopback. Without it that combination refuses to start, because it is an
+	// unauthenticated write path into the log store reachable by anything that can
+	// route to the port. Containers legitimately need it — inside a container the
+	// listener must bind every interface for the runtime to forward to it — so it is
+	// a setting rather than a prohibition, but it has to be chosen deliberately.
+	AllowPlaintext bool
 }
 
 // DB is the TimescaleDB connection.
@@ -133,9 +152,30 @@ type Queue struct {
 	StreamName     string
 	SubjectPrefix  string
 	ConnectTimeout time.Duration
+	// Durable is the name of the shared pull consumer the writers bind to. Shared
+	// rather than per-node: replicas competing on one durable consumer is what
+	// distributes the backlog instead of duplicating it.
+	Durable string
 	// MaxAckPending bounds unacknowledged messages per consumer, which is how
 	// storage-side slowness propagates back into ingest as backpressure.
 	MaxAckPending int
+	// AckWait is how long the broker waits for an ack before redelivering. It must
+	// exceed the writer's worst case -- WriteTimeout times MaxAttempts plus backoff
+	// -- or a batch that is merely slow gets redelivered while it is still being
+	// written, which costs a duplicate the dedup index then has to absorb.
+	AckWait time.Duration
+	// PublishTimeout bounds one publish, including waiting for the JetStream ack.
+	// The ingest handler acks the agent only after that ack arrives, so this is
+	// also the ceiling on how long a batch can hold a gRPC handler.
+	PublishTimeout time.Duration
+	// StreamMaxBytes caps the stream on disk. Reaching it rejects new publishes
+	// rather than discarding queued records, which pushes backpressure back to the
+	// agent instead of losing data (see queue.streamConfig).
+	StreamMaxBytes int64
+	// StreamMaxAge is the age at which an unconsumed record is dropped. This is a
+	// safety valve for a writer that has been down long enough that catching up is
+	// hopeless, not a retention policy: TimescaleDB is the archive.
+	StreamMaxAge time.Duration
 }
 
 // Cluster is the gossip membership and hash ring.
@@ -191,12 +231,19 @@ func Load() (*Config, error) {
 			EnablePprof: e.bool("ADMIN_ENABLE_PPROF", true),
 		},
 		Ingest: Ingest{
-			Addr:            e.str("INGEST_ADDR", ":9095"),
-			MaxRecvMsgBytes: e.bytes("INGEST_MAX_RECV_BYTES", 4<<20),
+			// Loopback by default, unlike the HTTP and admin listeners. Those serve
+			// reads; this one accepts writes with no application-level auth, so the
+			// default must not be reachable from off-box. A container overrides it to
+			// ":9095" and opts in below, because inside a container the listener has to
+			// bind every interface for the runtime to forward to it.
+			Addr:            e.str("INGEST_ADDR", "127.0.0.1:9095"),
+			MaxRecvMsgBytes: e.bytes("INGEST_MAX_RECV_BYTES", 1<<20),
 			BufferSize:      e.int("INGEST_BUFFER_SIZE", 8192),
+			PublishWorkers:  e.int("INGEST_PUBLISH_WORKERS", 8),
 			TLSCertFile:     e.str("INGEST_TLS_CERT_FILE", ""),
 			TLSKeyFile:      e.str("INGEST_TLS_KEY_FILE", ""),
 			TLSClientCAFile: e.str("INGEST_TLS_CLIENT_CA_FILE", ""),
+			AllowPlaintext:  e.bool("INGEST_ALLOW_PLAINTEXT", false),
 		},
 		DB: DB{
 			DSN:             e.str("DB_DSN", "postgres://logagg:logagg@timescaledb:5432/logagg?sslmode=disable"),
@@ -226,7 +273,18 @@ func Load() (*Config, error) {
 			StreamName:     e.str("QUEUE_STREAM", "LOGS"),
 			SubjectPrefix:  e.str("QUEUE_SUBJECT_PREFIX", "logs"),
 			ConnectTimeout: e.dur("QUEUE_CONNECT_TIMEOUT", 10*time.Second),
+			Durable:        e.str("QUEUE_DURABLE", "writer"),
 			MaxAckPending:  e.int("QUEUE_MAX_ACK_PENDING", 4096),
+			// Five minutes clears the writer's worst case (30s x 5 attempts plus
+			// backoff) with room to spare. Redelivering earlier than that would
+			// duplicate work the writer is still doing.
+			AckWait: e.dur("QUEUE_ACK_WAIT", 5*time.Minute),
+			// Well under the gRPC handler's patience: a publish that has not been
+			// acked in five seconds means JetStream is unhealthy, and telling the
+			// agent to retry beats holding its stream open.
+			PublishTimeout: e.dur("QUEUE_PUBLISH_TIMEOUT", 5*time.Second),
+			StreamMaxBytes: e.bytes64("QUEUE_STREAM_MAX_BYTES", 8<<30),
+			StreamMaxAge:   e.dur("QUEUE_STREAM_MAX_AGE", 24*time.Hour),
 		},
 		Cluster: Cluster{
 			Enabled:       e.bool("CLUSTER_ENABLED", false),
@@ -283,14 +341,30 @@ func (c *Config) Validate() error {
 	if c.Ingest.BufferSize <= 0 {
 		bad("ingest buffer size must be positive, got %d", c.Ingest.BufferSize)
 	}
+	if c.Ingest.PublishWorkers < 1 {
+		bad("ingest publish workers must be at least 1, got %d", c.Ingest.PublishWorkers)
+	}
 
-	// Partial TLS configuration is worse than none: it silently serves plaintext.
+	// Partial TLS configuration is worse than none: it silently serves plaintext, or
+	// it serves one-way TLS that looks authenticated and is not.
 	certSet, keySet := c.Ingest.TLSCertFile != "", c.Ingest.TLSKeyFile != ""
 	switch {
 	case certSet != keySet:
 		bad("ingest TLS needs both cert and key files, got cert=%q key=%q", c.Ingest.TLSCertFile, c.Ingest.TLSKeyFile)
 	case !certSet && c.Ingest.TLSClientCAFile != "":
 		bad("ingest client CA is set but server TLS is not enabled")
+	case certSet && c.Ingest.TLSClientCAFile == "":
+		// mTLS is the baseline for this hop (roadmap §8). Server-only TLS would
+		// encrypt the connection while letting anyone who can reach the port write
+		// logs into the cluster.
+		bad("ingest TLS is enabled without a client CA: mutual authentication is required")
+	case !certSet && !c.Ingest.AllowPlaintext && !loopbackAddr(c.Ingest.Addr):
+		// Ingest is a write path into the log store with no application-level auth,
+		// so plaintext on a routable address means anyone who can reach the port can
+		// forge records. Loopback is exempt because that is what `make dev` and the
+		// tests use.
+		bad("ingest listens on %s without TLS: set the TLS files, bind loopback, or set %sINGEST_ALLOW_PLAINTEXT=true to accept an unauthenticated write path",
+			c.Ingest.Addr, EnvPrefix)
 	}
 
 	if c.DB.DSN == "" {
@@ -323,8 +397,28 @@ func (c *Config) Validate() error {
 	if c.Queue.SubjectPrefix == "" {
 		bad("queue subject prefix must not be empty")
 	}
+	if c.Queue.Durable == "" {
+		bad("queue durable consumer name must not be empty")
+	}
+	if c.Queue.AckWait <= 0 {
+		bad("queue ack wait must be positive, got %s", c.Queue.AckWait)
+	}
+	// Redelivering a batch the writer is still retrying wastes a write and leans on
+	// the dedup index to clean up after it.
+	if worst := c.Writer.WriteTimeout * time.Duration(c.Writer.MaxAttempts); c.Queue.AckWait < worst {
+		bad("queue ack wait %s is below the writer's worst case %s (write timeout x max attempts)", c.Queue.AckWait, worst)
+	}
 	if c.Queue.MaxAckPending < 1 {
 		bad("queue max ack pending must be at least 1, got %d", c.Queue.MaxAckPending)
+	}
+	if c.Queue.PublishTimeout <= 0 {
+		bad("queue publish timeout must be positive, got %s", c.Queue.PublishTimeout)
+	}
+	if c.Queue.StreamMaxBytes < 1 {
+		bad("queue stream max bytes must be positive, got %d", c.Queue.StreamMaxBytes)
+	}
+	if c.Queue.StreamMaxAge <= 0 {
+		bad("queue stream max age must be positive, got %s", c.Queue.StreamMaxAge)
 	}
 	if c.Cluster.Enabled {
 		if c.Cluster.BindAddr == "" {
@@ -388,6 +482,28 @@ func (w *Writer) Validate() error {
 	return errors.Join(errs...)
 }
 
+// loopbackAddr reports whether addr binds only the loopback interface.
+//
+// An empty or wildcard host means every interface, which is the case that matters:
+// ":9095" and "0.0.0.0:9095" are reachable from off-box, "127.0.0.1:9095" is not.
+// A hostname that is not an IP literal is treated as routable, because resolving it
+// here would make validation depend on DNS.
+func loopbackAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		// Not host:port at all. Reported by the listener rather than guessed at here.
+		return false
+	}
+	if host == "" {
+		return false
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return host == "localhost"
+	}
+	return ip.IsLoopback()
+}
+
 // env reads prefixed variables, accumulating parse failures.
 type env struct {
 	errs []error
@@ -434,11 +550,22 @@ func (e *env) int(key string, def int) int {
 // bytes accepts a plain byte count or a KB/MB/GB suffix, so operators can write
 // 8MB instead of counting zeros.
 func (e *env) bytes(key string, def int) int {
+	v := e.bytes64(key, int64(def))
+	if v > math.MaxInt || v < math.MinInt {
+		e.fail(key, strconv.FormatInt(v, 10), errors.New("byte size does not fit in an int"))
+		return def
+	}
+	return int(v)
+}
+
+// bytes64 is bytes for the settings that are legitimately larger than a 32-bit
+// int, such as an on-disk stream ceiling measured in gigabytes.
+func (e *env) bytes64(key string, def int64) int64 {
 	raw, ok := e.lookup(key)
 	if !ok {
 		return def
 	}
-	mult := 1
+	var mult int64 = 1
 	num := raw
 	switch {
 	case strings.HasSuffix(strings.ToUpper(raw), "GB"):
@@ -448,9 +575,16 @@ func (e *env) bytes(key string, def int) int {
 	case strings.HasSuffix(strings.ToUpper(raw), "KB"):
 		mult, num = 1<<10, raw[:len(raw)-2]
 	}
-	v, err := strconv.Atoi(strings.TrimSpace(num))
+	v, err := strconv.ParseInt(strings.TrimSpace(num), 10, 64)
 	if err != nil {
 		e.fail(key, raw, errors.New("not a byte size (e.g. 4194304, 4MB)"))
+		return def
+	}
+	// Checked rather than trusted: a suffixed value large enough to wrap would come
+	// back negative and be reported as "must be positive", which sends an operator
+	// looking in the wrong place.
+	if mult > 1 && (v > math.MaxInt64/mult || v < math.MinInt64/mult) {
+		e.fail(key, raw, errors.New("byte size overflows a 64-bit integer"))
 		return def
 	}
 	return v * mult

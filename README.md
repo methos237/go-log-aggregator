@@ -10,12 +10,13 @@ over a consistent hash ring, so nodes can join and leave while ingest continues.
 **Delivery semantics: at-least-once end to end, deduplicated at the storage layer.**
 Not exactly-once.
 
-> **Status: phase 1 of 9 complete.** Foundations (configuration, logging, metrics,
-> health probes, graceful shutdown, container image, dev stack) plus the data model,
-> schema and write path: protobuf wire format, TimescaleDB hypertable with compression
-> and continuous aggregates, and a batching writer pool that deduplicates redelivered
-> records. The gRPC ingest service, agent, query compiler and cluster layer land in
-> phases 2–5. The full plan is in [`.aidocs/ROADMAP.md`](.aidocs/ROADMAP.md).
+> **Status: phase 2 of 9 complete.** Foundations, the data model and write path, and
+> now the ingest service: a bidirectional gRPC front door under mTLS that validates,
+> fingerprints and publishes to NATS JetStream, a bounded intake channel that sheds
+> load instead of growing, and a durable pull consumer feeding the writer pool.
+> Records survive killing a collector mid-stream. The agent, query compiler and
+> cluster layer land in phases 3–5. The full plan is in
+> [`.aidocs/ROADMAP.md`](.aidocs/ROADMAP.md).
 
 ## Quickstart
 
@@ -39,6 +40,18 @@ curl -s http://127.0.0.1:9090/metrics | head   # Prometheus metrics
 
 `make help` lists every target.
 
+Push some records through it:
+
+```bash
+make build
+echo "hello from logctl" | ./bin/logctl send -addr 127.0.0.1:9095 -service demo
+./bin/loadgen -addr 127.0.0.1:9095 -records 200000    # synthetic load
+```
+
+`loadgen` prints accepted/rejected counts and exits non-zero if anything was
+rejected, so it works as a check and not only as a demo. Both are deliberately
+minimal this phase; the configurable-rate load generator arrives in phase 8.
+
 ## Architecture
 
 ```
@@ -54,7 +67,7 @@ Ports, all bound to loopback in development:
 |---|---|---|
 | 8080 | Public HTTP API | health now; query and live tail in phases 4 and 6 |
 | 9090 | Admin | Prometheus metrics and pprof. **Never expose this.** |
-| 9095 | gRPC ingest | phase 2 |
+| 9095 | gRPC ingest | mTLS when configured; plaintext by default |
 | 9096 | gRPC peer | query fan-out, phase 5 |
 | 7946 | memberlist gossip | phase 5 |
 | 5432 | TimescaleDB | development credentials only |
@@ -74,9 +87,50 @@ port in front of the cluster.
 
 Every setting has a default that makes the compose stack work unconfigured. Override
 with `LOGAGG_`-prefixed environment variables — for example `LOGAGG_LOG_LEVEL=debug`,
-`LOGAGG_HTTP_ADDR=:9000`, `LOGAGG_INGEST_MAX_RECV_BYTES=8MB`. See
+`LOGAGG_HTTP_ADDR=:9000`, `LOGAGG_WRITER_BATCH_SIZE=10000`. See
 [`internal/config/config.go`](internal/config/config.go) for the full list; invalid
 values are reported all at once at startup rather than one per restart.
+
+Two settings are checked against each other rather than in isolation, because getting
+them wrong is silent: `LOGAGG_INGEST_MAX_RECV_BYTES` must not exceed the broker's
+`max_payload` (a batch above it would be accepted, validated, then refused as
+unsendable), and `LOGAGG_QUEUE_ACK_WAIT` must exceed the writer's worst case (or a
+batch still being written gets redelivered). The first is verified against the live
+broker at startup; the second in configuration validation.
+
+### mTLS on the ingest port
+
+Ingest speaks plaintext when no TLS files are configured, which is what makes
+`make dev` work with no setup. Enabling it requires all three of a server
+certificate, its key, and a client CA — configuring the first two without the third
+is refused at startup rather than served as one-way TLS, which would encrypt the
+connection while letting anyone who can reach the port write logs into the cluster.
+
+```bash
+make certs         # writes certs/ (gitignored): ca, server, client
+make certs-verify  # show what those certificates actually claim
+
+LOGAGG_INGEST_TLS_CERT_FILE=certs/server.pem \
+LOGAGG_INGEST_TLS_KEY_FILE=certs/server-key.pem \
+LOGAGG_INGEST_TLS_CLIENT_CA_FILE=certs/ca.pem \
+  go run ./cmd/collector
+```
+
+Without TLS, ingest binds loopback by default and refuses to serve a routable address
+unless `LOGAGG_INGEST_ALLOW_PLAINTEXT=true` is set — the compose stack sets it, because
+a container has to bind every interface for Docker to forward to it, and publishes the
+port on `127.0.0.1` only. Plaintext ingest also logs at WARN: it is an unauthenticated
+write path.
+
+A verified client certificate authorises writing anything, not writing as a particular
+service; ingest is one trust domain. See ADR-0003 §7 for why that is deferred rather
+than half-implemented.
+
+**These certificates are for local development only.** They are self-signed by a CA
+whose private key sits in your working tree, they last a year, and nothing can revoke
+them. A real deployment gets certificates from a CA with a rotation and revocation
+story, and keys that were never on a laptop. `certs/` and `*.pem` are gitignored:
+never commit key material, self-signed included, because it teaches the habit.
 
 ## Development
 
@@ -90,6 +144,8 @@ make ci                # everything CI enforces
 make proto             # regenerate protobuf code (pinned buf + plugins)
 make migrate           # apply migrations to DB_DSN
 make migrate-status    # print the applied schema version
+make lint-arch         # architectural invariants (ast-grep)
+make certs             # development mTLS material (gitignored)
 ```
 
 Go 1.27, golangci-lint v2. `make proto` needs no protoc: `buf` and the plugins are Go
@@ -106,6 +162,16 @@ LOGAGG_TEST_DB_DSN='postgres://logagg:logagg@127.0.0.1:5432/logagg?sslmode=disab
 ```
 
 `LOGAGG_TEST_RECORDS` scales the throughput test down from its default of one million.
+`LOGAGG_TEST_NATS_URL` does for the broker what `LOGAGG_TEST_DB_DSN` does for the
+database; each test still isolates itself with its own JetStream stream, durable
+consumer and subject prefix.
+
+`make lint-arch` checks architectural invariants that golangci-lint cannot express,
+using [ast-grep](https://ast-grep.github.io) rules in
+[`.ast-grep/rules/`](.ast-grep/rules). Currently one: no unbuffered channel may carry
+data, because every queue in this pipeline is bounded from configuration and
+instrumented with a depth gauge and a wait histogram. Signal channels
+(`chan struct{}`) are exempt.
 
 ## Data model
 
@@ -115,6 +181,10 @@ coordination. Log rows are narrow and reference it. `logs` is a TimescaleDB hype
 with 1 hour chunks, columnar compression segmented by stream, 30 day retention, and
 per-minute and per-hour count aggregates that the query planner will choose between in
 phase 4.
+
+The ingest path's reasoning — why the ack comes after the JetStream publish, why a full
+buffer sheds instead of waiting, and why a corrupt message is terminated rather than
+retried — is in [`ADR-0003`](docs/decisions/ADR-0003-ingest-path.md).
 
 The write path is `COPY` into a session-local staging table followed by
 `INSERT ... ON CONFLICT DO NOTHING` against a unique `(stream_id, seq, time)` index.

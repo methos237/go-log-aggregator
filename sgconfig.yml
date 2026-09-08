@@ -1,0 +1,6 @@
+# ast-grep configuration. Rules here are architectural invariants that a normal
+# linter cannot express — properties of this design rather than of Go.
+#
+# Run them with `make lint-arch`.
+ruleDirs:
+  - .ast-grep/rules

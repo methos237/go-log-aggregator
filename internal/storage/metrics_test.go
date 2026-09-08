@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/jamespolk/go-log-aggregator/internal/observability"
 )
 
 func TestNewMetricsRegistersEverything(t *testing.T) {
@@ -90,8 +92,8 @@ func TestNewMetricsWithNilRegistererIsUsable(t *testing.T) {
 
 	m := NewMetrics(nil)
 	m.RowsCopied.Add(1)
-	m.RecordsDropped.WithLabelValues(reasonInvalid).Inc()
-	m.QueueDepth.WithLabelValues(queueWriter).Set(3)
+	m.RecordsDropped.WithLabelValues(observability.ComponentWriter, reasonInvalid).Inc()
+	m.QueueDepth.WithLabelValues(observability.QueueWriter).Set(3)
 }
 
 func TestMetricNamesAreNamespaced(t *testing.T) {

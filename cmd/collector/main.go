@@ -26,7 +26,9 @@ import (
 
 	"github.com/jamespolk/go-log-aggregator/internal/config"
 	"github.com/jamespolk/go-log-aggregator/internal/httpapi"
+	"github.com/jamespolk/go-log-aggregator/internal/ingest"
 	"github.com/jamespolk/go-log-aggregator/internal/observability"
+	"github.com/jamespolk/go-log-aggregator/internal/queue"
 	"github.com/jamespolk/go-log-aggregator/internal/storage"
 	"github.com/jamespolk/go-log-aggregator/internal/version"
 )
@@ -136,6 +138,7 @@ func run(dsnOverride string) error {
 		slog.String("commit", version.Commit),
 		slog.String("http_addr", cfg.HTTP.Addr),
 		slog.String("admin_addr", cfg.Admin.Addr),
+		slog.String("ingest_addr", cfg.Ingest.Addr),
 		slog.Bool("cluster_enabled", cfg.Cluster.Enabled),
 	)
 
@@ -160,20 +163,71 @@ func run(dsnOverride string) error {
 	// bring Postgres back, and phase 2's JetStream buffer is what absorbs the outage.
 	health.Register("database", storage.HealthCheck(pool))
 
-	// Started with no producer yet: phase 2's JetStream consumer is what will call
-	// Submit. Wiring it now means the pool sizing, the metric registration and the
-	// drain-on-shutdown path are exercised by `make dev` and by the compose smoke
-	// test before there is any ingest traffic to debug at the same time.
+	// Started with no producer yet: the JetStream consumer that will call Submit
+	// lands later in phase 2. Wiring it now means the pool sizing, the metric
+	// registration and the drain-on-shutdown path are exercised by `make dev` and by
+	// the compose smoke test before there is any ingest traffic to debug at the same
+	// time.
 	writer, err := storage.NewWriter(pool, cfg.Writer, storage.NewMetrics(metrics.Registerer), log)
 	if err != nil {
 		return fmt.Errorf("create writer: %w", err)
 	}
 	writer.Start(ctx)
 
-	// Phase 2 adds a JetStream check. /readyz reports ready only once every
-	// registered dependency answers.
+	// The queue is connected before any listener comes up: a node that cannot reach
+	// JetStream cannot durably accept a batch, so there is nothing useful for it to
+	// serve. An outage *after* startup is different — that is a readiness failure
+	// with automatic reconnection, not a reason to exit.
+	q, err := queue.Connect(ctx, cfg.Queue, queue.NewMetrics(metrics.Registerer), log)
+	if err != nil {
+		return fmt.Errorf("connect queue: %w", err)
+	}
+	// Deferred rather than placed in the shutdown sequence, and last of everything:
+	// the writer's drain is what fires the deferred acks, so the connection those
+	// acks travel on has to outlive it. Close is idempotent, so this also covers the
+	// startup paths that fail before an ordered shutdown exists.
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cfg.Node.ShutdownTimeout)
+		defer cancel()
+		if closeErr := q.Close(closeCtx); closeErr != nil {
+			log.Error("queue close failed", slog.Any("error", closeErr))
+		}
+	}()
+	// Checked against the broker rather than assumed: a gRPC ceiling above the
+	// broker's max_payload turns an oversized-but-valid batch into a permanent drop,
+	// after the agent has already been told nothing about it. Refused at startup
+	// because the alternative is discovering it as records_dropped_total climbing
+	// under a reason nobody expected.
+	if maxPayload := q.MaxPayload(); int64(cfg.Ingest.MaxRecvMsgBytes) > maxPayload {
+		return fmt.Errorf(
+			"ingest accepts messages up to %d bytes but the broker accepts %d: lower %sINGEST_MAX_RECV_BYTES or raise the broker's max_payload",
+			cfg.Ingest.MaxRecvMsgBytes, maxPayload, config.EnvPrefix)
+	}
+
+	health.Register("queue", queue.HealthCheck(q))
+
+	// /readyz reports ready only once every registered dependency answers.
 	apiSrv := httpapi.New(cfg.HTTP, health, log)
 	adminSrv := observability.NewAdminServer(cfg.Admin, metrics, log)
+
+	// Binds its port here, so a conflict fails startup rather than surfacing as a
+	// listener dying a moment after the node reports itself healthy.
+	ingestMetrics := ingest.NewMetrics(metrics.Registerer)
+	ingestSrv, err := ingest.New(ctx, cfg.Ingest, q, ingestMetrics, log)
+	if err != nil {
+		return fmt.Errorf("create ingest server: %w", err)
+	}
+
+	// The queue consumer is what finally gives the writer a producer. Started after
+	// the writer, because a message delivered before the workers exist would be
+	// refused and immediately redelivered.
+	consumer, err := ingest.NewConsumer(q, writer, ingestMetrics, log)
+	if err != nil {
+		return fmt.Errorf("create queue consumer: %w", err)
+	}
+	if err = consumer.Start(ctx); err != nil {
+		return fmt.Errorf("start queue consumer: %w", err)
+	}
 
 	g, gctx := errgroup.WithContext(ctx)
 
@@ -186,6 +240,12 @@ func run(dsnOverride string) error {
 	g.Go(func() error {
 		if serveErr := adminSrv.ListenAndServe(); serveErr != nil {
 			return fmt.Errorf("admin server: %w", serveErr)
+		}
+		return nil
+	})
+	g.Go(func() error {
+		if serveErr := ingestSrv.Serve(); serveErr != nil {
+			return fmt.Errorf("ingest server: %w", serveErr)
 		}
 		return nil
 	})
@@ -204,15 +264,40 @@ func run(dsnOverride string) error {
 
 		log.Info("shutting down", slog.Duration("timeout", cfg.Node.ShutdownTimeout))
 
-		// Stop serving new public traffic first, then drain the writer, then tear
-		// down admin. Order matters: the writer must flush after nothing new can
-		// arrive, and metrics stay scrapeable throughout so the drain is observable.
+		// The order below is the whole graceful-shutdown story, and every step earns
+		// its position:
 		//
-		// The database check is deregistered up front so a shutting-down node reports
-		// unready to a load balancer instead of failing requests it has already
-		// stopped serving.
+		//  1. Deregister the readiness checks, so a load balancer stops sending work
+		//     to this node before it stops being able to do it. Unready-then-drain
+		//     produces no client-visible errors; drain-then-unready produces a burst
+		//     of them.
+		//  2. Stop the ingest listener. New streams are refused and in-flight batches
+		//     get their publish finished, so no agent is left holding an unanswered
+		//     batch it already handed over.
+		//  3. Stop the queue consumer, waiting for handlers mid-Submit. Nothing new
+		//     is pulled; nothing nearly-queued is discarded.
+		//  4. Stop the public API, which by this phase only serves health.
+		//  5. Drain the writer. It flushes what it holds and, crucially, this is when
+		//     the deferred acks fire — so the queue connection must still be open,
+		//     which is why it is closed last, by the deferred Close above.
+		//  6. Tear down admin last, so metrics stay scrapeable for the whole drain
+		//     instead of the interesting part being a gap in the graph.
+		//
+		// Every step is bounded by the same deadline. Whatever does not finish inside
+		// it was never acknowledged, so the queue redelivers it — the shutdown is
+		// allowed to be imperfect precisely because the delivery contract is not.
 		var errs []error
 		health.Deregister("database")
+		health.Deregister("queue")
+		if ingestErr := ingestSrv.Shutdown(shutdownCtx); ingestErr != nil {
+			errs = append(errs, fmt.Errorf("ingest shutdown: %w", ingestErr))
+		}
+		// Stopped before the writer drains, and it waits for handlers that are
+		// mid-Submit: a batch one call away from being queued should not be thrown
+		// away, and anything genuinely still in flight comes back by redelivery.
+		if consumerErr := consumer.Stop(shutdownCtx); consumerErr != nil {
+			errs = append(errs, fmt.Errorf("consumer shutdown: %w", consumerErr))
+		}
 		if apiErr := apiSrv.Shutdown(shutdownCtx); apiErr != nil {
 			errs = append(errs, fmt.Errorf("http shutdown: %w", apiErr))
 		}
