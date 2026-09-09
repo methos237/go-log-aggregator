@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand/v2"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -16,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jamespolk/go-log-aggregator/internal/backoff"
 	"github.com/jamespolk/go-log-aggregator/internal/config"
 	"github.com/jamespolk/go-log-aggregator/internal/model"
 	"github.com/jamespolk/go-log-aggregator/internal/observability"
@@ -313,7 +313,9 @@ func (w *Writer) drainAbandoned() {
 		case sh := <-w.in:
 			w.addDepth(-len(sh.Records))
 			w.drop(reasonShutdown, len(sh.Records))
-			w.ack(&sh, ErrWriterClosed)
+			if sh.Ack != nil {
+				sh.Ack(ErrWriterClosed)
+			}
 		default:
 			return
 		}
@@ -451,14 +453,14 @@ func (w *Writer) flush(dbCtx context.Context, log *slog.Logger, batch *writeBatc
 			break
 		}
 
-		delay := backoff(attempt, w.cfg.RetryBaseDelay, w.cfg.RetryMaxDelay)
+		delay := backoff.Delay(attempt, w.cfg.RetryBaseDelay, w.cfg.RetryMaxDelay)
 		log.Warn("batch write failed, retrying",
 			slog.Int("attempt", attempt),
 			slog.Int("records", len(batch.records)),
 			slog.Duration("delay", delay),
 			slog.Any("error", err),
 		)
-		if !sleep(dbCtx, delay) {
+		if !backoff.Sleep(dbCtx, delay) {
 			break
 		}
 	}
@@ -553,7 +555,7 @@ func (w *Writer) commitStreams(ctx context.Context, batch *writeBatch) error {
 
 	// Cleared so a retry of the records transaction does not redo work that is already
 	// durable.
-	batch.streamsCommitted()
+	clear(batch.streams)
 	return nil
 }
 
@@ -577,7 +579,7 @@ func (w *Writer) commitRecords(ctx context.Context, batch *writeBatch) (int64, e
 		pgx.Identifier{"logs_staging"},
 		logColumns,
 		pgx.CopyFromSlice(len(records), func(i int) ([]any, error) {
-			return copyRow(&records[i])
+			return copyRow(&records[i]), nil
 		}),
 	)
 	if err != nil {
@@ -603,14 +605,10 @@ func (w *Writer) commitRecords(ctx context.Context, batch *writeBatch) (int64, e
 // Nil rather than an empty slice or "{}" for absent optional columns: NULL costs a
 // bit in the row header, while an empty JSONB value costs bytes per row and makes
 // "has fields" a value comparison instead of a null check.
-func copyRow(r *model.LogRecord) ([]any, error) {
+func copyRow(r *model.LogRecord) []any {
 	var fields []byte
 	if len(r.Fields) > 0 {
-		encoded, err := marshalFields(r.Fields)
-		if err != nil {
-			return nil, err
-		}
-		fields = encoded
+		fields = marshalFields(r.Fields)
 	}
 	return []any{
 		r.Time,
@@ -621,7 +619,7 @@ func copyRow(r *model.LogRecord) ([]any, error) {
 		nilIfEmpty(r.TraceID),
 		nilIfEmpty(r.SpanID),
 		fields,
-	}, nil
+	}
 }
 
 func nilIfEmpty(b []byte) []byte {
@@ -650,12 +648,6 @@ func (w *Writer) drop(reason string, n int) {
 		return
 	}
 	w.metrics.RecordsDropped.WithLabelValues(observability.ComponentWriter, reason).Add(float64(n))
-}
-
-func (w *Writer) ack(sh *Shipment, err error) {
-	if sh.Ack != nil {
-		sh.Ack(err)
-	}
 }
 
 // writeBatch accumulates records from several shipments plus the streams and acks
@@ -722,10 +714,6 @@ func (b *writeBatch) streamSlice() []model.Stream {
 	return out
 }
 
-// streamsCommitted marks the batch's streams as durable, so a retry of the records
-// transaction does not upsert them again.
-func (b *writeBatch) streamsCommitted() { clear(b.streams) }
-
 func (b *writeBatch) empty() bool             { return len(b.records) == 0 }
 func (b *writeBatch) full(threshold int) bool { return len(b.records) >= threshold }
 
@@ -774,32 +762,4 @@ func isRetryable(err error) bool {
 		}
 	}
 	return true
-}
-
-// backoff returns the delay before the given attempt, exponential with full jitter.
-//
-// Full jitter rather than a fixed multiple: when the database briefly refuses
-// connections, every writer in the cluster fails at once, and without jitter they
-// all retry at the same instant and refuse it again.
-func backoff(attempt int, base, maxDelay time.Duration) time.Duration {
-	if attempt < 1 {
-		attempt = 1
-	}
-	delay := base << min(attempt-1, 16)
-	if delay <= 0 || delay > maxDelay {
-		delay = maxDelay
-	}
-	return time.Duration(rand.Int64N(int64(delay)) + 1) //nolint:gosec // jitter, not a secret
-}
-
-// sleep waits for d, reporting false if ctx was canceled first.
-func sleep(ctx context.Context, d time.Duration) bool {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		return true
-	case <-ctx.Done():
-		return false
-	}
 }

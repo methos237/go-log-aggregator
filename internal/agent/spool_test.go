@@ -93,9 +93,6 @@ func TestSpoolFIFOAcrossSegmentRoll(t *testing.T) {
 	if got := sp.Len(); got != 0 {
 		t.Errorf("Len() = %d, want 0", got)
 	}
-	if got := sp.Bytes(); got != 0 {
-		t.Errorf("Bytes() = %d, want 0", got)
-	}
 }
 
 func TestSpoolReleaseOnEmptyIsNoop(t *testing.T) {
@@ -141,14 +138,6 @@ func TestSpoolReopenPreservesUnreleased(t *testing.T) {
 
 	if got := reopened.Len(); got != 3 {
 		t.Fatalf("Len() after reopen = %d, want 3", got)
-	}
-	// Bytes() counts whole segment files on disk, including the two already-
-	// released entries still sitting in segment 0 (it has 3 slots, 2 of them
-	// consumed, and is not deleted until all 3 are) — so this is all 5
-	// entries' worth, not just the 3 logically unreleased ones; see the
-	// Bytes doc comment.
-	if got, want := reopened.Bytes(), entrySize*int64(n); got != want {
-		t.Fatalf("Bytes() after reopen = %d, want %d", got, want)
 	}
 	for i := 2; i < n; i++ {
 		got, ok, err := reopened.Peek()
@@ -390,9 +379,6 @@ func TestSpoolAbsurdLengthPrefix(t *testing.T) {
 	if got := sp.Len(); got != 0 {
 		t.Errorf("Len() = %d, want 0", got)
 	}
-	if got := sp.Bytes(); got != 0 {
-		t.Errorf("Bytes() = %d, want 0", got)
-	}
 	if _, statErr := os.Stat(segPath); !os.IsNotExist(statErr) {
 		t.Errorf("hand-crafted segment survived recovery, want it removed (0 valid entries): stat err = %v", statErr)
 	}
@@ -400,6 +386,28 @@ func TestSpoolAbsurdLengthPrefix(t *testing.T) {
 
 // TestSpoolMaxBytesEviction sizes segments to hold exactly one entry each,
 // so the arithmetic on which segments survive is exact.
+// segmentBytesOnDisk sums the sizes of every segment file in dir: the quantity
+// SpoolConfig.MaxBytes actually bounds.
+func segmentBytesOnDisk(t *testing.T, dir string) int64 {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir(%s): %v", dir, err)
+	}
+	var total int64
+	for _, de := range entries {
+		if _, ok := parseSegmentSeq(de.Name()); !ok {
+			continue
+		}
+		info, err := de.Info()
+		if err != nil {
+			t.Fatalf("Info(%s): %v", de.Name(), err)
+		}
+		total += info.Size()
+	}
+	return total
+}
+
 func TestSpoolMaxBytesEviction(t *testing.T) {
 	dir := t.TempDir()
 	entrySize := int64(len(encodeEntry(fixedPayload(0))))
@@ -420,8 +428,8 @@ func TestSpoolMaxBytesEviction(t *testing.T) {
 	if got, want := sp.Len(), 3; got != want {
 		t.Fatalf("Len() = %d, want %d", got, want)
 	}
-	if got := sp.Bytes(); got > maxBytes {
-		t.Fatalf("Bytes() = %d, exceeds MaxBytes %d", got, maxBytes)
+	if got := segmentBytesOnDisk(t, dir); got > maxBytes {
+		t.Fatalf("segment bytes on disk = %d, exceeds MaxBytes %d", got, maxBytes)
 	}
 
 	// The newest three survive; the oldest three were dropped.

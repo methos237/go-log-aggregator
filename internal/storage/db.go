@@ -68,19 +68,6 @@ func Open(ctx context.Context, cfg config.DB, appName string) (*pgxpool.Pool, er
 	return pool, nil
 }
 
-// HealthCheck returns a readiness check for the pool.
-//
-// A dead database makes a node unready, not dead: restarting the process would
-// not bring Postgres back, and the JetStream buffer is what absorbs the outage.
-func HealthCheck(pool *pgxpool.Pool) observability.CheckFunc {
-	return func(ctx context.Context) error {
-		if err := pool.Ping(ctx); err != nil {
-			return fmt.Errorf("ping: %w", err)
-		}
-		return nil
-	}
-}
-
 // poolCollector exports pgxpool's own statistics.
 //
 // Implemented as a Collector reading Stat() on scrape rather than as gauges

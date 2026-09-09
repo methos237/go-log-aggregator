@@ -139,7 +139,6 @@ func run(dsnOverride string) error {
 		slog.String("http_addr", cfg.HTTP.Addr),
 		slog.String("admin_addr", cfg.Admin.Addr),
 		slog.String("ingest_addr", cfg.Ingest.Addr),
-		slog.Bool("cluster_enabled", cfg.Cluster.Enabled),
 	)
 
 	// Migrations run before the pool is used for anything else, and before the
@@ -161,7 +160,7 @@ func run(dsnOverride string) error {
 
 	// A dead database makes this node unready rather than dead: restarting would not
 	// bring Postgres back, and phase 2's JetStream buffer is what absorbs the outage.
-	health.Register("database", storage.HealthCheck(pool))
+	health.Register("database", pool.Ping)
 
 	// Started with no producer yet: the JetStream consumer that will call Submit
 	// lands later in phase 2. Wiring it now means the pool sizing, the metric

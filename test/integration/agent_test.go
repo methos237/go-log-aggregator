@@ -247,7 +247,6 @@ func startPipeline(t *testing.T, cfg *pipelineConfig) *pipeline {
 			}
 			return labels, true
 		},
-		DefaultLevel:    model.LevelUnspecified,
 		MaxBatchRecords: testMaxBatchRecords,
 		MaxBatchDelay:   testMaxBatchDelay,
 		AckWindow:       testAckWindow,

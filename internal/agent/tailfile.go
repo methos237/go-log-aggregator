@@ -98,28 +98,12 @@ type TailSource struct {
 // It does not open the file: the file may not exist yet, which is ordinary
 // startup ordering for a log source configured before its writer, and it is
 // Run's job to wait for that, not NewTailSource's job to fail on it.
-//
-// It does probe that this platform can report a FileID at all. fileIDFromInfo
-// reports false only depending on GOOS (see fileid_other.go), never on which
-// file is stat'd, so any real file answers the question — the current
-// directory always exists. Failing here means a platform the agent cannot
-// tail correctly is caught at startup, instead of running with a Cursor.File
-// that is silently always zero and can never tell rotation apart from a
-// truncate.
 func NewTailSource(cfg *TailConfig) (*TailSource, error) {
 	if cfg == nil {
 		cfg = &TailConfig{}
 	}
 	if cfg.Path == "" {
 		return nil, errors.New("tail source: path is required")
-	}
-
-	info, err := os.Stat(".")
-	if err != nil {
-		return nil, fmt.Errorf("tail source: probing file identity support: %w", err)
-	}
-	if _, ok := fileIDFromInfo(info); !ok {
-		return nil, errors.New("tail source: this platform cannot report file identity (dev/inode); tailing is unsupported here")
 	}
 
 	interval := cfg.PollInterval
@@ -230,11 +214,11 @@ func (s *TailSource) resolveResumedCursor(file *os.File, fid FileID) (int64, Fin
 
 	// Decision 6: a stale offset past the current size. Decision 4: the file
 	// was truncated and rewritten past the old offset while this agent was
-	// down, so size alone never shows a shrink — resume.Head.Comparable
-	// reports false whenever either fingerprint is zero (unknown file, or a
-	// file too short to fingerprint), so this only fires when there is
-	// content to actually compare.
-	truncated := info.Size() < resume.Offset || (resume.Head.Comparable(head) && !resume.Head.Matches(head))
+	// down, so size alone never shows a shrink — Differs reports false
+	// whenever either fingerprint is zero (unknown file, or a file too short
+	// to fingerprint), so this only fires when there is content to actually
+	// compare.
+	truncated := info.Size() < resume.Offset || resume.Head.Differs(head)
 	if truncated {
 		s.metrics.TruncationsDetected.Inc()
 		return 0, head, nil
@@ -291,7 +275,7 @@ func (s *TailSource) resolveState(
 	// Decision 3: a plain size shrink, same inode — copytruncate. Decision 4:
 	// the size never shrank because the rewrite already reached past the old
 	// offset, which only the fingerprint catches.
-	truncated := fdInfo.Size() < offset || (head.Comparable(newHead) && !head.Matches(newHead))
+	truncated := fdInfo.Size() < offset || head.Differs(newHead)
 	if truncated {
 		s.metrics.TruncationsDetected.Inc()
 		return file, fid, 0, newHead, nil

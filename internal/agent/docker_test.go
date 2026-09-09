@@ -440,7 +440,7 @@ func TestDockerSource_ResumeSendsSince(t *testing.T) {
 		t.Errorf("Run() error = %v, want context.Canceled", err)
 	}
 
-	wantSince := fmt.Sprintf("%d.%09d", resume.Unix(), resume.Nanosecond())
+	wantSince := resume.Format(time.RFC3339Nano)
 	if opts.Since != wantSince {
 		t.Errorf("options.Since = %q, want %q", opts.Since, wantSince)
 	}

@@ -276,12 +276,12 @@ func TestServerReportsBadTLSMaterial(t *testing.T) {
 func TestNoTLSConfiguredMeansPlaintext(t *testing.T) {
 	t.Parallel()
 
-	opts, err := serverOptions(testIngestConfig())
+	creds, err := transportCredentials(testIngestConfig())
 	if err != nil {
-		t.Fatalf("serverOptions: %v", err)
+		t.Fatalf("transportCredentials: %v", err)
 	}
-	if len(opts) != 2 {
-		t.Fatalf("got %d options, want 2", len(opts))
+	if _, ok := creds.(grpc.EmptyServerOption); !ok {
+		t.Fatalf("got %T, want grpc.EmptyServerOption", creds)
 	}
 }
 

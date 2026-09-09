@@ -43,7 +43,6 @@ type service struct {
 	pipeline *pipeline
 	log      *slog.Logger
 	metrics  *Metrics
-	now      nowFunc
 }
 
 // New binds the ingest listener and registers the service.
@@ -70,8 +69,10 @@ func New(ctx context.Context, cfg config.Ingest, q queue.Publisher, metrics *Met
 	log = log.With(slog.String("component", "ingest"))
 
 	// Certificates are loaded before anything is bound or started, so a bad TLS
-	// configuration leaves nothing to unwind.
-	opts, err := serverOptions(cfg)
+	// configuration leaves nothing to unwind. Transport security is part of the
+	// resource envelope below: an unauthenticated peer should not get as far as
+	// allocating a message.
+	creds, err := transportCredentials(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -85,40 +86,17 @@ func New(ctx context.Context, cfg config.Ingest, q queue.Publisher, metrics *Met
 	// Publishers start here rather than in Serve. Starting them in Serve would let a
 	// Shutdown that arrives first wait on a WaitGroup another goroutine is still
 	// adding to, which is a data race and, worse, an occasional missed drain.
-	pipe := newPipeline(ctx, cfg, q, metrics, log, time.Now)
+	pipe := newPipeline(ctx, cfg, q, metrics, log)
 	pipe.start()
 
-	srv := grpc.NewServer(opts...)
-	logaggv1.RegisterLogServiceServer(srv, &service{
-		pipeline: pipe,
-		log:      log,
-		metrics:  metrics,
-		now:      time.Now,
-	})
+	// MaxRecvMsgSize is the first line of defense on an untrusted boundary: agents
+	// batch, so it bounds how much memory one unauthenticated peer can make this
+	// process allocate for a single message. gRPC's own default is 4MB, but leaving it
+	// implicit would mean the limit silently changed with a dependency bump.
+	srv := grpc.NewServer(grpc.MaxRecvMsgSize(cfg.MaxRecvMsgBytes), creds)
+	logaggv1.RegisterLogServiceServer(srv, &service{pipeline: pipe, log: log, metrics: metrics})
 
 	return &Server{grpc: srv, lis: lis, pipeline: pipe, mtls: cfg.TLSCertFile != "", log: log}, nil
-}
-
-// serverOptions is the server's resource envelope.
-//
-// MaxRecvMsgSize is the first line of defense on an untrusted boundary: agents
-// batch, so it bounds how much memory one unauthenticated peer can make this
-// process allocate for a single message. gRPC's own default is 4MB, but leaving it
-// implicit would mean the limit silently changed with a dependency bump.
-//
-// Transport security is part of this envelope: an unauthenticated peer should not
-// get as far as allocating a message.
-//
-//nolint:gocritic // hugeParam: called once per process
-func serverOptions(cfg config.Ingest) ([]grpc.ServerOption, error) {
-	creds, err := transportCredentials(cfg)
-	if err != nil {
-		return nil, err
-	}
-	return []grpc.ServerOption{
-		grpc.MaxRecvMsgSize(cfg.MaxRecvMsgBytes),
-		creds,
-	}, nil
 }
 
 // Addr reports the address actually bound, which is what a test that asked for

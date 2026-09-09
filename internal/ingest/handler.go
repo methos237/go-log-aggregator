@@ -69,8 +69,8 @@ func (s *service) Stream(stream grpc.BidiStreamingServer[logaggv1.LogBatch, loga
 // acknowledged the publish. Everything that can fail is therefore in front of the
 // ack, never behind it.
 func (s *service) handle(ctx context.Context, batch *logaggv1.LogBatch) *logaggv1.Ack {
-	started := s.now()
-	defer func() { s.metrics.BatchDuration.Observe(s.now().Sub(started).Seconds()) }()
+	started := time.Now()
+	defer func() { s.metrics.BatchDuration.Observe(time.Since(started).Seconds()) }()
 
 	id := batch.GetBatchId()
 	records := batch.GetRecords()
@@ -152,7 +152,7 @@ func (s *service) handle(ctx context.Context, batch *logaggv1.LogBatch) *logaggv
 // worth more than the cycles: validation lives in exactly one place, so the agent,
 // the loadgen and this handler cannot disagree about what a valid record is.
 func (s *service) acceptable(id model.StreamID, records []*logaggv1.LogRecord) ([]*logaggv1.LogRecord, error) {
-	now := s.now()
+	now := time.Now()
 	var firstErr error
 
 	// Filtered in place: the slice belongs to a protobuf message this handler is
@@ -276,8 +276,6 @@ func ackCodeLabel(code logaggv1.AckCode) string {
 		return "overloaded"
 	case logaggv1.AckCode_ACK_CODE_INVALID:
 		return "invalid"
-	case logaggv1.AckCode_ACK_CODE_INTERNAL, logaggv1.AckCode_ACK_CODE_UNSPECIFIED:
-		return "internal"
 	default:
 		return "internal"
 	}
@@ -295,19 +293,9 @@ func truncate(s string, maxLen int) string {
 	}
 
 	const ellipsis = "..."
-	if maxLen <= len(ellipsis) {
-		// No room for content and a marker both. A helper whose job is defensive
-		// truncation must not have a lower bound its callers are expected to know.
-		return ellipsis[:maxLen]
-	}
-
 	cut := maxLen - len(ellipsis)
 	for cut > 0 && !utf8.RuneStart(s[cut]) {
 		cut--
 	}
 	return s[:cut] + ellipsis
 }
-
-// nowFunc is injectable so the timestamp acceptance window is testable without
-// freezing the clock.
-type nowFunc func() time.Time

@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -77,10 +76,9 @@ func TestPublishFailureReasons(t *testing.T) {
 			metrics := NewMetrics(reg)
 			svc := &service{
 				pipeline: newPipeline(context.Background(), testIngestConfig(),
-					&queuetest.Publisher{}, metrics, slog.New(slog.DiscardHandler), time.Now),
+					&queuetest.Publisher{}, metrics, slog.New(slog.DiscardHandler)),
 				log:     slog.New(slog.DiscardHandler),
 				metrics: metrics,
-				now:     time.Now,
 			}
 
 			ack := svc.publishFailed("b1", "logs.dev.api", 42, 10, 10, tt.err)

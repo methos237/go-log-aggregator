@@ -17,24 +17,13 @@ import (
 	"strings"
 )
 
-// PubAck is what JetStream reports about an accepted message.
-//
-// Sequence is the stream's global sequence number, which is the only durable
-// identifier a published record has. It goes in the log line for a failed batch
-// so a redelivery can be traced back to the publish that produced it.
-type PubAck struct {
-	Stream    string
-	Sequence  uint64
-	Duplicate bool
-}
-
 // Publisher writes records into the queue.
 //
 // Publish must not return nil until the message is durable: the caller's next
 // action is to acknowledge an agent, and an ack for a message that is still in
 // flight is exactly the lie this design exists to avoid.
 type Publisher interface {
-	Publish(ctx context.Context, subject string, payload []byte) (PubAck, error)
+	Publish(ctx context.Context, subject string, payload []byte) error
 	// Subject renders the subject a label set publishes to. On the Publisher
 	// because the prefix is connection configuration, not caller knowledge.
 	Subject(env, service string) string

@@ -264,20 +264,12 @@ func code(c logaggv1.AckCode) string {
 // collector would reject every record for an invalid level, and the operator would
 // be looking at a rejection count instead of a typo.
 func parseLevel(name string) (logaggv1.Level, error) {
-	levels := map[string]logaggv1.Level{
-		"trace": logaggv1.Level_LEVEL_TRACE,
-		"debug": logaggv1.Level_LEVEL_DEBUG,
-		"info":  logaggv1.Level_LEVEL_INFO,
-		"warn":  logaggv1.Level_LEVEL_WARN,
-		"error": logaggv1.Level_LEVEL_ERROR,
-		"fatal": logaggv1.Level_LEVEL_FATAL,
-	}
-	level, ok := levels[strings.ToLower(name)]
-	if !ok {
+	level, ok := logaggv1.Level_value["LEVEL_"+strings.ToUpper(name)]
+	if !ok || level == 0 {
 		return logaggv1.Level_LEVEL_UNSPECIFIED,
 			fmt.Errorf("unknown level %q: use trace, debug, info, warn, error or fatal", name)
 	}
-	return level, nil
+	return logaggv1.Level(level), nil
 }
 
 func hostname() string {

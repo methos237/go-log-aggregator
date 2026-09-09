@@ -141,10 +141,6 @@ func run() error {
 			ls, ok := sourceLabels[source]
 			return ls, ok
 		},
-		// Level inference is out of scope for this phase (see
-		// ShipperConfig.DefaultLevel's doc comment); LevelUnspecified is the
-		// model package's own answer for "no level known," not a guess.
-		DefaultLevel:    model.LevelUnspecified,
 		MaxBatchRecords: cfg.Agent.BatchRecords,
 		MaxBatchBytes:   cfg.Agent.BatchBytes,
 		MaxBatchDelay:   cfg.Agent.BatchDelay,
@@ -159,14 +155,6 @@ func run() error {
 
 	adminSrv := observability.NewAdminServer(cfg.Admin, metrics, log)
 
-	// The pipeline: sources (N goroutines) -> lines (bounded, QueueCapacity)
-	// -> an instrumented relay -> linesToJoiner -> Joiner -> joined (bounded)
-	// -> Shipper. See runPipeline's doc comment for why there are two
-	// channels between the sources and the Joiner rather than one.
-	lines := make(chan agent.Line, cfg.Agent.QueueCapacity)
-	linesToJoiner := make(chan agent.Line, cfg.Agent.QueueCapacity)
-	joined := make(chan agent.Line, cfg.Agent.QueueCapacity)
-
 	g, gctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
@@ -178,18 +166,15 @@ func run() error {
 
 	g.Go(func() error {
 		return runPipeline(gctx, &pipelineDeps{
-			cfg:           cfg,
-			log:           log,
-			sources:       sources,
-			joiner:        joiner,
-			shipper:       shipper,
-			spool:         spool,
-			checkpoint:    checkpoint,
-			adminSrv:      adminSrv,
-			lines:         lines,
-			linesToJoiner: linesToJoiner,
-			joined:        joined,
-			registerer:    metrics.Registerer,
+			cfg:        cfg,
+			log:        log,
+			sources:    sources,
+			joiner:     joiner,
+			shipper:    shipper,
+			spool:      spool,
+			checkpoint: checkpoint,
+			adminSrv:   adminSrv,
+			registerer: metrics.Registerer,
 		})
 	})
 
@@ -251,10 +236,6 @@ type pipelineDeps struct {
 	checkpoint *agent.CheckpointStore
 	adminSrv   *observability.AdminServer
 	registerer prometheus.Registerer
-
-	lines         chan agent.Line
-	linesToJoiner chan agent.Line
-	joined        chan agent.Line
 }
 
 // runPipeline starts every source, the instrumented relay, the Joiner and
@@ -267,18 +248,24 @@ type pipelineDeps struct {
 // of the nil it returns for a clean, signal-driven stop. That error
 // includes a stage that did not finish inside cfg.Node.ShutdownTimeout.
 //
-// Sources write to lines, not directly to what the Joiner reads. That
-// indirection exists solely so this function can instrument the "lines chan"
-// the phase 3 design calls for: neither Source nor Joiner exposes a hook for
-// recording queue depth or wait time on the channel between them (a Source
-// writes straight to whatever channel it is given, and the Joiner reads
-// straight from whatever channel it is given), so relayLines is spliced in
-// as the one place that can observe both ends. It changes nothing about the
-// shutdown contract — closing lines still propagates to the Joiner's input
-// exactly one hop later, once the relay itself sees lines close.
+// The pipeline: sources (N goroutines) -> lines (bounded, QueueCapacity) ->
+// an instrumented relay -> linesToJoiner -> Joiner -> joined (bounded) ->
+// Shipper. Sources write to lines, not directly to what the Joiner reads.
+// That indirection exists solely so this function can instrument the "lines
+// chan" the phase 3 design calls for: neither Source nor Joiner exposes a
+// hook for recording queue depth or wait time on the channel between them (a
+// Source writes straight to whatever channel it is given, and the Joiner
+// reads straight from whatever channel it is given), so relayLines is spliced
+// in as the one place that can observe both ends. It changes nothing about
+// the shutdown contract — closing lines still propagates to the Joiner's
+// input exactly one hop later, once the relay itself sees lines close.
 //
 //nolint:contextcheck // drainCtx deliberately does not inherit ctx's cancellation; see its own doc comment below
 func runPipeline(ctx context.Context, d *pipelineDeps) error {
+	lines := make(chan agent.Line, d.cfg.Agent.QueueCapacity)
+	linesToJoiner := make(chan agent.Line, d.cfg.Agent.QueueCapacity)
+	joined := make(chan agent.Line, d.cfg.Agent.QueueCapacity)
+
 	// srcCtx is a child of ctx, not ctx itself: every source stops the
 	// instant ctx is canceled either way, because context.WithCancel
 	// propagates a parent's cancellation, but this function also needs a
@@ -296,7 +283,7 @@ func runPipeline(ctx context.Context, d *pipelineDeps) error {
 			// ctx.Err() (from either srcCtx or its parent being canceled) is
 			// the expected outcome here and is not reported; anything else
 			// is a genuine source failure.
-			if runErr := src.Run(srcCtx, d.lines); runErr != nil && !errors.Is(runErr, context.Canceled) {
+			if runErr := src.Run(srcCtx, lines); runErr != nil && !errors.Is(runErr, context.Canceled) {
 				sourceErrs[i] = runErr
 			}
 		}(i, src)
@@ -316,13 +303,13 @@ func runPipeline(ctx context.Context, d *pipelineDeps) error {
 
 	queueDepth := observability.QueueDepth(d.registerer).WithLabelValues(observability.QueueAgentLines)
 	queueWait := observability.QueueWait(d.registerer).WithLabelValues(observability.QueueAgentLines)
-	go relayLines(drainCtx, d.lines, d.linesToJoiner, queueDepth, queueWait)
+	go relayLines(drainCtx, lines, linesToJoiner, queueDepth, queueWait)
 
 	joinerErrCh := make(chan error, 1)
-	go func() { joinerErrCh <- d.joiner.Run(drainCtx, d.linesToJoiner, d.joined) }()
+	go func() { joinerErrCh <- d.joiner.Run(drainCtx, linesToJoiner, joined) }()
 
 	shipperErrCh := make(chan error, 1)
-	go func() { shipperErrCh <- d.shipper.Run(drainCtx, d.joined) }()
+	go func() { shipperErrCh <- d.shipper.Run(drainCtx, joined) }()
 
 	// Nothing in this function ever closes linesToJoiner or joined before
 	// ctx is done, so the Joiner and the Shipper are only ever supposed to
@@ -364,10 +351,7 @@ func runPipeline(ctx context.Context, d *pipelineDeps) error {
 	// hanging forever on any single step.
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.WithoutCancel(ctx), d.cfg.Node.ShutdownTimeout)
 	defer cancelShutdown()
-	go func() {
-		<-shutdownCtx.Done()
-		cancelDrain()
-	}()
+	context.AfterFunc(shutdownCtx, cancelDrain)
 
 	var errs []error
 	if fatal != nil {
@@ -394,18 +378,18 @@ func runPipeline(ctx context.Context, d *pipelineDeps) error {
 	}
 
 	// Step 3.
-	close(d.lines)
+	close(lines)
 
 	// Step 4: the relay sees lines close and closes linesToJoiner in turn;
 	// the Joiner sees that close, flushes every held record, and returns.
 	// Skipped when the Joiner is the stage that already triggered the fatal
 	// path above — its result is already in errs via fatal, and it has
-	// already stopped touching d.joined, so closing it below is still safe.
+	// already stopped touching joined, so closing it below is still safe.
 	if !joinerDone {
 		joinErr = <-joinerErrCh
 		errs = appendStageErr(errs, d.log, "multiline joiner", joinErr)
 	}
-	close(d.joined)
+	close(joined)
 
 	// Step 5: the shipper sees joined close and runs its own shutdown --
 	// flush accumulators, a bounded wait for outstanding acks, spool the
@@ -543,7 +527,14 @@ func buildSources(cfg *config.Agent, checkpoint *agent.CheckpointStore, metrics 
 	// LabelSet directly.
 	owners := make(map[model.StreamID]string)
 
+	// cfg.Service, if set, overrides every source's own service and
+	// deliberately collapses them into one stream (see config.Agent.Service's
+	// doc comment); otherwise service is the one the caller derived from the
+	// source's own identity.
 	addLabel := func(name, service string) error {
+		if cfg.Service != "" {
+			service = cfg.Service
+		}
 		ls := model.LabelSet{Service: service, Host: cfg.Host, Env: cfg.Env}
 		// Skipped entirely when cfg.Service is set: that override
 		// deliberately collapses every source into one LabelSet (see
@@ -561,16 +552,6 @@ func buildSources(cfg *config.Agent, checkpoint *agent.CheckpointStore, metrics 
 		labels[name] = ls
 		return nil
 	}
-	// service resolves the per-source service label: cfg.Service, if set,
-	// overrides every source and deliberately collapses them into one
-	// stream (see config.Agent.Service's doc comment); otherwise fallback
-	// computes it from the source's own identity.
-	service := func(fallback func() string) string {
-		if cfg.Service != "" {
-			return cfg.Service
-		}
-		return fallback()
-	}
 
 	for _, path := range cfg.Files {
 		resume, _ := checkpoint.Get(path)
@@ -583,7 +564,7 @@ func buildSources(cfg *config.Agent, checkpoint *agent.CheckpointStore, metrics 
 		if err != nil {
 			return nil, nil, fmt.Errorf("tail source %s: %w", path, err)
 		}
-		if err := addLabel(src.Name(), service(func() string { return fileService(path) })); err != nil {
+		if err := addLabel(src.Name(), fileService(path)); err != nil {
 			return nil, nil, err
 		}
 		sources = append(sources, src)
@@ -603,7 +584,7 @@ func buildSources(cfg *config.Agent, checkpoint *agent.CheckpointStore, metrics 
 			if err != nil {
 				return nil, nil, fmt.Errorf("docker source %s: %w", name, err)
 			}
-			if err := addLabel(src.Name(), service(func() string { return containerService(container, stream) })); err != nil {
+			if err := addLabel(src.Name(), containerService(container, stream)); err != nil {
 				return nil, nil, err
 			}
 			sources = append(sources, src)
@@ -615,7 +596,7 @@ func buildSources(cfg *config.Agent, checkpoint *agent.CheckpointStore, metrics 
 		// No per-source rule is documented for stdin the way there is for a
 		// file or a container stream — there is exactly one of it, and its
 		// own Name() ("stdin") is already the obvious, unambiguous label.
-		if err := addLabel(src.Name(), service(func() string { return src.Name() })); err != nil {
+		if err := addLabel(src.Name(), src.Name()); err != nil {
 			return nil, nil, err
 		}
 		sources = append(sources, src)

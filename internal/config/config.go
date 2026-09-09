@@ -24,16 +24,15 @@ const EnvPrefix = "LOGAGG_"
 
 // Config is the fully resolved configuration for a collector process.
 type Config struct {
-	Node    Node
-	HTTP    HTTP
-	Admin   Admin
-	Ingest  Ingest
-	DB      DB
-	Writer  Writer
-	Queue   Queue
-	Cluster Cluster
-	Log     Log
-	Agent   Agent
+	Node   Node
+	HTTP   HTTP
+	Admin  Admin
+	Ingest Ingest
+	DB     DB
+	Writer Writer
+	Queue  Queue
+	Log    Log
+	Agent  Agent
 }
 
 // Node identifies this process within the cluster.
@@ -50,11 +49,10 @@ type Node struct {
 
 // HTTP is the public API listener: query, tail, health.
 type HTTP struct {
-	Addr            string
-	ReadTimeout     time.Duration
-	WriteTimeout    time.Duration
-	IdleTimeout     time.Duration
-	ShutdownTimeout time.Duration
+	Addr         string
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
+	IdleTimeout  time.Duration
 }
 
 // Admin is the internal listener: metrics and pprof. Never expose this port
@@ -180,25 +178,6 @@ type Queue struct {
 	StreamMaxAge time.Duration
 }
 
-// Cluster is the gossip membership and hash ring.
-type Cluster struct {
-	// Enabled off means single-node mode: no gossip, ring of one.
-	Enabled bool
-	// BindAddr is the memberlist gossip listener (TCP and UDP on the same port).
-	BindAddr string
-	// AdvertiseAddr is what peers are told to reach this node on. Required when
-	// the bind address is not routable from peers.
-	AdvertiseAddr string
-	// Peers is the seed list for joining. Under compose, the service name
-	// resolves to every replica, so one entry is enough.
-	Peers []string
-	// PeerAddr is the internal gRPC listener used for query fan-out.
-	PeerAddr string
-	// VirtualNodes per member on the hash ring. Higher means more even key
-	// distribution and a larger ring; 128 is the starting point to benchmark.
-	VirtualNodes int
-}
-
 // Log configures the structured logger.
 type Log struct {
 	Level     slog.Level
@@ -314,11 +293,10 @@ func Load() (*Config, error) {
 			ShutdownTimeout: e.dur("SHUTDOWN_TIMEOUT", 20*time.Second),
 		},
 		HTTP: HTTP{
-			Addr:            e.str("HTTP_ADDR", ":8080"),
-			ReadTimeout:     e.dur("HTTP_READ_TIMEOUT", 15*time.Second),
-			WriteTimeout:    e.dur("HTTP_WRITE_TIMEOUT", 30*time.Second),
-			IdleTimeout:     e.dur("HTTP_IDLE_TIMEOUT", 120*time.Second),
-			ShutdownTimeout: e.dur("HTTP_SHUTDOWN_TIMEOUT", 10*time.Second),
+			Addr:         e.str("HTTP_ADDR", ":8080"),
+			ReadTimeout:  e.dur("HTTP_READ_TIMEOUT", 15*time.Second),
+			WriteTimeout: e.dur("HTTP_WRITE_TIMEOUT", 30*time.Second),
+			IdleTimeout:  e.dur("HTTP_IDLE_TIMEOUT", 120*time.Second),
 		},
 		Admin: Admin{
 			Addr:        e.str("ADMIN_ADDR", ":9090"),
@@ -379,14 +357,6 @@ func Load() (*Config, error) {
 			PublishTimeout: e.dur("QUEUE_PUBLISH_TIMEOUT", 5*time.Second),
 			StreamMaxBytes: e.bytes64("QUEUE_STREAM_MAX_BYTES", 8<<30),
 			StreamMaxAge:   e.dur("QUEUE_STREAM_MAX_AGE", 24*time.Hour),
-		},
-		Cluster: Cluster{
-			Enabled:       e.bool("CLUSTER_ENABLED", false),
-			BindAddr:      e.str("CLUSTER_BIND_ADDR", ":7946"),
-			AdvertiseAddr: e.str("CLUSTER_ADVERTISE_ADDR", ""),
-			Peers:         e.list("CLUSTER_PEERS", nil),
-			PeerAddr:      e.str("CLUSTER_PEER_ADDR", ":9096"),
-			VirtualNodes:  e.int("CLUSTER_VIRTUAL_NODES", 128),
 		},
 		Log: Log{
 			Level:     e.level("LOG_LEVEL", slog.LevelInfo),
@@ -555,17 +525,6 @@ func (c *Config) Validate() error {
 	}
 	if c.Queue.StreamMaxAge <= 0 {
 		bad("queue stream max age must be positive, got %s", c.Queue.StreamMaxAge)
-	}
-	if c.Cluster.Enabled {
-		if c.Cluster.BindAddr == "" {
-			bad("cluster bind addr must not be empty when clustering is enabled")
-		}
-		if c.Cluster.PeerAddr == "" {
-			bad("cluster peer addr must not be empty when clustering is enabled")
-		}
-		if c.Cluster.VirtualNodes < 1 {
-			bad("cluster virtual nodes must be at least 1, got %d", c.Cluster.VirtualNodes)
-		}
 	}
 	if c.Log.Format != "json" && c.Log.Format != "text" {
 		bad("log format must be json or text, got %q", c.Log.Format)
@@ -777,12 +736,7 @@ func (e *env) int(key string, def int) int {
 // bytes accepts a plain byte count or a KB/MB/GB suffix, so operators can write
 // 8MB instead of counting zeros.
 func (e *env) bytes(key string, def int) int {
-	v := e.bytes64(key, int64(def))
-	if v > math.MaxInt || v < math.MinInt {
-		e.fail(key, strconv.FormatInt(v, 10), errors.New("byte size does not fit in an int"))
-		return def
-	}
-	return int(v)
+	return int(e.bytes64(key, int64(def)))
 }
 
 // bytes64 is bytes for the settings that are legitimately larger than a 32-bit

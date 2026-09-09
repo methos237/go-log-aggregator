@@ -8,12 +8,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math/rand/v2"
 	"sync"
 	"time"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/client"
+
+	"github.com/jamespolk/go-log-aggregator/internal/backoff"
 )
 
 // DockerStream selects which of a container's output streams a source
@@ -238,7 +239,9 @@ func (s *DockerSource) Run(ctx context.Context, out chan<- Line) error {
 		attempt++
 		s.metrics.DockerReconnects.Inc()
 
-		if !dockerSleep(ctx, dockerBackoff(attempt, dockerBackoffBase, dockerBackoffMax)) {
+		// Full jitter, so every DockerSource in an agent watching containers
+		// on one host does not reconnect in lockstep after a daemon restart.
+		if !backoff.Sleep(ctx, backoff.Delay(attempt, dockerBackoffBase, dockerBackoffMax)) {
 			return ctx.Err()
 		}
 	}
@@ -305,7 +308,10 @@ func (s *DockerSource) connect(ctx context.Context, since int64) (io.ReadCloser,
 		Follow:     true,
 	}
 	if since > 0 {
-		opts.Since = dockerSince(since)
+		// RFC3339Nano is one of the formats the client's own Since parser
+		// (github.com/moby/moby/client/internal/timestamp.GetTimestamp)
+		// accepts; it converts it to the daemon's "sec.nsec" form itself.
+		opts.Since = time.Unix(0, since).UTC().Format(time.RFC3339Nano)
 	}
 
 	result, err := s.client.ContainerLogs(ctx, s.container, opts)
@@ -476,27 +482,6 @@ func splitDockerTimestamp(line []byte) (rest []byte, ts time.Time, ok bool) {
 	return line[idx+1:], t, true
 }
 
-// dockerSince formats a Unix-nanosecond instant as the "sec.nsec" string
-// ContainerLogsOptions.Since accepts. This is not a guess at an accepted
-// format: it is exactly what
-// github.com/moby/moby/client/internal/timestamp.GetTimestamp produces
-// internally for an RFC3339 Since value before the request is sent, so
-// passing it pre-formatted is equivalent and skips a round trip through
-// that parser.
-func dockerSince(nanos int64) string {
-	sec := nanos / int64(time.Second)
-	nsec := nanos % int64(time.Second)
-	if nsec < 0 {
-		// Only possible for an instant before the Unix epoch, which no real
-		// container log will ever carry, but integer division truncates
-		// toward zero rather than flooring, so a negative input needs this
-		// adjustment to avoid a malformed "sec.-nsec" string.
-		sec--
-		nsec += int64(time.Second)
-	}
-	return fmt.Sprintf("%d.%09d", sec, nsec)
-}
-
 // dockerBackoffBase and dockerBackoffMax bound the exponential-with-jitter
 // delay between reconnect attempts. Base is short because a container
 // restart is often quick and this source should notice promptly; max is
@@ -505,41 +490,6 @@ const (
 	dockerBackoffBase = 200 * time.Millisecond
 	dockerBackoffMax  = 30 * time.Second
 )
-
-// dockerBackoff returns the delay before the given reconnect attempt,
-// exponential with full jitter -- the same shape as internal/storage/
-// writer.go's backoff, and for the same reason: without jitter, every
-// DockerSource in an agent watching containers on one host reconnects in
-// lockstep after a daemon restart and hits its HTTP listener at the same
-// instant, repeatedly.
-func dockerBackoff(attempt int, base, maxDelay time.Duration) time.Duration {
-	if attempt < 1 {
-		attempt = 1
-	}
-	delay := base << min(attempt-1, 16)
-	if delay <= 0 || delay > maxDelay {
-		delay = maxDelay
-	}
-	// The range is [1, delay] rather than a literal [0, delay]: a zero delay would
-	// turn a tight failure loop into a busy one, and one nanosecond of floor costs
-	// nothing while removing that case.
-	//
-	// math/rand/v2 is right here: this is scheduling jitter, not a secret, and a
-	// cryptographic source would cost more for no property this needs.
-	return time.Duration(rand.Int64N(int64(delay)) + 1)
-}
-
-// dockerSleep waits for d, reporting false if ctx was canceled first.
-func dockerSleep(ctx context.Context, d time.Duration) bool {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		return true
-	case <-ctx.Done():
-		return false
-	}
-}
 
 // Close closes the client this source built from the environment.
 //

@@ -107,20 +107,19 @@ func run() error {
 
 func (o *options) validate() error {
 	var errs []error
-	if o.records < 1 {
-		errs = append(errs, fmt.Errorf("records must be at least 1, got %d", o.records))
-	}
-	if o.batchSize < 1 {
-		errs = append(errs, fmt.Errorf("batch size must be at least 1, got %d", o.batchSize))
-	}
-	if o.streams < 1 {
-		errs = append(errs, fmt.Errorf("streams must be at least 1, got %d", o.streams))
-	}
-	if o.senders < 1 {
-		errs = append(errs, fmt.Errorf("senders must be at least 1, got %d", o.senders))
-	}
-	if o.messageSize < 1 {
-		errs = append(errs, fmt.Errorf("message size must be at least 1, got %d", o.messageSize))
+	for _, f := range []struct {
+		name  string
+		value int
+	}{
+		{"records", o.records},
+		{"batch size", o.batchSize},
+		{"streams", o.streams},
+		{"senders", o.senders},
+		{"message size", o.messageSize},
+	} {
+		if f.value < 1 {
+			errs = append(errs, fmt.Errorf("%s must be at least 1, got %d", f.name, f.value))
+		}
 	}
 	return errors.Join(errs...)
 }

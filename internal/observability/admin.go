@@ -33,7 +33,7 @@ func NewAdminServer(cfg config.Admin, m *Metrics, log *slog.Logger) *AdminServer
 		// silently truncated response, so a broken collector is visible as a
 		// scrape failure instead of a metric that quietly disappears.
 		ErrorHandling: promhttp.HTTPErrorOnError,
-		ErrorLog:      slogErrorLog{log: log},
+		ErrorLog:      slog.NewLogLogger(log.Handler(), slog.LevelError),
 	}))
 
 	if cfg.EnablePprof {
@@ -60,9 +60,6 @@ func NewAdminServer(cfg config.Admin, m *Metrics, log *slog.Logger) *AdminServer
 	}
 }
 
-// Addr reports the configured listen address.
-func (a *AdminServer) Addr() string { return a.srv.Addr }
-
 // ListenAndServe blocks until the server stops. A clean Shutdown returns nil.
 func (a *AdminServer) ListenAndServe() error {
 	a.log.Info("admin server listening", slog.String("addr", a.srv.Addr))
@@ -76,11 +73,4 @@ func (a *AdminServer) ListenAndServe() error {
 // Shutdown stops accepting connections and waits for in-flight requests.
 func (a *AdminServer) Shutdown(ctx context.Context) error {
 	return a.srv.Shutdown(ctx)
-}
-
-// slogErrorLog adapts slog to the promhttp.Logger interface.
-type slogErrorLog struct{ log *slog.Logger }
-
-func (s slogErrorLog) Println(v ...any) {
-	s.log.Error("metrics handler error", slog.Any("detail", v))
 }

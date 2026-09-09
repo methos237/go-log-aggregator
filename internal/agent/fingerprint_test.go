@@ -112,8 +112,8 @@ func TestFingerprintHead_AppendPastPrefixDoesNotChange(t *testing.T) {
 	if before != after {
 		t.Errorf("fingerprint changed across an append past the prefix: before %+v, after %+v", before, after)
 	}
-	if !before.Matches(after) {
-		t.Error("Matches(before, after) = false, want true for an append past the prefix")
+	if before.Differs(after) {
+		t.Error("Differs(before, after) = true, want false for an append past the prefix")
 	}
 }
 
@@ -145,60 +145,26 @@ func TestFingerprintHead_LeavesOffsetUndisturbed(t *testing.T) {
 	}
 }
 
-func TestFingerprint_MatchesAndComparable(t *testing.T) {
+func TestFingerprint_Differs(t *testing.T) {
 	tests := []struct {
-		name           string
-		a, b           Fingerprint
-		wantComparable bool
-		wantMatches    bool
+		name string
+		a, b Fingerprint
+		want bool
 	}{
-		{
-			name:           "equal, same length",
-			a:              Fingerprint{Len: 256, Hash: 42},
-			b:              Fingerprint{Len: 256, Hash: 42},
-			wantComparable: true,
-			wantMatches:    true,
-		},
-		{
-			name:           "same length, different hash: rewritten content",
-			a:              Fingerprint{Len: 256, Hash: 1},
-			b:              Fingerprint{Len: 256, Hash: 2},
-			wantComparable: true,
-			wantMatches:    false,
-		},
-		{
-			name:           "different length: not comparable at all",
-			a:              Fingerprint{Len: 256, Hash: 1},
-			b:              Fingerprint{Len: 128, Hash: 1},
-			wantComparable: false,
-			wantMatches:    false,
-		},
-		{
-			name:           "one zero: unknown, falls back to size",
-			a:              Fingerprint{},
-			b:              Fingerprint{Len: 256, Hash: 1},
-			wantComparable: false,
-			wantMatches:    false,
-		},
-		{
-			name:           "both zero",
-			a:              Fingerprint{},
-			b:              Fingerprint{},
-			wantComparable: false,
-			wantMatches:    false,
-		},
+		{name: "equal, same length", a: Fingerprint{Len: 256, Hash: 42}, b: Fingerprint{Len: 256, Hash: 42}, want: false},
+		{name: "same length, different hash: rewritten content", a: Fingerprint{Len: 256, Hash: 1}, b: Fingerprint{Len: 256, Hash: 2}, want: true},
+		{name: "different length: not comparable, falls back to size", a: Fingerprint{Len: 256, Hash: 1}, b: Fingerprint{Len: 128, Hash: 1}, want: false},
+		{name: "one zero: unknown, falls back to size", a: Fingerprint{}, b: Fingerprint{Len: 256, Hash: 1}, want: false},
+		{name: "both zero", a: Fingerprint{}, b: Fingerprint{}, want: false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.a.Comparable(tt.b); got != tt.wantComparable {
-				t.Errorf("Comparable = %v, want %v", got, tt.wantComparable)
+			if got := tt.a.Differs(tt.b); got != tt.want {
+				t.Errorf("Differs = %v, want %v", got, tt.want)
 			}
-			if got := tt.b.Comparable(tt.a); got != tt.wantComparable {
-				t.Errorf("Comparable (reversed) = %v, want %v", got, tt.wantComparable)
-			}
-			if got := tt.a.Matches(tt.b); got != tt.wantMatches {
-				t.Errorf("Matches = %v, want %v", got, tt.wantMatches)
+			if got := tt.b.Differs(tt.a); got != tt.want {
+				t.Errorf("Differs (reversed) = %v, want %v", got, tt.want)
 			}
 		})
 	}

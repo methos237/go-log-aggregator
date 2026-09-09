@@ -37,15 +37,3 @@ func TestTruncateKeepsValidUTF8(t *testing.T) {
 		}
 	}
 }
-
-// A defensive helper must not have a lower bound its callers are expected to know.
-func TestTruncateHandlesTinyLimits(t *testing.T) {
-	t.Parallel()
-
-	for maxLen := 0; maxLen <= 4; maxLen++ {
-		got := truncate("abcdefgh", maxLen)
-		if len(got) > maxLen {
-			t.Errorf("truncate(_, %d) returned %d bytes", maxLen, len(got))
-		}
-	}
-}

@@ -12,12 +12,8 @@ func TestPublisherRecordsMessages(t *testing.T) {
 	t.Parallel()
 
 	var p Publisher
-	ack, err := p.Publish(context.Background(), "logs.dev.api", []byte("one"))
-	if err != nil {
+	if err := p.Publish(context.Background(), "logs.dev.api", []byte("one")); err != nil {
 		t.Fatalf("Publish: %v", err)
-	}
-	if ack.Sequence != 1 {
-		t.Errorf("Sequence = %d, want 1", ack.Sequence)
 	}
 
 	got := p.Published()
@@ -33,7 +29,7 @@ func TestPublisherCopiesPayloads(t *testing.T) {
 
 	var p Publisher
 	buf := []byte("original")
-	if _, err := p.Publish(context.Background(), "logs.dev.api", buf); err != nil {
+	if err := p.Publish(context.Background(), "logs.dev.api", buf); err != nil {
 		t.Fatalf("Publish: %v", err)
 	}
 	copy(buf, "mutated!")
@@ -50,7 +46,7 @@ func TestPublisherFailWith(t *testing.T) {
 	var p Publisher
 	p.FailWith(sentinel)
 
-	if _, err := p.Publish(context.Background(), "logs.dev.api", nil); !errors.Is(err, sentinel) {
+	if err := p.Publish(context.Background(), "logs.dev.api", nil); !errors.Is(err, sentinel) {
 		t.Fatalf("err = %v, want %v", err, sentinel)
 	}
 	if p.Count() != 0 {
@@ -58,7 +54,7 @@ func TestPublisherFailWith(t *testing.T) {
 	}
 
 	p.FailWith(nil)
-	if _, err := p.Publish(context.Background(), "logs.dev.api", nil); err != nil {
+	if err := p.Publish(context.Background(), "logs.dev.api", nil); err != nil {
 		t.Fatalf("Publish after clearing the error: %v", err)
 	}
 }
@@ -70,7 +66,7 @@ func TestPublisherHonorsContext(t *testing.T) {
 	cancel()
 
 	var p Publisher
-	if _, err := p.Publish(ctx, "logs.dev.api", nil); !errors.Is(err, context.Canceled) {
+	if err := p.Publish(ctx, "logs.dev.api", nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want context.Canceled", err)
 	}
 }
@@ -85,7 +81,7 @@ func TestPublisherHookRunsBeforeRecording(t *testing.T) {
 		return nil
 	})
 
-	if _, err := p.Publish(context.Background(), "logs.dev.api", nil); err != nil {
+	if err := p.Publish(context.Background(), "logs.dev.api", nil); err != nil {
 		t.Fatalf("Publish: %v", err)
 	}
 	if sawCount != 0 {
@@ -104,10 +100,5 @@ func TestPublisherSubjectMatchesProduction(t *testing.T) {
 	var p Publisher
 	if got, want := p.Subject("dev", "api.v2"), queue.Subject("logs", "dev", "api.v2"); got != want {
 		t.Errorf("Subject() = %q, want %q", got, want)
-	}
-
-	p.Prefix = "records"
-	if got, want := p.Subject("dev", "api"), "records.dev.api"; got != want {
-		t.Errorf("Subject() with custom prefix = %q, want %q", got, want)
 	}
 }

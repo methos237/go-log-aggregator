@@ -16,9 +16,14 @@ import (
 //
 // The zero value means "no backing file", which is the honest answer for stdin
 // and for the Docker source.
+//
+// The json tags on this and the other Cursor types are the checkpoint file's
+// on-disk format (see checkpoint.go). Lowercase deliberately: that file's whole
+// purpose is to be inspected with `cat` while diagnosing a restart, and short
+// lowercase keys read better in a terminal than exported Go names would.
 type FileID struct {
-	Dev uint64
-	Ino uint64
+	Dev uint64 `json:"dev"`
+	Ino uint64 `json:"ino"`
 }
 
 // IsZero reports whether the ID refers to no file at all.
@@ -42,30 +47,21 @@ func (f FileID) IsZero() bool { return f == FileID{} }
 // than assumed — a fingerprint over min(prefix, size) would change every time a
 // short file grew and would report truncation on ordinary appends.
 type Fingerprint struct {
-	Len  int64
-	Hash uint64
+	Len  int64  `json:"len"`
+	Hash uint64 `json:"hash"`
 }
 
 // IsZero reports whether no fingerprint was taken.
 func (f Fingerprint) IsZero() bool { return f.Len == 0 }
 
-// Matches reports whether two fingerprints were taken over the same length and
-// agree. Two fingerprints of differing length are not comparable, so this
-// reports false rather than guessing; a caller that cannot compare should fall
-// back to size and inode rather than treat a mismatch as truncation.
-func (f Fingerprint) Matches(other Fingerprint) bool {
-	if f.IsZero() || other.IsZero() || f.Len != other.Len {
-		return false
-	}
-	return f.Hash == other.Hash
-}
-
-// Comparable reports whether two fingerprints can be compared at all: both
-// taken, and over the same number of bytes. It is separate from Matches because
-// "cannot tell" and "definitely different" call for opposite responses — the
-// first falls back to size, the second means the file was rewritten.
-func (f Fingerprint) Comparable(other Fingerprint) bool {
-	return !f.IsZero() && !other.IsZero() && f.Len == other.Len
+// Differs reports whether two fingerprints were taken over the same, non-zero
+// length and disagree — the one case that means the file was rewritten. Two
+// fingerprints of differing length, or one never taken, are not comparable at
+// all, so this reports false rather than guessing: "cannot tell" and
+// "definitely different" call for opposite responses, and a caller that cannot
+// compare should fall back to size and inode rather than treat it as truncation.
+func (f Fingerprint) Differs(o Fingerprint) bool {
+	return f.Len > 0 && f.Len == o.Len && f.Hash != o.Hash
 }
 
 // Cursor is where a Line came from, expressed in terms the checkpoint store can
@@ -82,19 +78,25 @@ type Cursor struct {
 	// derived as Offset minus the line length: that arithmetic is wrong for CRLF
 	// input and wrong for every truncated line, and a seq that does not reproduce
 	// exactly on replay turns deduplication into duplicate rows.
-	Start int64
+	Start int64 `json:"start"`
 	// Offset is the byte offset immediately past this line in the file it came
 	// from, counting the line terminator. Resuming from it reads the next line.
 	// Zero for sources without seekable input.
-	Offset int64
+	Offset int64 `json:"offset"`
 	// File identifies the backing file. A change here under an unchanged Source
 	// name is a rotation; see the tail source for how truncation is told apart.
-	File FileID
+	File FileID `json:"file"`
 	// Head fingerprints the start of the file this cursor points into. It is
 	// persisted so that a restart can tell "the same file, resume at Offset" from
 	// "the same inode, but its contents were replaced while we were down", which
 	// inode and size together cannot distinguish.
-	Head Fingerprint
+	//
+	// An absent "head" key in a checkpoint written by a build before this field
+	// existed unmarshals to the zero Fingerprint — "unknown, fall back to size" —
+	// not a parse error. A file written by an older build is not corrupt; it
+	// simply predates a field, and Load must not treat that as the same failure
+	// as hand-edited garbage.
+	Head Fingerprint `json:"head,omitempty"`
 }
 
 // Line is one unparsed log line with its provenance.

@@ -53,8 +53,8 @@ func (ls LabelSet) ID() StreamID {
 	return StreamID(xxhash.Sum64(ls.canonical(nil))) //nolint:gosec // intentional reinterpretation, see StreamID
 }
 
-// AppendCanonical appends the canonical byte encoding of the label set to dst
-// and returns the extended slice. Exposed so hot paths can reuse a buffer.
+// canonical appends the canonical byte encoding of the label set to dst and
+// returns the extended slice.
 //
 // The encoding is length-prefixed rather than delimited. With a delimiter,
 // {service: "a", host: "b|c"} and {service: "a|b", host: "c"} would encode
@@ -62,10 +62,6 @@ func (ls LabelSet) ID() StreamID {
 // contain, so no delimiter is safe. Length prefixes make the encoding injective.
 //
 // Extra labels are sorted by name so map iteration order cannot change the ID.
-func (ls LabelSet) AppendCanonical(dst []byte) []byte {
-	return ls.canonical(dst)
-}
-
 func (ls LabelSet) canonical(dst []byte) []byte {
 	dst = appendField(dst, ls.Service)
 	dst = appendField(dst, ls.Host)
