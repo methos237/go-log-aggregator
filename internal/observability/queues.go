@@ -7,9 +7,17 @@ import (
 )
 
 // Bounded queues in the record pipeline, used as the queue label below.
+//
+// Agent-side and collector-side queues share this one family rather than getting
+// a logagg_agent_* family of their own, because the operator's question spans
+// both processes: "where in the pipeline is the backlog". A separate family would
+// make that ungraphable on one panel, which is the whole reason this family is
+// shared in the first place.
 const (
 	QueueIngest = "ingest"
 	QueueWriter = "writer"
+	// QueueAgentLines is the agent's source-to-shipper channel.
+	QueueAgentLines = "agent_lines"
 )
 
 // QueueDepth returns the shared depth gauge for bounded in-process queues,

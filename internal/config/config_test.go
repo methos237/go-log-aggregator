@@ -2,6 +2,7 @@ package config
 
 import (
 	"log/slog"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +29,66 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Cluster.Enabled {
 		t.Error("clustering should default to off so a single node needs no configuration")
 	}
+
+	// Agent defaults must make a bare `go run ./cmd/agent` reach the compose
+	// stack's collector with no configuration beyond a source, and must
+	// leave a collector process's own defaults untouched by anything
+	// agent-specific.
+	if got, want := cfg.Agent.IngestAddr, "127.0.0.1:9095"; got != want {
+		t.Errorf("Agent.IngestAddr = %q, want %q", got, want)
+	}
+	if got, want := cfg.Agent.Env, cfg.Node.Env; got != want {
+		t.Errorf("Agent.Env = %q, want it to default to Node.Env %q", got, want)
+	}
+	if cfg.Agent.Host == "" {
+		t.Error("Agent.Host defaulted to empty")
+	}
+	if got, want := cfg.Agent.CheckpointPath, "/var/lib/logagg/checkpoint.json"; got != want {
+		t.Errorf("Agent.CheckpointPath = %q, want %q", got, want)
+	}
+	if got, want := cfg.Agent.SpoolDir, "/var/lib/logagg/spool"; got != want {
+		t.Errorf("Agent.SpoolDir = %q, want %q", got, want)
+	}
+	if got, want := cfg.Agent.SpoolMaxBytes, int64(256<<20); got != want {
+		t.Errorf("Agent.SpoolMaxBytes = %d, want %d", got, want)
+	}
+	if got, want := cfg.Agent.SpoolSegmentBytes, int64(8<<20); got != want {
+		t.Errorf("Agent.SpoolSegmentBytes = %d, want %d", got, want)
+	}
+	if got, want := cfg.Agent.QueueCapacity, 4096; got != want {
+		t.Errorf("Agent.QueueCapacity = %d, want %d", got, want)
+	}
+	if got, want := cfg.Agent.PollInterval, 250*time.Millisecond; got != want {
+		t.Errorf("Agent.PollInterval = %s, want %s", got, want)
+	}
+	if got, want := cfg.Agent.MultilineTimeout, 5*time.Second; got != want {
+		t.Errorf("Agent.MultilineTimeout = %s, want %s", got, want)
+	}
+	if got, want := cfg.Agent.BatchRecords, 500; got != want {
+		t.Errorf("Agent.BatchRecords = %d, want %d", got, want)
+	}
+	if got, want := cfg.Agent.BatchBytes, 512<<10; got != want {
+		t.Errorf("Agent.BatchBytes = %d, want %d", got, want)
+	}
+	if got, want := cfg.Agent.BatchDelay, time.Second; got != want {
+		t.Errorf("Agent.BatchDelay = %s, want %s", got, want)
+	}
+	if got, want := cfg.Agent.AckWindow, 64; got != want {
+		t.Errorf("Agent.AckWindow = %d, want %d", got, want)
+	}
+	if got, want := cfg.Agent.MinBackoff, 250*time.Millisecond; got != want {
+		t.Errorf("Agent.MinBackoff = %s, want %s", got, want)
+	}
+	if got, want := cfg.Agent.MaxBackoff, 30*time.Second; got != want {
+		t.Errorf("Agent.MaxBackoff = %s, want %s", got, want)
+	}
+	// A collector's own default config has no sources configured at all —
+	// see TestAgentValidate's "no sources" case — and that must not stop
+	// the collector's Load from succeeding: Agent.Validate is deliberately
+	// not part of this Validate chain (see Agent.Validate's doc comment).
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("default config (no agent sources) must still validate for a collector process: %v", err)
+	}
 }
 
 func TestLoadOverrides(t *testing.T) {
@@ -38,6 +99,19 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv(EnvPrefix+"CLUSTER_ENABLED", "true")
 	t.Setenv(EnvPrefix+"CLUSTER_PEERS", "a:7946, b:7946 ,")
 	t.Setenv(EnvPrefix+"LOG_LEVEL", "debug")
+	t.Setenv(EnvPrefix+"AGENT_FILES", "/var/log/app.log, /var/log/other.log ,")
+	t.Setenv(EnvPrefix+"AGENT_CONTAINERS", "web, worker")
+	t.Setenv(EnvPrefix+"AGENT_STDIN", "true")
+	t.Setenv(EnvPrefix+"AGENT_SERVICE", "everything")
+	t.Setenv(EnvPrefix+"AGENT_ENV", "staging")
+	t.Setenv(EnvPrefix+"AGENT_HOST", "agent-host-7")
+	t.Setenv(EnvPrefix+"AGENT_INGEST_ADDR", "collector:9095")
+	t.Setenv(EnvPrefix+"AGENT_SPOOL_MAX_BYTES", "64MB")
+	t.Setenv(EnvPrefix+"AGENT_QUEUE_CAPACITY", "128")
+	t.Setenv(EnvPrefix+"AGENT_MULTILINE_PATTERN", `^\s`)
+	t.Setenv(EnvPrefix+"AGENT_EXTRACT_JSON", "true")
+	t.Setenv(EnvPrefix+"AGENT_BATCH_RECORDS", "50")
+	t.Setenv(EnvPrefix+"AGENT_ACK_WINDOW", "8")
 
 	cfg, err := Load()
 	if err != nil {
@@ -61,6 +135,45 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if got, want := cfg.Log.Level, slog.LevelDebug; got != want {
 		t.Errorf("Log.Level = %v, want %v", got, want)
+	}
+	if got, want := cfg.Agent.Files, []string{"/var/log/app.log", "/var/log/other.log"}; !slices.Equal(got, want) {
+		t.Errorf("Agent.Files = %v, want %v (blanks trimmed)", got, want)
+	}
+	if got, want := cfg.Agent.Containers, []string{"web", "worker"}; !slices.Equal(got, want) {
+		t.Errorf("Agent.Containers = %v, want %v", got, want)
+	}
+	if !cfg.Agent.Stdin {
+		t.Error("Agent.Stdin = false, want true")
+	}
+	if got, want := cfg.Agent.Service, "everything"; got != want {
+		t.Errorf("Agent.Service = %q, want %q", got, want)
+	}
+	if got, want := cfg.Agent.Env, "staging"; got != want {
+		t.Errorf("Agent.Env = %q, want %q", got, want)
+	}
+	if got, want := cfg.Agent.Host, "agent-host-7"; got != want {
+		t.Errorf("Agent.Host = %q, want %q", got, want)
+	}
+	if got, want := cfg.Agent.IngestAddr, "collector:9095"; got != want {
+		t.Errorf("Agent.IngestAddr = %q, want %q", got, want)
+	}
+	if got, want := cfg.Agent.SpoolMaxBytes, int64(64<<20); got != want {
+		t.Errorf("Agent.SpoolMaxBytes = %d, want %d", got, want)
+	}
+	if got, want := cfg.Agent.QueueCapacity, 128; got != want {
+		t.Errorf("Agent.QueueCapacity = %d, want %d", got, want)
+	}
+	if got, want := cfg.Agent.MultilinePattern, `^\s`; got != want {
+		t.Errorf("Agent.MultilinePattern = %q, want %q", got, want)
+	}
+	if !cfg.Agent.ExtractJSON {
+		t.Error("Agent.ExtractJSON = false, want true")
+	}
+	if got, want := cfg.Agent.BatchRecords, 50; got != want {
+		t.Errorf("Agent.BatchRecords = %d, want %d", got, want)
+	}
+	if got, want := cfg.Agent.AckWindow, 8; got != want {
+		t.Errorf("Agent.AckWindow = %d, want %d", got, want)
 	}
 }
 
@@ -168,6 +281,135 @@ func TestValidateAcceptsDefaults(t *testing.T) {
 	}
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("defaults must be valid, got: %v", err)
+	}
+}
+
+// validAgent returns an Agent config with one source (Stdin) and every
+// other field at the value Load produces by default, so each test below
+// mutates exactly one thing away from "valid" instead of constructing a
+// config from scratch.
+func validAgent() Agent {
+	return Agent{
+		Stdin:             true,
+		IngestAddr:        "127.0.0.1:9095",
+		CheckpointPath:    "/var/lib/logagg/checkpoint.json",
+		SpoolDir:          "/var/lib/logagg/spool",
+		SpoolMaxBytes:     256 << 20,
+		SpoolSegmentBytes: 8 << 20,
+		QueueCapacity:     4096,
+		PollInterval:      250 * time.Millisecond,
+		MultilineTimeout:  5 * time.Second,
+		BatchRecords:      500,
+		BatchBytes:        512 << 10,
+		BatchDelay:        time.Second,
+		AckWindow:         64,
+		MinBackoff:        250 * time.Millisecond,
+		MaxBackoff:        30 * time.Second,
+	}
+}
+
+func TestAgentValidateAcceptsSensibleConfig(t *testing.T) {
+	a := validAgent()
+	if err := a.Validate(); err != nil {
+		t.Fatalf("valid agent config rejected: %v", err)
+	}
+}
+
+func TestAgentValidate(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*Agent)
+		want   string
+	}{
+		{
+			name:   "no sources at all",
+			mutate: func(a *Agent) { a.Stdin = false },
+			want:   "no sources configured",
+		},
+		{
+			name:   "files alone is a source",
+			mutate: func(a *Agent) { a.Stdin = false; a.Files = []string{"/var/log/app.log"} },
+			want:   "",
+		},
+		{
+			name:   "containers alone is a source",
+			mutate: func(a *Agent) { a.Stdin = false; a.Containers = []string{"web"} },
+			want:   "",
+		},
+		{
+			name:   "bad multiline pattern",
+			mutate: func(a *Agent) { a.MultilinePattern = "(" },
+			want:   "multiline pattern",
+		},
+		{
+			name:   "bad extract pattern",
+			mutate: func(a *Agent) { a.ExtractPattern = "(" },
+			want:   "extract pattern",
+		},
+		{
+			name:   "cert without key or ca",
+			mutate: func(a *Agent) { a.CertFile = "client.pem" },
+			want:   "needs all three",
+		},
+		{
+			name:   "cert and key without ca",
+			mutate: func(a *Agent) { a.CertFile, a.KeyFile = "client.pem", "client.key" },
+			want:   "needs all three",
+		},
+		{
+			name: "all three tls files is fine",
+			mutate: func(a *Agent) {
+				a.CertFile, a.KeyFile, a.CAFile = "client.pem", "client.key", "ca.pem"
+			},
+			want: "",
+		},
+		{name: "non-positive spool max bytes", mutate: func(a *Agent) { a.SpoolMaxBytes = 0 }, want: "spool max bytes"},
+		{name: "non-positive spool segment bytes", mutate: func(a *Agent) { a.SpoolSegmentBytes = -1 }, want: "spool segment bytes"},
+		{name: "non-positive queue capacity", mutate: func(a *Agent) { a.QueueCapacity = 0 }, want: "queue capacity"},
+		{name: "non-positive poll interval", mutate: func(a *Agent) { a.PollInterval = 0 }, want: "poll interval"},
+		{name: "non-positive multiline timeout", mutate: func(a *Agent) { a.MultilineTimeout = 0 }, want: "multiline timeout"},
+		{name: "non-positive batch records", mutate: func(a *Agent) { a.BatchRecords = 0 }, want: "batch records"},
+		{name: "non-positive batch bytes", mutate: func(a *Agent) { a.BatchBytes = 0 }, want: "batch bytes"},
+		{name: "non-positive batch delay", mutate: func(a *Agent) { a.BatchDelay = 0 }, want: "batch delay"},
+		{name: "non-positive ack window", mutate: func(a *Agent) { a.AckWindow = 0 }, want: "ack window"},
+		{name: "non-positive min backoff", mutate: func(a *Agent) { a.MinBackoff = 0 }, want: "min backoff"},
+		{name: "non-positive max backoff", mutate: func(a *Agent) { a.MaxBackoff = 0 }, want: "max backoff"},
+		{
+			name:   "max backoff below min backoff",
+			mutate: func(a *Agent) { a.MinBackoff, a.MaxBackoff = time.Second, 500*time.Millisecond },
+			want:   "below min backoff",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			a := validAgent()
+			tc.mutate(&a)
+
+			err := a.Validate()
+			switch {
+			case tc.want == "" && err != nil:
+				t.Fatalf("unexpected error: %v", err)
+			case tc.want == "":
+			case err == nil:
+				t.Fatalf("expected an error mentioning %q, got nil", tc.want)
+			case !strings.Contains(err.Error(), tc.want):
+				t.Fatalf("error %q does not mention %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestAgentValidateReportsEveryProblemAtOnce(t *testing.T) {
+	a := Agent{}
+	err := a.Validate()
+	if err == nil {
+		t.Fatal("expected an error for a zero-value agent config")
+	}
+	// Accumulating rather than failing fast: an operator fixing configuration should
+	// see every mistake in one restart, not one per restart.
+	if got := strings.Count(err.Error(), "\n") + 1; got < 8 {
+		t.Fatalf("expected at least 8 problems reported, got %d:\n%v", got, err)
 	}
 }
 

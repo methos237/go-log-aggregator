@@ -135,17 +135,41 @@ tidy-check: ## Fail if go.mod or go.sum would change
 ## ---- docker ---------------------------------------------------------------
 
 .PHONY: docker-build
-docker-build: ## Build the collector image
-	$(COMPOSE) build
+docker-build: ## Build both service images (collector and agent)
+	$(COMPOSE) build collector agent
+
+.PHONY: agent-build
+agent-build: ## Build just the agent image
+	$(COMPOSE) build agent
 
 .PHONY: dev
-dev: ## Start the full dev stack in the background (one collector, fixed ports)
-	$(COMPOSE) up -d --build --wait --wait-timeout 240
+dev: ## Start the core dev stack (db, broker, collector; no agent -- see dev-agent)
+	$(COMPOSE) up -d --build --wait --wait-timeout 240 timescaledb nats collector
 	@echo
 	@echo "  api      http://127.0.0.1:8080/healthz"
 	@echo "  metrics  http://127.0.0.1:9090/metrics"
 	@echo "  nats     http://127.0.0.1:8222/healthz"
 	@echo "  postgres postgres://logagg:logagg@127.0.0.1:5432/logagg"
+
+.PHONY: dev-agent
+dev-agent: ## Start the dev stack plus the agent and its log-writing sidecar
+	$(COMPOSE) up -d --build --wait --wait-timeout 240 timescaledb nats collector agent logwriter
+	@echo
+	@echo "  agent state   docker volume logagg_agent-state (survives 'docker compose restart agent')"
+	@echo "  agent logs    make dev-logs (or: $(COMPOSE) logs -f agent)"
+	@echo "  demo events   make demo-restart-collector / make demo-rotate-log"
+
+.PHONY: e2e-agent
+e2e-agent: ## Phase 3 exit criteria on the real stack: restart + rotation, assert no gaps
+	bash deploy/e2e-agent.sh
+
+.PHONY: demo-restart-collector
+demo-restart-collector: ## Exit-criteria demo: restart the collector under the running agent
+	$(COMPOSE) restart collector
+
+.PHONY: demo-rotate-log
+demo-rotate-log: ## Exit-criteria demo: force an out-of-band log rotation in the sidecar
+	$(COMPOSE) exec -T logwriter sh -c 'mv "$$LOG_DIR/app.log" "$$LOG_DIR/app.log.1" && : > "$$LOG_DIR/app.log"'
 
 .PHONY: dev-down
 dev-down: ## Stop the dev stack, keeping volumes

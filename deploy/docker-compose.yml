@@ -109,6 +109,80 @@ services:
       - no-new-privileges:true
     restart: unless-stopped
 
+  # Log sidecar for the agent demo (`make dev-agent`). Continuously appends
+  # numbered, timestamped lines to a shared log file and rotates it on a
+  # schedule, so both exit-criteria events -- a collector restart and a log
+  # rotation -- can be exercised against the agent without hand-intervention.
+  # See logwriter.sh for the counter/rotation mechanism.
+  #
+  # Reuses the nats image already pulled for the "nats" service (it is
+  # Alpine-based, so it has a shell) rather than pulling a new base image for
+  # what is just a shell loop. entrypoint/command below replace nats-server
+  # entirely.
+  logwriter:
+    # nats:2.12-alpine
+    image: nats@sha256:b270f5e2428354c0335612694d7dd2fb588148e567a5757fdff325ef9c9332e6
+    entrypoint: ["/bin/sh", "/sidecar/logwriter.sh"]
+    command: []
+    environment:
+      LOG_DIR: /var/log/app
+      # Passed through from the invoking shell so e2e-agent.sh can raise the write
+      # rate and rotation frequency for a short run. The defaults are the
+      # human-paced ones make dev-agent wants; without these two lines the
+      # script's knobs would silently do nothing.
+      WRITE_INTERVAL: ${WRITE_INTERVAL:-1}
+      ROTATE_EVERY: ${ROTATE_EVERY:-20}
+    volumes:
+      - ./logwriter.sh:/sidecar/logwriter.sh:ro
+      - agent-log-data:/var/log/app
+    restart: unless-stopped
+
+  agent:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        BIN: agent
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-none}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    environment:
+      # Same address family the collector's other in-network clients use
+      # (see LOGAGG_CLUSTER_PEERS above): Compose's embedded DNS resolves the
+      # service name. The collector's dev config runs its ingest listener in
+      # plaintext (LOGAGG_INGEST_ALLOW_PLAINTEXT above), so the agent matches
+      # it here by leaving LOGAGG_AGENT_CERT_FILE/_KEY_FILE/_CA_FILE unset --
+      # all three or none, and "none" is what the server side actually is.
+      LOGAGG_AGENT_FILES: /var/log/app/app.log
+      LOGAGG_AGENT_INGEST_ADDR: collector:9095
+      LOGAGG_AGENT_ENV: dev
+      LOGAGG_AGENT_HOST: agent
+    volumes:
+      # Shared with logwriter: the directory the sidecar rotates in.
+      - agent-log-data:/var/log/app
+      # Named, not ephemeral: this is what makes a collector-restart test mean
+      # anything. If the checkpoint and spool lived in the container's writable
+      # layer, restarting the agent container would also wipe its progress,
+      # and "survives a restart" would be untestable.
+      - agent-state:/var/lib/logagg
+    depends_on:
+      collector:
+        condition: service_healthy
+    # Same hardening as collector: distroless, non-root, no extra
+    # capabilities. /tmp stays writable for anything transient; the two
+    # named volumes above are writable regardless of read_only since a mount
+    # point is excluded from the read-only root filesystem.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
 volumes:
   timescale-data:
   nats-data:
+  agent-log-data:
+  agent-state:
