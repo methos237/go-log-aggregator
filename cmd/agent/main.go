@@ -86,9 +86,9 @@ func run() error {
 		slog.Bool("stdin", cfg.Agent.Stdin),
 	)
 
-	checkpoint := agent.NewCheckpointStore(cfg.Agent.CheckpointPath)
-	if err = checkpoint.Load(); err != nil {
-		return fmt.Errorf("load checkpoint: %w", err)
+	checkpoint, err := prepareCheckpoint(cfg.Agent.CheckpointPath)
+	if err != nil {
+		return fmt.Errorf("prepare checkpoint: %w", err)
 	}
 
 	spool, err := agent.NewSpool(agent.SpoolConfig{
@@ -205,6 +205,39 @@ func run() error {
 	return nil
 }
 
+// prepareCheckpoint creates path's parent directory if necessary, loads
+// whatever checkpoint already lives there, and proves the location is
+// writable before returning.
+//
+// CheckpointStore.Commit's atomic rename needs a temp file next to path,
+// and os.CreateTemp refuses with ENOENT if that directory does not exist.
+// With every default setting this is invisible, because NewSpool's own
+// MkdirAll for the spool directory happens to create the checkpoint's
+// parent too — they share one default parent directory. Point
+// LOGAGG_AGENT_CHECKPOINT_PATH somewhere else and every commit would
+// otherwise fail forever, silently: the periodic commit ticker in
+// Shipper.Run discards its error (a gap worth a log line or a metric there,
+// but out of this package's scope to fix). Creating the directory here, and
+// immediately self-testing it with a real Commit rather than just checking
+// permissions, catches both a missing directory and an unwritable one at
+// startup instead of on the first real commit, minutes into a run that
+// looks otherwise healthy.
+func prepareCheckpoint(path string) (*agent.CheckpointStore, error) {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, fmt.Errorf("create checkpoint directory %s: %w", dir, err)
+	}
+
+	checkpoint := agent.NewCheckpointStore(path)
+	if err := checkpoint.Load(); err != nil {
+		return nil, fmt.Errorf("load checkpoint: %w", err)
+	}
+	if err := checkpoint.Commit(); err != nil {
+		return nil, fmt.Errorf("checkpoint path %s is not writable: %w", path, err)
+	}
+	return checkpoint, nil
+}
+
 // pipelineDeps bundles runPipeline's dependencies. A struct rather than a
 // long parameter list because gocritic's hugeParam check would flag the
 // latter, and every field here is genuinely required.
@@ -225,11 +258,14 @@ type pipelineDeps struct {
 }
 
 // runPipeline starts every source, the instrumented relay, the Joiner and
-// the Shipper, then blocks until ctx is done and runs the shutdown sequence
-// documented step by step below. It returns nil for the ordinary
-// signal-driven shutdown path (ctx.Err() is context.Canceled) and a non-nil
-// error for anything that went wrong along the way, including a stage that
-// did not finish inside cfg.Node.ShutdownTimeout.
+// the Shipper, then waits for whichever comes first: ctx being done (the
+// ordinary signal-driven path), or the Joiner or the Shipper returning on
+// its own. The latter is always fatal — see the comment on the select
+// below for why — and is treated exactly like a signal for the purpose of
+// starting the shutdown sequence documented step by step further down,
+// except that it also makes this function return a non-nil error instead
+// of the nil it returns for a clean, signal-driven stop. That error
+// includes a stage that did not finish inside cfg.Node.ShutdownTimeout.
 //
 // Sources write to lines, not directly to what the Joiner reads. That
 // indirection exists solely so this function can instrument the "lines chan"
@@ -243,18 +279,24 @@ type pipelineDeps struct {
 //
 //nolint:contextcheck // drainCtx deliberately does not inherit ctx's cancellation; see its own doc comment below
 func runPipeline(ctx context.Context, d *pipelineDeps) error {
+	// srcCtx is a child of ctx, not ctx itself: every source stops the
+	// instant ctx is canceled either way, because context.WithCancel
+	// propagates a parent's cancellation, but this function also needs a
+	// way to stop sources on its own, before ctx is ever canceled — see
+	// cancelSrcCtx's call below.
+	srcCtx, cancelSrcCtx := context.WithCancel(ctx)
+	defer cancelSrcCtx()
+
 	var sourceWG sync.WaitGroup
 	sourceErrs := make([]error, len(d.sources))
 	for i, src := range d.sources {
 		sourceWG.Add(1)
 		go func(i int, src agent.Source) {
 			defer sourceWG.Done()
-			// Sources run against ctx directly: a signal (or any other
-			// failure that cancels the errgroup's context) must stop them
-			// immediately, which is step 1 and step 2 of the sequence below.
-			// ctx.Err() is the expected outcome of that and is not reported;
-			// anything else is a genuine source failure.
-			if runErr := src.Run(ctx, d.lines); runErr != nil && !errors.Is(runErr, context.Canceled) {
+			// ctx.Err() (from either srcCtx or its parent being canceled) is
+			// the expected outcome here and is not reported; anything else
+			// is a genuine source failure.
+			if runErr := src.Run(srcCtx, d.lines); runErr != nil && !errors.Is(runErr, context.Canceled) {
 				sourceErrs[i] = runErr
 			}
 		}(i, src)
@@ -282,12 +324,44 @@ func runPipeline(ctx context.Context, d *pipelineDeps) error {
 	shipperErrCh := make(chan error, 1)
 	go func() { shipperErrCh <- d.shipper.Run(drainCtx, d.joined) }()
 
-	<-ctx.Done()
-	d.log.Info("agent shutting down", slog.Duration("timeout", d.cfg.Node.ShutdownTimeout))
+	// Nothing in this function ever closes linesToJoiner or joined before
+	// ctx is done, so the Joiner and the Shipper are only ever supposed to
+	// return here as a *consequence* of ctx firing. Either one returning
+	// first is therefore a dead pipeline stage, not a stage finishing its
+	// job: whichever one it is stops draining its input, that input's
+	// channel fills, and everything upstream of it (the other stage, the
+	// relay, every source) backs up and blocks in turn — silently, since
+	// nothing here was watching for it. Treating this the same as a signal,
+	// immediately, is what turns that hang into a bounded, reported
+	// shutdown instead. joinerDone/shipperDone record which channel (if
+	// either) already delivered here, so the sequence below never blocks
+	// trying to read the same one twice.
+	var (
+		joinerDone, shipperDone bool
+		joinErr, shipErr        error
+		fatal                   error
+	)
+	select {
+	case <-ctx.Done():
+		d.log.Info("agent shutting down", slog.Duration("timeout", d.cfg.Node.ShutdownTimeout))
+	case joinErr = <-joinerErrCh:
+		joinerDone = true
+		fatal = earlyStageErr("multiline joiner", joinErr)
+		d.log.Error("agent shutting down: pipeline stage stopped unexpectedly",
+			slog.String("stage", "multiline joiner"), slog.Any("error", joinErr))
+		cancelSrcCtx()
+	case shipErr = <-shipperErrCh:
+		shipperDone = true
+		fatal = earlyStageErr("shipper", shipErr)
+		d.log.Error("agent shutting down: pipeline stage stopped unexpectedly",
+			slog.String("stage", "shipper"), slog.Any("error", shipErr))
+		cancelSrcCtx()
+	}
 
 	// One deadline bounds this whole sequence, mirroring cmd/collector: a
 	// wedged stage still lets the process exit within ShutdownTimeout of the
-	// signal, rather than the process hanging forever on any single step.
+	// signal (or of the fatal stage return above), rather than the process
+	// hanging forever on any single step.
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.WithoutCancel(ctx), d.cfg.Node.ShutdownTimeout)
 	defer cancelShutdown()
 	go func() {
@@ -296,6 +370,9 @@ func runPipeline(ctx context.Context, d *pipelineDeps) error {
 	}()
 
 	var errs []error
+	if fatal != nil {
+		errs = append(errs, fatal)
+	}
 
 	// Step 2: wait for every source's Run to return, bounded by the same
 	// deadline. This has to happen, and happen first, because closing lines
@@ -321,21 +398,22 @@ func runPipeline(ctx context.Context, d *pipelineDeps) error {
 
 	// Step 4: the relay sees lines close and closes linesToJoiner in turn;
 	// the Joiner sees that close, flushes every held record, and returns.
-	joinErr := <-joinerErrCh
-	if joinErr != nil {
-		d.log.Error("shutdown: multiline joiner did not finish flushing before the timeout", slog.Any("error", joinErr))
+	// Skipped when the Joiner is the stage that already triggered the fatal
+	// path above — its result is already in errs via fatal, and it has
+	// already stopped touching d.joined, so closing it below is still safe.
+	if !joinerDone {
+		joinErr = <-joinerErrCh
+		errs = appendStageErr(errs, d.log, "multiline joiner", joinErr)
 	}
-	errs = append(errs, joinErr)
 	close(d.joined)
 
 	// Step 5: the shipper sees joined close and runs its own shutdown --
 	// flush accumulators, a bounded wait for outstanding acks, spool the
 	// rest, commit the checkpoint (see Shipper.shutdown).
-	shipErr := <-shipperErrCh
-	if shipErr != nil {
-		d.log.Error("shutdown: shipper did not finish draining before the timeout", slog.Any("error", shipErr))
+	if !shipperDone {
+		shipErr = <-shipperErrCh
+		errs = appendStageErr(errs, d.log, "shipper", shipErr)
 	}
-	errs = append(errs, shipErr)
 
 	// Step 6.
 	if closeErr := d.spool.Close(); closeErr != nil {
@@ -348,11 +426,64 @@ func runPipeline(ctx context.Context, d *pipelineDeps) error {
 	// Admin is torn down last, so metrics stay scrapeable for the whole
 	// drain — the same reasoning cmd/collector's shutdown sequence gives for
 	// its own admin server.
+	//
+	// This does not also flip an admin-served health endpoint to unhealthy:
+	// unlike cmd/collector (whose httpapi serves observability.Health's
+	// ReadyHandler), cmd/agent never constructs a Health registry at all,
+	// and AdminServer (internal/observability/admin.go) serves only
+	// /metrics and pprof — it has no readiness route to attach one to.
+	// Wiring that in would mean adding a route to AdminServer itself, which
+	// is outside internal/observability and therefore out of scope for this
+	// fix; /metrics already carries agentMetrics for anything scraping it to
+	// alert on instead.
 	if adminErr := d.adminSrv.Shutdown(shutdownCtx); adminErr != nil {
 		errs = append(errs, fmt.Errorf("admin shutdown: %w", adminErr))
 	}
 
 	return errors.Join(errs...)
+}
+
+// earlyStageErr builds the fatal error for a pipeline stage (the multiline
+// joiner or the shipper) that returned before shutdown was ever requested.
+// err may itself be nil: even a stage exiting cleanly this early is a bug
+// worth reporting, not a success, because nothing upstream of it will ever
+// stop sending on its own — see runPipeline's doc comment.
+func earlyStageErr(stage string, err error) error {
+	if err == nil {
+		return fmt.Errorf("agent: %s stopped before shutdown was requested", stage)
+	}
+	// A stage that reports context.Canceled this early is still a fatal bug, but
+	// the sentinel must not travel with the error: run() treats a result matching
+	// context.Canceled as the ordinary signal-driven success path, and errors.Is
+	// needs only one matching leaf anywhere in the tree to find it. Wrapping with
+	// %w here would make this fatal condition exit zero. The cause is kept in the
+	// message with %v, where it is still readable but no longer matchable.
+	if errors.Is(err, context.Canceled) {
+		return fmt.Errorf("agent: %s stopped before shutdown was requested: %v", stage, err) //nolint:errorlint // deliberate: see above
+	}
+	return fmt.Errorf("agent: %s stopped before shutdown was requested: %w", stage, err)
+}
+
+// appendStageErr adds a pipeline stage's shutdown-time error to errs,
+// filtering out a bare context.Canceled first.
+//
+// context.Canceled is exactly what the Joiner and the Shipper return as the
+// unremarkable consequence of drainCtx being canceled once the shutdown
+// deadline elapses — expected, not a failure. Letting it into errs anyway
+// would let a caller's later errors.Is(result, context.Canceled) find it and
+// treat the whole joined result as a clean stop, even when another error
+// collected alongside it (a failed final checkpoint commit, say) is
+// genuinely not one: errors.Is only needs one matching leaf in the tree, and
+// does not care how many other, real errors are joined next to it. Filtering
+// here, at the point each stage's result is actually collected, is where the
+// code knows the difference; reconstructing that distinction later from the
+// aggregate is what the bug this function fixes did instead.
+func appendStageErr(errs []error, log *slog.Logger, stage string, err error) []error {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return errs
+	}
+	log.Error("shutdown: pipeline stage returned an error", slog.String("stage", stage), slog.Any("error", err))
+	return append(errs, fmt.Errorf("%s: %w", stage, err))
 }
 
 // relayLines copies every Line from src to dst, recording queue depth and
@@ -399,9 +530,36 @@ func relayLines(ctx context.Context, src <-chan agent.Line, dst chan<- agent.Lin
 func buildSources(cfg *config.Agent, checkpoint *agent.CheckpointStore, metrics *agent.Metrics, log *slog.Logger) ([]agent.Source, map[string]model.LabelSet, error) {
 	var sources []agent.Source
 	labels := make(map[string]model.LabelSet)
+	// owners records which source first claimed a given stream_id (a
+	// LabelSet's ID(), the same identity Shipper keys its accumulators and
+	// the collector keys its dimension table by — see shipper.go's accums
+	// field), so a second source landing on the same one is caught here —
+	// where the operator's config and both sources' names are still in
+	// scope to name in the error — rather than downstream, where it would
+	// silently collide sequence numbers with the first (see the finding
+	// this check exists for: fileService alone cannot tell
+	// /var/log/a/app.log from /var/log/b/app.log apart). LabelSet itself is
+	// not a valid map key — Extra is a map — so ID() is used instead of the
+	// LabelSet directly.
+	owners := make(map[model.StreamID]string)
 
-	addLabel := func(name, service string) {
-		labels[name] = model.LabelSet{Service: service, Host: cfg.Host, Env: cfg.Env}
+	addLabel := func(name, service string) error {
+		ls := model.LabelSet{Service: service, Host: cfg.Host, Env: cfg.Env}
+		// Skipped entirely when cfg.Service is set: that override
+		// deliberately collapses every source into one LabelSet (see
+		// config.Agent.Service's doc comment), so every "collision" it
+		// produces is the intended outcome, not the bug this check exists
+		// to catch.
+		if cfg.Service == "" {
+			if other, ok := owners[ls.ID()]; ok {
+				return fmt.Errorf(
+					"sources %q and %q both resolve to service %q and would collide on one stream_id: set %sAGENT_SERVICE to collapse them deliberately, or give one of them a distinguishing name",
+					other, name, service, config.EnvPrefix)
+			}
+			owners[ls.ID()] = name
+		}
+		labels[name] = ls
+		return nil
 	}
 	// service resolves the per-source service label: cfg.Service, if set,
 	// overrides every source and deliberately collapses them into one
@@ -425,7 +583,9 @@ func buildSources(cfg *config.Agent, checkpoint *agent.CheckpointStore, metrics 
 		if err != nil {
 			return nil, nil, fmt.Errorf("tail source %s: %w", path, err)
 		}
-		addLabel(src.Name(), service(func() string { return fileService(path) }))
+		if err := addLabel(src.Name(), service(func() string { return fileService(path) })); err != nil {
+			return nil, nil, err
+		}
 		sources = append(sources, src)
 	}
 
@@ -443,7 +603,9 @@ func buildSources(cfg *config.Agent, checkpoint *agent.CheckpointStore, metrics 
 			if err != nil {
 				return nil, nil, fmt.Errorf("docker source %s: %w", name, err)
 			}
-			addLabel(src.Name(), service(func() string { return containerService(container, stream) }))
+			if err := addLabel(src.Name(), service(func() string { return containerService(container, stream) })); err != nil {
+				return nil, nil, err
+			}
 			sources = append(sources, src)
 		}
 	}
@@ -453,7 +615,9 @@ func buildSources(cfg *config.Agent, checkpoint *agent.CheckpointStore, metrics 
 		// No per-source rule is documented for stdin the way there is for a
 		// file or a container stream — there is exactly one of it, and its
 		// own Name() ("stdin") is already the obvious, unambiguous label.
-		addLabel(src.Name(), service(func() string { return src.Name() }))
+		if err := addLabel(src.Name(), service(func() string { return src.Name() })); err != nil {
+			return nil, nil, err
+		}
 		sources = append(sources, src)
 	}
 

@@ -35,7 +35,7 @@ func TestSpoolPeekDoesNotConsume(t *testing.T) {
 	t.Cleanup(func() { _ = sp.Close() })
 
 	want := fixedPayload(0)
-	if err := sp.Append(want); err != nil {
+	if _, err := sp.Append(want); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
 
@@ -69,7 +69,7 @@ func TestSpoolFIFOAcrossSegmentRoll(t *testing.T) {
 
 	const n = 7
 	for i := 0; i < n; i++ {
-		if err := sp.Append(fixedPayload(i)); err != nil {
+		if _, err := sp.Append(fixedPayload(i)); err != nil {
 			t.Fatalf("Append(%d): %v", i, err)
 		}
 	}
@@ -122,7 +122,7 @@ func TestSpoolReopenPreservesUnreleased(t *testing.T) {
 
 	const n = 5
 	for i := 0; i < n; i++ {
-		if err := sp.Append(fixedPayload(i)); err != nil {
+		if _, err := sp.Append(fixedPayload(i)); err != nil {
 			t.Fatalf("Append(%d): %v", i, err)
 		}
 	}
@@ -188,7 +188,7 @@ func TestSpoolReopenMidDrainBoundedReplay(t *testing.T) {
 
 	const n = 9 // three whole segments
 	for i := 0; i < n; i++ {
-		if err := sp.Append(fixedPayload(i)); err != nil {
+		if _, err := sp.Append(fixedPayload(i)); err != nil {
 			t.Fatalf("Append(%d): %v", i, err)
 		}
 	}
@@ -259,7 +259,7 @@ func TestSpoolTornTailTruncated(t *testing.T) {
 	sp := mustNewSpool(t, dir, 1<<20, entrySize*10)
 
 	for i := 0; i < 3; i++ {
-		if err := sp.Append(fixedPayload(i)); err != nil {
+		if _, err := sp.Append(fixedPayload(i)); err != nil {
 			t.Fatalf("Append(%d): %v", i, err)
 		}
 	}
@@ -307,7 +307,7 @@ func TestSpoolTornTailBadChecksum(t *testing.T) {
 	sp := mustNewSpool(t, dir, 1<<20, entrySize*10)
 
 	for i := 0; i < 3; i++ {
-		if err := sp.Append(fixedPayload(i)); err != nil {
+		if _, err := sp.Append(fixedPayload(i)); err != nil {
 			t.Fatalf("Append(%d): %v", i, err)
 		}
 	}
@@ -409,7 +409,7 @@ func TestSpoolMaxBytesEviction(t *testing.T) {
 
 	const n = 6
 	for i := 0; i < n; i++ {
-		if err := sp.Append(fixedPayload(i)); err != nil {
+		if _, err := sp.Append(fixedPayload(i)); err != nil {
 			t.Fatalf("Append(%d): %v", i, err)
 		}
 	}
@@ -455,10 +455,10 @@ func TestSpoolOversizedPayload(t *testing.T) {
 	big := bytes.Repeat([]byte("x"), 50)
 	small := []byte("hi")
 
-	if err := sp.Append(big); err != nil {
+	if _, err := sp.Append(big); err != nil {
 		t.Fatalf("Append(big): %v", err)
 	}
-	if err := sp.Append(small); err != nil {
+	if _, err := sp.Append(small); err != nil {
 		t.Fatalf("Append(small): %v", err)
 	}
 
@@ -507,7 +507,7 @@ func TestSpoolConcurrentAppendPeekRelease(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < n; i++ {
-			if err := sp.Append(fixedPayload(i)); err != nil {
+			if _, err := sp.Append(fixedPayload(i)); err != nil {
 				appendErr = err
 				return
 			}

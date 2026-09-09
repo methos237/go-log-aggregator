@@ -145,6 +145,13 @@ type segmentInfo struct {
 // collector has acknowledged it, and a send can still fail after Peek
 // returns the bytes. Release is the caller's promise that this specific
 // payload made it.
+//
+// Append can itself evict entries — see its own doc comment and
+// enforceMaxBytesLocked — whenever adding one pushes the spool over
+// MaxBytes. Any caller keeping parallel bookkeeping indexed against the
+// spool's FIFO order (again, Shipper.spoolMeta) must trim that bookkeeping
+// by Append's evicted return value or it will silently drift out of
+// alignment with what Peek actually returns.
 type Spool struct {
 	dir          string
 	maxBytes     int64
@@ -358,9 +365,19 @@ func (s *Spool) recoverCursor() error {
 // collector already bounds batch size independently, and refusing to spool
 // a batch that was merely too big to share a segment would throw away data
 // this package exists to protect.
-func (s *Spool) Append(payload []byte) error {
+//
+// Append can itself evict: adding this entry can push the spool over
+// MaxBytes, which enforceMaxBytesLocked answers by deleting whole oldest
+// segments (see its own doc comment for why oldest, and why the segment this
+// entry just landed in is never one of them). evicted reports how many
+// entries — always taken from the front of the spool's logical FIFO, oldest
+// first — that eviction removed, so a caller keeping its own parallel
+// bookkeeping of what is in the spool (see Shipper.spoolMeta) can trim that
+// bookkeeping by the same amount from its own front and stay aligned with
+// what Peek will actually return next.
+func (s *Spool) Append(payload []byte) (evicted int, err error) {
 	if len(payload) > maxEntryPayloadBytes {
-		return fmt.Errorf("spool: payload of %d bytes exceeds the %d-byte limit", len(payload), maxEntryPayloadBytes)
+		return 0, fmt.Errorf("spool: payload of %d bytes exceeds the %d-byte limit", len(payload), maxEntryPayloadBytes)
 	}
 	entry := encodeEntry(payload)
 
@@ -376,7 +393,7 @@ func (s *Spool) Append(payload []byte) error {
 	}
 	if needNew {
 		if err := s.openNewTailLocked(); err != nil {
-			return err
+			return 0, err
 		}
 	}
 
@@ -384,15 +401,14 @@ func (s *Spool) Append(payload []byte) error {
 	// entry losing its trip to disk on a hard crash is exactly as safe as it
 	// never having been spooled — the source that produced it still has it.
 	if _, err := s.tail.Write(entry); err != nil {
-		return fmt.Errorf("spool: append: %w", err)
+		return 0, fmt.Errorf("spool: append: %w", err)
 	}
 
 	tailIdx := len(s.segments) - 1
 	s.segments[tailIdx].bytes += int64(len(entry))
 	s.segments[tailIdx].entries++
 
-	s.enforceMaxBytesLocked()
-	return nil
+	return s.enforceMaxBytesLocked(), nil
 }
 
 // openNewTailLocked closes the current tail handle, if any, and opens a
@@ -450,16 +466,25 @@ func (s *Spool) reopenTailLocked() error {
 // notice the outage at all, and the alternative to dropping something is
 // blocking Append until room frees up — which stalls the reader upstream of
 // it, which is the exact failure this whole component exists to prevent.
-func (s *Spool) enforceMaxBytesLocked() {
+//
+// It returns the total number of entries removed from the spool's logical
+// FIFO — i.e. summed across every evicted segment, victim.entries minus
+// whatever of that segment had already been released — which is exactly how
+// far a caller's own front-aligned bookkeeping (see Append) needs to be
+// trimmed to match.
+func (s *Spool) enforceMaxBytesLocked() int {
+	var evicted int
 	for s.totalBytesLocked() > s.maxBytes && len(s.segments) > 1 {
 		victim := s.segments[0]
 		lost := victim.entries - s.consumedEntries
 		s.metrics.RecordsDropped.WithLabelValues(observability.ComponentAgent, reasonSpoolEvicted).Add(float64(lost))
+		evicted += lost
 		s.segments = s.segments[1:]
 		s.consumedEntries = 0
 		s.consumedBytes = 0
 		_ = os.Remove(victim.path)
 	}
+	return evicted
 }
 
 func (s *Spool) totalBytesLocked() int64 {
@@ -543,6 +568,14 @@ func (s *Spool) peekEntryLocked() (payload []byte, size int64, ok bool, err erro
 // Release discards the oldest payload. Call it only once the collector has
 // acknowledged that payload.
 //
+// Unlike Append, Release never needs to report anything back for a caller's
+// parallel bookkeeping to trim: the segment-boundary deletion below only
+// ever removes a segment once every entry in it — including the one this
+// very call is releasing — has been released. It can never remove an entry
+// nothing has acknowledged yet, which is exactly the property that would
+// make an evicted-style return value necessary here the way it is for
+// Append.
+//
 // Release on a spool with nothing left to release is not an error: it is a
 // no-op. A caller that raced a Peek against a concurrent drain, or that
 // simply calls Release once too often while draining down to empty, must
@@ -560,6 +593,17 @@ func (s *Spool) peekEntryLocked() (payload []byte, size int64, ok bool, err erro
 // entries were never acknowledged as far as the checkpoint is concerned
 // either — the collector's ack that released them and storage's dedup on
 // (stream_id, seq, time) are exactly what absorbs the resulting duplicate.
+//
+// Release must be called from one goroutine at a time. Every other method here
+// is fully mutex-guarded, but this one deliberately drops the lock before
+// persisting the cursor, because holding a mutex across an fsync would stall a
+// concurrent Append behind the disk. The consequence is that two overlapping
+// Release calls could let the older (segment, offset) land last, rewinding the
+// persisted read position and replaying already-released entries after a
+// restart. The shipper drives Peek and Release from its single select loop, so
+// this does not happen today; it is stated because the alternative — a second
+// caller appearing later and quietly reintroducing replay — would look like a
+// spool bug rather than a violated contract.
 func (s *Spool) Release() error {
 	s.mu.Lock()
 

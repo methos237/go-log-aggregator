@@ -336,19 +336,27 @@ func (s *TailSource) rotate(
 	if err := s.readToEOF(ctx, out, oldFile, assembler, oldFid, oldHead, &offset, true); err != nil {
 		return oldFile, oldFid, offset, Fingerprint{}, err
 	}
-	_ = oldFile.Close()
 
 	// Reuse awaitFile rather than a bare os.Open: it already polls for the
 	// path to exist, which covers the gap between a writer unlinking the old
 	// name and recreating the new one, and it is already exercised by every
 	// startup test.
+	//
+	// The old descriptor is closed only after the replacement has been registered,
+	// never before. Closing first leaves s.file pointing at a closed descriptor
+	// for as long as awaitFile takes -- which is unbounded, since it waits for the
+	// new file to appear -- and a Close arriving in that window would close the
+	// same descriptor twice and report a spurious "file already closed".
 	newFile, newFid, err := s.awaitFile(ctx)
 	if err != nil {
+		_ = oldFile.Close()
 		return nil, FileID{}, 0, Fingerprint{}, err
 	}
 	if !s.setFile(newFile) {
+		_ = oldFile.Close()
 		return nil, FileID{}, 0, Fingerprint{}, errTailClosed
 	}
+	_ = oldFile.Close()
 
 	head, err := fingerprintHead(newFile)
 	if err != nil {

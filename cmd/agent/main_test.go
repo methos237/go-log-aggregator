@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -404,5 +406,214 @@ func TestRunRejectsInvalidConfig(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no sources configured") {
 		t.Errorf("run() error = %q, want it to mention \"no sources configured\"", err)
+	}
+}
+
+// TestPrepareCheckpointCreatesParentDirectory covers a checkpoint path whose
+// directory does not exist yet.
+//
+// CheckpointStore.Commit writes a temp file next to the target and renames it,
+// and os.CreateTemp fails with ENOENT when that directory is missing. With every
+// default setting the failure is invisible, because the spool's own MkdirAll
+// happens to create the same parent; point the checkpoint elsewhere and every
+// commit fails for the life of the process, silently, because the periodic
+// commit discards its error.
+func TestPrepareCheckpointCreatesParentDirectory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "deeper", "checkpoint.json")
+
+	store, err := prepareCheckpoint(path)
+	if err != nil {
+		t.Fatalf("prepareCheckpoint() error = %v, want nil (it is supposed to create the directory)", err)
+	}
+	if store == nil {
+		t.Fatal("prepareCheckpoint() returned a nil store with no error")
+	}
+	// The self-test Commit must have actually produced a file, otherwise
+	// "writable" was asserted rather than proven.
+	if _, statErr := os.Stat(path); statErr != nil {
+		t.Errorf("checkpoint file absent after prepareCheckpoint: %v", statErr)
+	}
+
+	// And a real commit still works afterward, which is the thing that was
+	// failing forever before.
+	store.Set("app.log", agent.Cursor{Start: 10, Offset: 20})
+	if err := store.Commit(); err != nil {
+		t.Errorf("Commit() after prepare error = %v, want nil", err)
+	}
+}
+
+func TestPrepareCheckpointRejectsUnwritablePath(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: mode bits do not restrict root, so this cannot fail as intended")
+	}
+	dir := t.TempDir()
+	locked := filepath.Join(dir, "locked")
+	if err := os.Mkdir(locked, 0o500); err != nil { // r-x: cannot create entries
+		t.Fatalf("mkdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
+
+	if _, err := prepareCheckpoint(filepath.Join(locked, "sub", "checkpoint.json")); err == nil {
+		t.Error("prepareCheckpoint() on an unwritable path returned no error; it must fail at startup, not at the first commit")
+	}
+}
+
+// TestEarlyStageErrDoesNotLeakCancellation pins that a fatal early stage return
+// never masquerades as the clean signal-driven exit.
+//
+// run() treats a result matching context.Canceled as success. errors.Is finds a
+// match anywhere in the tree, so wrapping a stage's context.Canceled with %w
+// would make a dead pipeline exit zero — the opposite of the point.
+func TestEarlyStageErrDoesNotLeakCancellation(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{"bare cancellation", context.Canceled},
+		{"wrapped cancellation", fmt.Errorf("shipper gave up: %w", context.Canceled)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := earlyStageErr("shipper", tt.err)
+			if got == nil {
+				t.Fatal("earlyStageErr returned nil for a fatal early return")
+			}
+			if errors.Is(got, context.Canceled) {
+				t.Errorf("earlyStageErr(%v) still matches context.Canceled; run() would report a dead pipeline as a clean stop", tt.err)
+			}
+			if !strings.Contains(got.Error(), "shipper") {
+				t.Errorf("error does not name the stage: %v", got)
+			}
+		})
+	}
+
+	t.Run("nil error is still fatal", func(t *testing.T) {
+		if got := earlyStageErr("multiline joiner", nil); got == nil {
+			t.Error("a stage returning nil before shutdown is still a bug and must produce an error")
+		}
+	})
+
+	t.Run("other errors stay wrapped", func(t *testing.T) {
+		sentinel := errors.New("dial failed")
+		if got := earlyStageErr("shipper", sentinel); !errors.Is(got, sentinel) {
+			t.Errorf("earlyStageErr dropped a real cause: %v", got)
+		}
+	})
+}
+
+// TestAppendStageErrFiltersCancellation pins that an expected cancellation is
+// filtered where it is collected, not pattern-matched out of the aggregate later.
+//
+// The bug this guards: errors.Join'ing a stage's context.Canceled alongside a
+// genuinely failed final commit makes errors.Is(result, context.Canceled) true,
+// and the process then reports a clean stop while acked progress was never
+// persisted.
+func TestAppendStageErrFiltersCancellation(t *testing.T) {
+	log := discardLogger()
+
+	if got := appendStageErr(nil, log, "joiner", nil); len(got) != 0 {
+		t.Errorf("nil error produced %d entries, want 0", len(got))
+	}
+	if got := appendStageErr(nil, log, "joiner", context.Canceled); len(got) != 0 {
+		t.Errorf("context.Canceled produced %d entries, want 0 (it is the expected outcome of drainCtx)", len(got))
+	}
+
+	real := errors.New("commit failed")
+	errs := appendStageErr(nil, log, "joiner", context.Canceled)
+	errs = append(errs, real)
+	joined := errors.Join(errs...)
+	if errors.Is(joined, context.Canceled) {
+		t.Error("joined result still matches context.Canceled; a real failure alongside it would be reported as a clean stop")
+	}
+	if !errors.Is(joined, real) {
+		t.Error("joined result lost the real failure")
+	}
+}
+
+// TestBuildSourcesRejectsCollidingStreams covers two files whose base names
+// match in different directories.
+//
+// Deriving the service label from the base name alone makes them one LabelSet
+// and therefore one stream_id. Each file source's Seq is its own byte offset, so
+// the two would write colliding (stream_id, seq, time) keys and the dedup index
+// would discard genuinely distinct records as duplicates — silent loss wearing
+// deduplication's clothes. Failing at startup is the intended behavior: the
+// operator is the only one who knows which file is which.
+func TestBuildSourcesRejectsCollidingStreams(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a")
+	b := filepath.Join(dir, "b")
+	for _, d := range []string{a, b} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+	}
+	pathA := filepath.Join(a, "app.log")
+	pathB := filepath.Join(b, "app.log")
+
+	cfg := &config.Agent{
+		Files:        []string{pathA, pathB},
+		Host:         "host",
+		Env:          "test",
+		PollInterval: 10 * time.Millisecond,
+	}
+
+	_, _, err := buildSources(cfg, agent.NewCheckpointStore(filepath.Join(dir, "ckpt.json")),
+		agent.NewMetrics(nil), discardLogger())
+	if err == nil {
+		t.Fatal("buildSources accepted two files that collapse to one stream_id; that silently collides sequence numbers")
+	}
+	// The message has to name both paths, or the operator cannot act on it.
+	for _, want := range []string{pathA, pathB} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error does not name %q: %v", want, err)
+		}
+	}
+	if !strings.Contains(err.Error(), "AGENT_SERVICE") {
+		t.Errorf("error does not point at the override that resolves it deliberately: %v", err)
+	}
+}
+
+// TestBuildSourcesOverrideAllowsCollision confirms the explicit service override
+// still collapses sources into one stream on purpose. The collision check must
+// not take that away.
+func TestBuildSourcesOverrideAllowsCollision(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a")
+	b := filepath.Join(dir, "b")
+	for _, d := range []string{a, b} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+	}
+
+	cfg := &config.Agent{
+		Files:        []string{filepath.Join(a, "app.log"), filepath.Join(b, "app.log")},
+		Service:      "deliberately-one-stream",
+		Host:         "host",
+		Env:          "test",
+		PollInterval: 10 * time.Millisecond,
+	}
+
+	sources, labels, err := buildSources(cfg, agent.NewCheckpointStore(filepath.Join(dir, "ckpt.json")),
+		agent.NewMetrics(nil), discardLogger())
+	if err != nil {
+		t.Fatalf("buildSources with an explicit Service override error = %v, want nil", err)
+	}
+	t.Cleanup(func() {
+		for _, s := range sources {
+			_ = s.Close()
+		}
+	})
+	if len(sources) != 2 {
+		t.Fatalf("got %d sources, want 2", len(sources))
+	}
+
+	var ids []model.StreamID
+	for _, ls := range labels {
+		ids = append(ids, ls.ID())
+	}
+	if len(ids) != 2 || ids[0] != ids[1] {
+		t.Errorf("override did not collapse both sources onto one stream_id: %v", ids)
 	}
 }

@@ -389,6 +389,12 @@ func (s *DockerSource) readLines(done <-chan struct{}, raw io.Reader, lines chan
 	if isFramedStream(br) {
 		pr, pw := io.Pipe()
 		go s.demux(br, pw)
+		// Closing the read end is what lets the demux goroutine exit, and it has
+		// to happen on every return path including the done one. StdCopy parks in
+		// pw.Write once nobody is reading, and closing raw does not release it:
+		// it is blocked writing, not reading. Without this, every reconnect of a
+		// framed stream leaks a goroutine for the life of the process.
+		defer func() { _ = pr.Close() }()
 		br = bufio.NewReader(pr)
 	}
 
@@ -514,6 +520,10 @@ func dockerBackoff(attempt int, base, maxDelay time.Duration) time.Duration {
 	if delay <= 0 || delay > maxDelay {
 		delay = maxDelay
 	}
+	// The range is [1, delay] rather than a literal [0, delay]: a zero delay would
+	// turn a tight failure loop into a busy one, and one nanosecond of floor costs
+	// nothing while removing that case.
+	//
 	// math/rand/v2 is right here: this is scheduling jitter, not a secret, and a
 	// cryptographic source would cost more for no property this needs.
 	return time.Duration(rand.Int64N(int64(delay)) + 1)

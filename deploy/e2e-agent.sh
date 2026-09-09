@@ -173,7 +173,7 @@ sleep $((RUN_SECONDS / 3))
 # Stop the writer so its counter stops moving and the drain has a fixed target.
 say "stopping the sidecar and reading its final counter"
 $COMPOSE stop logwriter >/dev/null
-written=$($COMPOSE run --rm --no-deps --entrypoint sh logwriter -c 'cat /var/log/app/.seq' | tr -d '\r[:space:]')
+written=$($COMPOSE run --rm --no-deps --entrypoint sh logwriter -c 'cat "$LOG_DIR/.seq"' | tr -d '\r[:space:]')
 if ! [ "$written" -gt 0 ] 2>/dev/null; then
 	echo "FAIL: could not read the sidecar's counter (got '$written')" >&2
 	exit 1

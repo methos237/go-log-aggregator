@@ -32,6 +32,14 @@ go.work.sum
 bin/
 dist/
 
+# Binaries a bare `go build ./cmd/<name>` drops in the repo root. Named
+# individually rather than by a wildcard: a pattern broad enough to catch these
+# also catches directories like cmd/ and internal/.
+/agent
+/collector
+/loadgen
+/logctl
+
 # Profiles from `make bench` / pprof
 *.prof
 *.pprof

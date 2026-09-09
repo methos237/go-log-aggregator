@@ -218,6 +218,16 @@ type Shipper struct {
 	// (loaded from disk at startup, with nothing in memory remembering
 	// which lines produced it) or it was dropped as unparseable. See
 	// tryDrainSpool and appendToSpool for the two ends of this queue.
+	//
+	// This alignment is not automatic: Spool.Append can itself evict whole
+	// oldest segments to stay under MaxBytes, which silently removes
+	// entries from the front of the spool's own FIFO without spoolMeta
+	// knowing. appendToSpool is what keeps the two in step, by trimming the
+	// same number of entries from spoolMeta's own front — see its doc
+	// comment. Letting the two drift apart is exactly the bug this pairing
+	// guards against: peekSpoolMeta would then hand back a cursor map
+	// belonging to an entry that is no longer the one Peek returns, and a
+	// later ACCEPTED would advance the wrong source's checkpoint.
 	spoolMeta []map[string]Cursor
 }
 
@@ -479,15 +489,54 @@ func (s *Shipper) handleAckResult(res ackResult) {
 // tryDrainSpool call will find it again. A batch built fresh this run has
 // no other copy anywhere, so it must be appended now or it is gone.
 func (s *Shipper) teardownStream() {
-	for _, o := range s.pendingAcks {
-		if !o.fromSpool {
-			s.appendToSpool(o.batch, o.sourceCursors)
-		}
-	}
+	s.demoteOutstanding(s.pendingAcks...)
 	s.pendingAcks = nil
 	s.stream = nil
 	s.ackCh = nil
 	s.armConnectRetry()
+}
+
+// demoteOutstanding appends every batch in batches to the spool, in order,
+// skipping any that is already there (fromSpool). It is the common step
+// shared by teardownStream (the whole outstanding list) and demoteRemaining
+// (one acked batch plus whatever is left of the list) — see demoteRemaining
+// for why the caller's ordering matters here.
+func (s *Shipper) demoteOutstanding(batches ...outstanding) {
+	for _, o := range batches {
+		if !o.fromSpool {
+			s.appendToSpool(o.batch, o.sourceCursors)
+		}
+	}
+}
+
+// demoteRemaining moves o — the batch an OVERLOADED or INTERNAL/UNSPECIFIED
+// ack just applied to — and every batch still outstanding behind it into the
+// spool, in send order, then clears pendingAcks.
+//
+// This is what keeps advanceCheckpoint's no-younger-ack-outruns-an-older-
+// spooled-batch assumption true: leaving newer batches outstanding while an
+// older one goes to the spool would let a younger batch's later ACCEPTED
+// advance a source's checkpoint past lines the older, now-spooled batch has
+// not yet delivered — a gap, since Spool.Append never fsyncs and a crash in
+// that window loses the older batch with the checkpoint already past it.
+//
+// Order is what makes this correct, not just "spool everything": a batch
+// already fromSpool is already sitting in the spool, unreleased, at the
+// front (see the outstanding field doc); appendToSpool only ever appends to
+// the tail, so o — if it was built fresh this run — lands right behind
+// whatever is already there, and every batch still in pendingAcks (sent
+// after o, so also newer) lands behind that in the same order it was
+// originally sent. Replay order therefore matches original send order.
+//
+// Any ack the collector later sends for a batch demoted here (it already
+// received these batches; nothing stops it from acking them on this same,
+// still-open stream) arrives to find pendingAcks empty and is ignored as a
+// stray ack — see processAck. That is a deliberate, bounded duplicate, the
+// same tradeoff replay from the spool already accepts elsewhere.
+func (s *Shipper) demoteRemaining(o outstanding) {
+	s.demoteOutstanding(o)
+	s.demoteOutstanding(s.pendingAcks...)
+	s.pendingAcks = nil
 }
 
 // addLine folds one line into the accumulator for its own label set,
@@ -537,13 +586,8 @@ func (s *Shipper) addLine(line *Line) {
 	if valid {
 		pb = rec.Proto()
 		size = proto.Size(pb)
-		switch {
-		case len(a.records) == 0 && a.overhead+size > s.maxBatchBytes:
-			// Too big to ever fit, even alone: not a batching problem, a
-			// permanently unshippable record.
-			s.countDropped(reasonRecordTooLarge, 1)
-			valid = false
-		case len(a.records) > 0 && a.overhead+a.bytes+size > s.maxBatchBytes:
+
+		if len(a.records) > 0 && a.overhead+a.bytes+size > s.maxBatchBytes {
 			// Does not fit beside what is already batched in this stream's
 			// accumulator. Flush that batch now, before this line is
 			// attributed to anything: attributing it to the batch being
@@ -555,6 +599,23 @@ func (s *Shipper) addLine(line *Line) {
 			s.flushAccum(id)
 			a = s.newAccumulator(labels)
 			s.accums[id] = a
+		}
+
+		// Re-check against whichever accumulator the record will actually go
+		// into — a is now either the original one (already empty, or with
+		// room beside its existing records) or the brand-new replacement
+		// just created above. Checking only once, here, after any flush has
+		// already happened, is what catches a record too big to ever fit
+		// even alone: without this re-check, a record that does not fit
+		// beside an existing batch gets a fresh, empty accumulator via the
+		// flush above but then skips this test entirely, letting a record
+		// larger than MaxBatchBytes itself (a single record can legitimately
+		// reach ~576 KiB; see model.MaxMessageLen and model.MaxFields) into a
+		// batch the collector will refuse outright instead of being dropped
+		// and counted here, where the offending source is visible.
+		if a.overhead+size > s.maxBatchBytes {
+			s.countDropped(reasonRecordTooLarge, 1)
+			valid = false
 		}
 	} else {
 		s.countDropped(reasonInvalidRecord, 1)
@@ -797,9 +858,10 @@ func (s *Shipper) processAck(ack *logaggv1.Ack) {
 		}
 		s.attempt = 0
 	case logaggv1.AckCode_ACK_CODE_OVERLOADED:
-		if !o.fromSpool {
-			s.appendToSpool(o.batch, o.sourceCursors)
-		}
+		// Demote o and every batch still outstanding behind it together —
+		// see demoteRemaining for why leaving newer batches outstanding
+		// here would reopen this same finding.
+		s.demoteRemaining(o)
 		s.armPause()
 	case logaggv1.AckCode_ACK_CODE_INVALID:
 		// Resending identical bytes fails identically (see the AckCode doc
@@ -812,9 +874,9 @@ func (s *Shipper) processAck(ack *logaggv1.Ack) {
 			s.popSpoolMeta()
 		}
 	default: // ACK_CODE_INTERNAL and ACK_CODE_UNSPECIFIED
-		if !o.fromSpool {
-			s.appendToSpool(o.batch, o.sourceCursors)
-		}
+		// Same demotion as OVERLOADED, for the same reason — see
+		// demoteRemaining.
+		s.demoteRemaining(o)
 		// No backoff: a collector-side fault is retried at the same rate,
 		// not backed off, so one transient fault does not throttle the
 		// agent the way sustained overload should.
@@ -825,6 +887,15 @@ func (s *Shipper) processAck(ack *logaggv1.Ack) {
 // appendToSpool marshals batch and appends it to the spool, recording its
 // per-source cursors in spoolMeta so a later successful drain can still
 // advance the checkpoint correctly.
+//
+// spoolMeta and the spool must be trimmed together: Spool.Append reports how
+// many entries its own MaxBytes eviction dropped from the front of the
+// spool's FIFO, and that many entries are dropped from the front of spoolMeta
+// here too, after this call's own cursors are appended to the back. Eviction
+// always removes the oldest entries, and spoolMeta[0] is always the oldest
+// entry's metadata, so trimming from the front realigns the two exactly —
+// leaving them misaligned is what would let a later ACCEPTED advance the
+// wrong source's checkpoint (see the spoolMeta field doc).
 func (s *Shipper) appendToSpool(batch *logaggv1.LogBatch, cursors map[string]Cursor) {
 	data, err := proto.Marshal(batch)
 	if err != nil {
@@ -833,13 +904,25 @@ func (s *Shipper) appendToSpool(batch *logaggv1.LogBatch, cursors map[string]Cur
 		s.countDropped(reasonEncodeFailed, len(batch.GetRecords()))
 		return
 	}
-	if err := s.spool.Append(data); err != nil {
+	evicted, err := s.spool.Append(data)
+	if err != nil {
 		// Disk exhaustion or similar: the batch is already off the network
 		// path, so there is nowhere else for it to go.
 		s.countDropped(reasonSpoolAppendFailed, len(batch.GetRecords()))
 		return
 	}
 	s.spoolMeta = append(s.spoolMeta, cursors)
+	// Defensive bound, not an expected case: as long as spoolMeta stays
+	// aligned with the spool (which is this whole function's job), eviction
+	// can never remove more entries than spoolMeta already tracks — nil
+	// placeholders for pre-existing entries (see the spoolMeta field doc and
+	// Run) count too, so it is never short. Capping evicted here means a
+	// future bug in that invariant becomes a lost cursor map, not a slice
+	// bound panic that takes the whole agent down with it.
+	if evicted > len(s.spoolMeta) {
+		evicted = len(s.spoolMeta)
+	}
+	s.spoolMeta = s.spoolMeta[evicted:]
 }
 
 // peekSpoolMeta returns the cursor map for the oldest spool entry without
@@ -879,7 +962,12 @@ func (s *Shipper) popSpoolMeta() {
 //
 // A stale cursor from the old generation arriving after a new one would pass
 // this check, but cannot happen: acks on one stream arrive in send order, and
-// spool replay is serialized ahead of live batches for exactly that reason.
+// spool replay is serialized ahead of live batches for exactly that reason —
+// dispatch never sends a fresh batch directly while the spool is non-empty,
+// and demoteRemaining is what keeps the spool non-empty for every batch
+// still outstanding once an older one from the same stream is demoted to it,
+// so a younger batch's ack can never outrun an older, still-unacked spooled
+// one from the same source.
 func (s *Shipper) advanceCheckpoint(source string, cur Cursor) {
 	current, ok := s.checkpoint.Get(source)
 	if ok && cur.File == current.File && cur.Offset < current.Offset {

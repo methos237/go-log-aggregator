@@ -1158,12 +1158,55 @@ func TestShipper_IndependentDelayTimers(t *testing.T) {
 	waitForRun(t, done, 2*time.Second)
 }
 
-// TestShipper_TimerSweepDeterministicOrder confirms that when a single timer
-// firing finds several accumulators due at once, the batches it produces come
-// out in a reproducible order — ascending StreamID — rather than depending on
-// Go's randomized map iteration. Run under `go test -count=2`, this must not
-// vary between the two runs.
-func TestShipper_TimerSweepDeterministicOrder(t *testing.T) {
+// TestSortedAccumIDsIsDeterministic covers the actual ordering guarantee: a
+// flush touching several accumulators emits them in ascending StreamID order,
+// not in Go's randomized map iteration order.
+//
+// This is asserted directly on the helper rather than through the flush timer.
+// Driving it through the timer looked like a stronger test and was a flakier
+// one: the accumulators are created as addLine processes each line, so their
+// deadlines differ by however long that takes, and under load a sweep can fire
+// after the first deadline but before the last. The batches then come out in
+// deadline order across two sweeps, which is correct behavior that the ordering
+// assertion cannot distinguish from the bug it was written to catch. The sort is
+// the part that is deterministic, so the sort is what gets asserted; that all
+// due accumulators eventually flush is covered separately below.
+func TestSortedAccumIDsIsDeterministic(t *testing.T) {
+	labelSets := []model.LabelSet{
+		{Service: "svc-1", Host: "host", Env: "test"},
+		{Service: "svc-2", Host: "host", Env: "test"},
+		{Service: "svc-3", Host: "host", Env: "test"},
+		{Service: "svc-4", Host: "host", Env: "test"},
+	}
+
+	want := make([]model.StreamID, 0, len(labelSets))
+	accums := make(map[model.StreamID]*accumulator, len(labelSets))
+	for _, ls := range labelSets {
+		accums[ls.ID()] = &accumulator{labels: ls}
+		want = append(want, ls.ID())
+	}
+	sort.Slice(want, func(i, j int) bool { return want[i] < want[j] })
+
+	// Repeated because map iteration order is randomized per range, so a single
+	// pass could match by luck.
+	for i := 0; i < 50; i++ {
+		got := sortedAccumIDs(accums)
+		if len(got) != len(want) {
+			t.Fatalf("got %d ids, want %d", len(got), len(want))
+		}
+		for j := range got {
+			if got[j] != want[j] {
+				t.Fatalf("pass %d: id %d = %d, want %d — order must not depend on map iteration", i, j, got[j], want[j])
+			}
+		}
+	}
+}
+
+// TestShipper_TimerSweepFlushesEveryDueAccumulator confirms the delay trigger
+// eventually ships every stream's partial batch, with none lost or merged.
+// Ordering is deliberately not asserted here — see
+// TestSortedAccumIDsIsDeterministic for why.
+func TestShipper_TimerSweepFlushesEveryDueAccumulator(t *testing.T) {
 	stub := &stubServer{}
 	addr, _ := startStubServer(t, stub, "127.0.0.1:0")
 
@@ -1202,17 +1245,19 @@ func TestShipper_TimerSweepDeterministicOrder(t *testing.T) {
 	close(in)
 	waitForRun(t, done, 2*time.Second)
 
-	want := append([]model.LabelSet(nil), labelSets...)
-	sort.Slice(want, func(i, j int) bool { return want[i].ID() < want[j].ID() })
-
 	if len(got) != 3 {
 		t.Fatalf("got %d batches, want 3", len(got))
 	}
-	for i, b := range got {
-		gotLS := model.LabelSetFromProto(b.GetLabels())
-		if gotLS.ID() != want[i].ID() {
-			t.Fatalf("batch %d has labels %+v (StreamID %d), want %+v (StreamID %d) — the sweep must flush in ascending StreamID order",
-				i, gotLS, gotLS.ID(), want[i], want[i].ID())
+
+	// Every configured stream must appear exactly once: one batch per accumulator,
+	// none dropped and none folded into another stream's batch.
+	seen := make(map[model.StreamID]int, len(labelSets))
+	for _, b := range got {
+		seen[model.LabelSetFromProto(b.GetLabels()).ID()]++
+	}
+	for _, ls := range labelSets {
+		if n := seen[ls.ID()]; n != 1 {
+			t.Errorf("stream %+v produced %d batches, want exactly 1", ls, n)
 		}
 	}
 }
@@ -1312,5 +1357,257 @@ func TestShipper_ShutdownFlushesAllAccumulators(t *testing.T) {
 	}
 	if total != 2 {
 		t.Fatalf("got %d total records across shutdown batches, want 2", total)
+	}
+}
+
+// TestShipper_SpoolEvictionKeepsMetaAligned is the regression test for the
+// spoolMeta/spool desync finding: Spool.Append's own MaxBytes eviction can
+// silently drop entries from the front of the spool without spoolMeta
+// knowing, and appendToSpool must trim spoolMeta by the same amount to stay
+// aligned with what Peek actually returns next.
+//
+// The spool here is sized to hold exactly two entries: appending a third
+// batch (from source-a again) forces a roll and then an eviction of the
+// first batch's whole segment. Against the unfixed code, spoolMeta is never
+// trimmed, so its front entry (source-a's first cursor) stays associated
+// with the payload Peek now returns (source-b's batch) — a straight
+// misattribution that would let a later ACCEPTED move source-a's checkpoint
+// to a cursor whose batch was evicted and never delivered, while source-b's
+// real cursor is never seen at all.
+func TestShipper_SpoolEvictionKeepsMetaAligned(t *testing.T) {
+	sample := &logaggv1.LogBatch{
+		BatchId: "sample",
+		Labels:  defaultTestLabels.Proto(),
+		Records: []*logaggv1.LogRecord{{Message: "aaaa"}},
+	}
+	data, err := proto.Marshal(sample)
+	if err != nil {
+		t.Fatalf("marshal sample: %v", err)
+	}
+	entrySize := int64(len(encodeEntry(data)))
+
+	sp, err := NewSpool(SpoolConfig{Dir: t.TempDir(), MaxBytes: entrySize * 2, SegmentBytes: entrySize})
+	if err != nil {
+		t.Fatalf("new spool: %v", err)
+	}
+	t.Cleanup(func() { _ = sp.Close() })
+
+	cfg := &ShipperConfig{
+		Ingest:     ingest.ClientConfig{Addr: "127.0.0.1:1"}, // never dialed by this unit test
+		Spool:      sp,
+		Checkpoint: newTestCheckpoint(t),
+		Labels:     twoSourceLabels(defaultTestLabels, defaultTestLabels),
+	}
+	s, err := NewShipper(cfg)
+	if err != nil {
+		t.Fatalf("new shipper: %v", err)
+	}
+
+	batch := func(msg string) *logaggv1.LogBatch {
+		return &logaggv1.LogBatch{BatchId: msg, Labels: defaultTestLabels.Proto(), Records: []*logaggv1.LogRecord{{Message: msg}}}
+	}
+	curA1 := Cursor{Start: 0, Offset: 10}
+	curB1 := Cursor{Start: 0, Offset: 10}
+	curA2 := Cursor{Start: 10, Offset: 20}
+
+	// batch1 (source-a) and batch2 (source-b) each land in their own
+	// segment; batch3 (source-a again) forces the roll that then evicts
+	// batch1's segment to stay under MaxBytes.
+	s.appendToSpool(batch("aaaa"), map[string]Cursor{"source-a": curA1})
+	s.appendToSpool(batch("bbbb"), map[string]Cursor{"source-b": curB1})
+	s.appendToSpool(batch("cccc"), map[string]Cursor{"source-a": curA2})
+
+	if got, want := s.spool.Len(), 2; got != want {
+		t.Fatalf("spool.Len() = %d, want %d (the oldest entry must have been evicted)", got, want)
+	}
+	if got, want := len(s.spoolMeta), 2; got != want {
+		t.Fatalf("len(spoolMeta) = %d, want %d — it must be trimmed in step with the spool's own eviction", got, want)
+	}
+
+	// The oldest surviving spool entry must be batch2 (bbbb, source-b), and
+	// its spoolMeta entry must name only source-b — not source-a's stale,
+	// evicted-batch cursor.
+	peekAndUnmarshal := func() *logaggv1.LogBatch {
+		t.Helper()
+		payload, ok, err := s.spool.Peek()
+		if err != nil || !ok {
+			t.Fatalf("Peek: ok=%v err=%v", ok, err)
+		}
+		got := new(logaggv1.LogBatch)
+		if err := proto.Unmarshal(payload, got); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		return got
+	}
+
+	oldest := peekAndUnmarshal()
+	if len(oldest.GetRecords()) != 1 || oldest.GetRecords()[0].GetMessage() != "bbbb" {
+		t.Fatalf("oldest surviving entry message = %q, want %q", oldest.GetRecords()[0].GetMessage(), "bbbb")
+	}
+	meta := s.peekSpoolMeta()
+	if _, bad := meta["source-a"]; bad {
+		t.Fatalf("spoolMeta for the surviving bbbb batch names source-a; it belongs only to source-b: %+v", meta)
+	}
+	if metaCur, metaOK := meta["source-b"]; !metaOK || metaCur != curB1 {
+		t.Fatalf("spoolMeta for bbbb = %+v, want source-b -> %+v", meta, curB1)
+	}
+
+	// Simulate exactly what processAck's ACCEPTED branch does for this
+	// entry: advance only the source(s) actually named by its own metadata.
+	for source, cur := range meta {
+		s.advanceCheckpoint(source, cur)
+	}
+	if _, sawA := s.checkpoint.Get("source-a"); sawA {
+		t.Fatal("source-a's checkpoint must not advance from the bbbb batch's ack — it was never in that batch")
+	}
+	if curB, sawB := s.checkpoint.Get("source-b"); !sawB || curB != curB1 {
+		t.Fatalf("source-b checkpoint = %+v ok=%v, want %+v", curB, sawB, curB1)
+	}
+	if err := s.spool.Release(); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	s.popSpoolMeta()
+
+	// The last surviving entry must be batch3 (cccc, source-a's second
+	// cursor) — never misattributed to the evicted first one.
+	last := peekAndUnmarshal()
+	if len(last.GetRecords()) != 1 || last.GetRecords()[0].GetMessage() != "cccc" {
+		t.Fatalf("last surviving entry message = %q, want %q", last.GetRecords()[0].GetMessage(), "cccc")
+	}
+	meta = s.peekSpoolMeta()
+	if metaCur, metaOK := meta["source-a"]; !metaOK || metaCur != curA2 {
+		t.Fatalf("spoolMeta for cccc = %+v, want source-a -> %+v (never the evicted curA1)", meta, curA2)
+	}
+	for source, cur := range meta {
+		s.advanceCheckpoint(source, cur)
+	}
+	if curA, sawA := s.checkpoint.Get("source-a"); !sawA || curA != curA2 {
+		t.Fatalf("source-a checkpoint = %+v ok=%v, want %+v (curA1 must never have been used)", curA, sawA, curA2)
+	}
+}
+
+// TestShipper_OverloadedDemotesNewerOutstanding is the regression test for
+// demoting only the acked batch on OVERLOADED while leaving younger,
+// still-outstanding batches in flight. With three batches outstanding from
+// one source, an OVERLOADED on the first must demote all three together —
+// not just the first — so a later ACCEPTED for the second can never advance
+// the checkpoint past lines the first (now-spooled, unacked) batch has not
+// delivered.
+func TestShipper_OverloadedDemotesNewerOutstanding(t *testing.T) {
+	cfg := &ShipperConfig{
+		Ingest:     ingest.ClientConfig{Addr: "127.0.0.1:1"}, // never dialed by this unit test
+		Spool:      newTestSpool(t),
+		Checkpoint: newTestCheckpoint(t),
+		Labels:     labelsFunc(defaultTestLabels),
+	}
+	s, err := NewShipper(cfg)
+	if err != nil {
+		t.Fatalf("new shipper: %v", err)
+	}
+	t.Cleanup(func() {
+		if s.pauseTimer != nil {
+			s.pauseTimer.Stop()
+		}
+	})
+
+	makeBatch := func(id, msg string) *logaggv1.LogBatch {
+		return &logaggv1.LogBatch{BatchId: id, Labels: defaultTestLabels.Proto(), Records: []*logaggv1.LogRecord{{Message: msg}}}
+	}
+	cur1 := Cursor{Start: 0, Offset: 10}
+	cur2 := Cursor{Start: 10, Offset: 20}
+	cur3 := Cursor{Start: 20, Offset: 30}
+
+	b1 := makeBatch("b1", "one")
+	b2 := makeBatch("b2", "two")
+	b3 := makeBatch("b3", "three")
+	s.pendingAcks = []outstanding{
+		{batch: b1, recordCount: 1, sourceCursors: map[string]Cursor{"app.log": cur1}},
+		{batch: b2, recordCount: 1, sourceCursors: map[string]Cursor{"app.log": cur2}},
+		{batch: b3, recordCount: 1, sourceCursors: map[string]Cursor{"app.log": cur3}},
+	}
+
+	// OVERLOADED on the first outstanding batch.
+	s.processAck(&logaggv1.Ack{BatchId: "b1", Code: logaggv1.AckCode_ACK_CODE_OVERLOADED})
+
+	if len(s.pendingAcks) != 0 {
+		t.Fatalf("pendingAcks = %d, want 0 — every outstanding batch must be demoted together", len(s.pendingAcks))
+	}
+	if !s.sendPaused {
+		t.Fatal("OVERLOADED must pause sending, not tear down the stream")
+	}
+
+	// A late ACCEPTED for the second batch — the collector already received
+	// it before it decided to reject the first — must find nothing left in
+	// pendingAcks to attribute it to and be ignored as a stray ack.
+	s.processAck(&logaggv1.Ack{BatchId: "b2", Code: logaggv1.AckCode_ACK_CODE_ACCEPTED})
+
+	if _, ok := s.checkpoint.Get("app.log"); ok {
+		t.Fatal("checkpoint must not advance past the first (spooled, unacked) batch's lines")
+	}
+
+	if got, want := s.spool.Len(), 3; got != want {
+		t.Fatalf("spool.Len() = %d, want %d — all three outstanding batches must have been spooled", got, want)
+	}
+	for i, want := range []string{"one", "two", "three"} {
+		payload, ok, err := s.spool.Peek()
+		if err != nil || !ok {
+			t.Fatalf("Peek(%d): ok=%v err=%v", i, ok, err)
+		}
+		got := new(logaggv1.LogBatch)
+		if err := proto.Unmarshal(payload, got); err != nil {
+			t.Fatalf("unmarshal spooled batch %d: %v", i, err)
+		}
+		if len(got.GetRecords()) != 1 || got.GetRecords()[0].GetMessage() != want {
+			t.Fatalf("spooled batch %d message = %q, want %q — original send order must be preserved", i, got.GetRecords()[0].GetMessage(), want)
+		}
+		if err := s.spool.Release(); err != nil {
+			t.Fatalf("Release(%d): %v", i, err)
+		}
+	}
+}
+
+// TestShipper_OversizedRecordDroppedWithNonEmptyAccumulator is the
+// regression test for skipping the "cannot fit even alone" guard when a
+// record forces a flush of a non-empty accumulator. A small record
+// accumulates first; a huge one that cannot fit even in a brand-new, empty
+// accumulator arrives next, forcing that flush — and must then be dropped
+// and counted as record_too_large rather than riding along into the fresh
+// accumulator unchecked.
+func TestShipper_OversizedRecordDroppedWithNonEmptyAccumulator(t *testing.T) {
+	stub := &stubServer{}
+	addr, _ := startStubServer(t, stub, "127.0.0.1:0")
+
+	cfg := newTestShipperConfig(t, addr)
+	cfg.MaxBatchRecords = 1000
+	cfg.MaxBatchDelay = 5 * time.Second // only the size trigger should matter here
+	cfg.MaxBatchBytes = 300
+	s := newTestShipper(t, cfg)
+
+	in := make(chan Line, 2)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- s.Run(ctx, in) }()
+
+	huge := strings.Repeat("x", 1000)
+	in <- testLine("app.log", "small", 0)
+	in <- testLine("app.log", huge, 10)
+	close(in)
+
+	waitForRun(t, done, 2*time.Second)
+
+	got := stub.receivedBatches()
+	for _, b := range got {
+		if sz := proto.Size(b); sz > cfg.MaxBatchBytes {
+			t.Fatalf("batch marshaled to %d bytes, want <= %d — an oversized record must never ship", sz, cfg.MaxBatchBytes)
+		}
+		for _, r := range b.GetRecords() {
+			if r.GetMessage() == huge {
+				t.Fatalf("the oversized record was shipped instead of being dropped: %+v", b)
+			}
+		}
+	}
+	if n := counterValue(t, s.metrics.RecordsDropped.WithLabelValues(observability.ComponentAgent, reasonRecordTooLarge)); n != 1 {
+		t.Fatalf("record_too_large drop count = %v, want 1", n)
 	}
 }
