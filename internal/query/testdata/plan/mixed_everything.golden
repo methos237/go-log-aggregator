@@ -1,0 +1,21 @@
+-- query
+{service=~"api-.*", level>="warn", env!="dev", region="eu", shard!~"1.*", host="web-1"}
+-- source
+logs
+-- streams
+SELECT stream_id FROM streams WHERE service ~ $1 AND env <> $2 AND labels @> $3::jsonb AND coalesce(labels ->> $4, '') !~ $5 AND host = $6
+-- streams args
+string "^(?:api-.*)$"
+string "dev"
+string "{\"region\":\"eu\"}"
+string "shard"
+string "^(?:1.*)$"
+string "web-1"
+-- logs
+SELECT time, stream_id, seq, level, message, trace_id, span_id, fields FROM logs WHERE stream_id = ANY($1) AND time >= $2 AND time < $3 AND level >= $4 ORDER BY time DESC, seq DESC LIMIT $5
+-- logs args
+[]int64 []int64(nil)
+time.Time time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+time.Time time.Date(2026, time.September, 1, 1, 0, 0, 0, time.UTC)
+int16 4
+int 100

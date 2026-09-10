@@ -1,0 +1,16 @@
+-- query
+{host="web-1", env!="dev"}
+-- source
+logs
+-- streams
+SELECT stream_id FROM streams WHERE host = $1 AND env <> $2
+-- streams args
+string "web-1"
+string "dev"
+-- logs
+SELECT time, stream_id, seq, level, message, trace_id, span_id, fields FROM logs WHERE stream_id = ANY($1) AND time >= $2 AND time < $3 ORDER BY time DESC, seq DESC LIMIT $4
+-- logs args
+[]int64 []int64(nil)
+time.Time time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+time.Time time.Date(2026, time.September, 1, 1, 0, 0, 0, time.UTC)
+int 100
