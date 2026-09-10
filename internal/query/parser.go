@@ -1,0 +1,170 @@
+package query
+
+import (
+	"fmt"
+	"regexp"
+
+	"github.com/jamespolk/go-log-aggregator/internal/model"
+)
+
+// MaxRegexLen bounds any regular expression literal (matcher, line filter,
+// regexp stage). Go's regexp is linear-time, so the cap is about memory and
+// about refusing to ship a kilobyte of pattern to Postgres as a query
+// argument, not about catastrophic backtracking.
+const MaxRegexLen = 1024
+
+// Error is a parse error with the 1-based position of the token it is about.
+type Error struct {
+	Pos Pos
+	Msg string
+}
+
+func (e *Error) Error() string { return fmt.Sprintf("%d:%d: %s", e.Pos.Line, e.Pos.Col, e.Msg) }
+
+// Parse parses one query. The error is always a *Error pointing at the
+// offending token.
+func Parse(src string) (q *Query, err error) {
+	p := &parser{lex: newLexer(src)}
+	// Bailing out with a panic keeps the grammar functions free of error
+	// plumbing, the same trade text/template makes. Anything that is not our
+	// own *Error is a real bug and is re-raised.
+	defer func() {
+		if r := recover(); r != nil {
+			pe, ok := r.(*Error)
+			if !ok {
+				panic(r)
+			}
+			q, err = nil, pe
+		}
+	}()
+	p.advance()
+	q = &Query{Selector: p.parseSelector()}
+	if p.tok.Kind != tokEOF {
+		p.bail(p.tok.Pos, `expected line filter, "|" or end of input, got %s`, describe(p.tok))
+	}
+	return q, nil
+}
+
+// parser is a single-pass recursive-descent parser with one token of
+// lookahead. It stops at the first error; there is no recovery, because a
+// query is one line typed by a person and the first mistake is the one they
+// want to hear about.
+type parser struct {
+	lex *lexer
+	tok token
+}
+
+// advance moves to the next token. An illegal token is an error the moment it
+// becomes the lookahead: it can never satisfy any rule, and since it is only
+// lexed once the previous token has been accepted, reporting it here keeps
+// errors in source order.
+func (p *parser) advance() {
+	p.tok = p.lex.next()
+	if p.tok.Kind == tokIllegal {
+		p.bail(p.tok.Pos, "%s", p.tok.Err)
+	}
+}
+
+func (p *parser) bail(pos Pos, format string, args ...any) {
+	panic(&Error{Pos: pos, Msg: fmt.Sprintf(format, args...)})
+}
+
+// want checks the current token without consuming it, so a caller can
+// validate the token's text before advance() lexes what follows it.
+func (p *parser) want(kind tokenKind, what string) token {
+	if p.tok.Kind != kind {
+		p.bail(p.tok.Pos, "expected %s, got %s", what, describe(p.tok))
+	}
+	return p.tok
+}
+
+func (p *parser) expect(kind tokenKind, what string) token {
+	t := p.want(kind, what)
+	p.advance()
+	return t
+}
+
+// describe renders a token for the "got ..." half of an error. Literals show
+// their text because "got identifier" alone does not tell the user which word
+// the parser tripped over; punctuation is already self-describing.
+func describe(t token) string {
+	switch t.Kind {
+	case tokIdent, tokString, tokNumber, tokDuration:
+		return fmt.Sprintf("%s %q", t.Kind, t.Text)
+	}
+	return t.Kind.String()
+}
+
+var ops = map[tokenKind]Op{
+	tokEq: OpEq, tokNeq: OpNeq, tokRe: OpRe, tokNre: OpNre,
+	tokGte: OpGte, tokLte: OpLte, tokGt: OpGt, tokLt: OpLt,
+}
+
+// parseOp consumes a comparison operator.
+func (p *parser) parseOp() Op {
+	op, ok := ops[p.tok.Kind]
+	if !ok {
+		p.bail(p.tok.Pos, "expected matcher operator, got %s", describe(p.tok))
+	}
+	p.advance()
+	return op
+}
+
+func (p *parser) parseSelector() Selector {
+	sel := Selector{Pos: p.expect(tokLBrace, `"{"`).Pos}
+	if p.tok.Kind == tokRBrace {
+		p.bail(sel.Pos, "selector needs at least one matcher")
+	}
+	for {
+		sel.Matchers = append(sel.Matchers, p.parseMatcher())
+		if p.tok.Kind == tokComma {
+			p.advance()
+			continue
+		}
+		p.expect(tokRBrace, `"}" or ","`)
+		return sel
+	}
+}
+
+func (p *parser) parseMatcher() Matcher {
+	label := p.expect(tokIdent, "label name")
+	m := Matcher{Pos: label.Pos, Label: label.Text}
+	opPos := p.tok.Pos
+	m.Op = p.parseOp()
+	m.Value = p.parseValue(m.Label, m.Op, opPos)
+	return m
+}
+
+// parseValue consumes the string operand of a matcher and applies the checks
+// that depend on the label and operator: level names must be real levels, and
+// regex patterns must compile. Doing this at parse time means a bad query is
+// rejected before it costs a database round trip. The original text is kept;
+// the planner re-parses level names into their numeric form.
+func (p *parser) parseValue(label string, op Op, opPos Pos) string {
+	if label == "level" && op.IsRegex() {
+		p.bail(opPos, "level does not support %s", op)
+	}
+	val := p.want(tokString, "string")
+	if label == "level" {
+		p.checkLevel(val)
+	} else if op.IsRegex() {
+		p.checkRegex(val)
+	}
+	p.advance()
+	return val.Text
+}
+
+func (p *parser) checkLevel(val token) {
+	if _, err := model.ParseLevel(val.Text); err != nil {
+		p.bail(val.Pos, "unknown level %q", val.Text)
+	}
+}
+
+func (p *parser) checkRegex(val token) {
+	if len(val.Text) > MaxRegexLen {
+		p.bail(val.Pos, "regex is %d bytes, max %d", len(val.Text), MaxRegexLen)
+	}
+	if _, err := regexp.Compile(val.Text); err != nil {
+		p.bail(val.Pos, "invalid regex: %s", err.Error())
+	}
+}
