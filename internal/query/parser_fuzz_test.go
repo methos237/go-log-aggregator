@@ -9,8 +9,10 @@ func FuzzParse(f *testing.F) {
 	for _, seed := range roadmapExamples {
 		f.Add(seed)
 	}
-	for _, tc := range selectorErrorCases {
-		f.Add(tc.src)
+	for _, cases := range [][]errCase{selectorErrorCases, stageErrorCases} {
+		for _, tc := range cases {
+			f.Add(tc.src)
+		}
 	}
 	f.Fuzz(func(t *testing.T, src string) {
 		q, err := Parse(src)

@@ -39,8 +39,16 @@ func Parse(src string) (q *Query, err error) {
 	}()
 	p.advance()
 	q = &Query{Selector: p.parseSelector()}
-	if p.tok.Kind != tokEOF {
-		p.bail(p.tok.Pos, `expected line filter, "|" or end of input, got %s`, describe(p.tok))
+	for p.tok.Kind != tokEOF {
+		switch p.tok.Kind {
+		case tokPipeExact, tokNeq, tokPipeRe, tokNre:
+			q.Stages = append(q.Stages, p.parseLineFilter())
+		case tokPipe:
+			p.advance()
+			q.Stages = append(q.Stages, p.parseStage())
+		default:
+			p.bail(p.tok.Pos, `expected line filter, "|" or end of input, got %s`, describe(p.tok))
+		}
 	}
 	return q, nil
 }
@@ -167,4 +175,60 @@ func (p *parser) checkRegex(val token) {
 	if _, err := regexp.Compile(val.Text); err != nil {
 		p.bail(val.Pos, "invalid regex: %s", err.Error())
 	}
+}
+
+var lineOps = map[tokenKind]LineOp{
+	tokPipeExact: LineContains, tokNeq: LineNotContains, tokPipeRe: LineMatches, tokNre: LineNotMatches,
+}
+
+func (p *parser) parseLineFilter() LineFilter {
+	f := LineFilter{Pos: p.tok.Pos, Op: lineOps[p.tok.Kind]}
+	p.advance()
+	val := p.want(tokString, "string")
+	if f.Op.IsRegex() {
+		p.checkRegex(val)
+	}
+	p.advance()
+	f.Text = val.Text
+	return f
+}
+
+const stageWhat = "a stage (json, logfmt, regexp, a label filter, or an aggregation)"
+
+// parseStage parses what follows a "|". The lexer hands keywords over as plain
+// identifiers, so this is where "json" is told apart from a label called json:
+// an identifier followed by an operator is a label filter, anything else has
+// to be a keyword.
+func (p *parser) parseStage() Stage {
+	kw := p.expect(tokIdent, stageWhat)
+	switch kw.Text {
+	case "json":
+		return ParserStage{Pos: kw.Pos, Kind: ParserJSON}
+	case "logfmt":
+		return ParserStage{Pos: kw.Pos, Kind: ParserLogfmt}
+	case "regexp":
+		pat := p.want(tokString, "string")
+		p.checkRegex(pat)
+		p.advance()
+		return ParserStage{Pos: kw.Pos, Kind: ParserRegexp, Pattern: pat.Text}
+	}
+	if _, ok := ops[p.tok.Kind]; !ok {
+		p.bail(kw.Pos, "expected %s, got %s", stageWhat, describe(kw))
+	}
+	return p.parseLabelFilter(kw)
+}
+
+func (p *parser) parseLabelFilter(label token) LabelFilter {
+	f := LabelFilter{Pos: label.Pos, Label: label.Text}
+	opPos := p.tok.Pos
+	f.Op = p.parseOp()
+	// A bare number is only meaningful for an ordering or equality test on an
+	// extracted field; regexes and level names are always strings.
+	if p.tok.Kind == tokNumber && !f.Op.IsRegex() && f.Label != "level" {
+		f.Value, f.Numeric = p.tok.Text, true
+		p.advance()
+		return f
+	}
+	f.Value = p.parseValue(f.Label, f.Op, opPos)
+	return f
 }

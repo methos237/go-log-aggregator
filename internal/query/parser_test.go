@@ -156,6 +156,98 @@ func TestParseSelectorErrors(t *testing.T) {
 	runErrCases(t, selectorErrorCases)
 }
 
+// api is the selector every stage and aggregation case starts with; it ends
+// at column 15 so the next token starts at 17.
+var api = Selector{Pos: at(1, 1), Matchers: []Matcher{matcher(1, 2, "service", OpEq, "api")}}
+
+func TestParseStages(t *testing.T) {
+	runParseCases(t, []parseCase{
+		{`{service="api"} |= "timeout"`, &Query{Selector: api, Stages: []Stage{
+			LineFilter{Pos: at(1, 17), Op: LineContains, Text: "timeout"},
+		}}},
+		{`{service="api"} != "healthcheck"`, &Query{Selector: api, Stages: []Stage{
+			LineFilter{Pos: at(1, 17), Op: LineNotContains, Text: "healthcheck"},
+		}}},
+		{`{service="api"} |~ "timeout|deadline"`, &Query{Selector: api, Stages: []Stage{
+			LineFilter{Pos: at(1, 17), Op: LineMatches, Text: "timeout|deadline"},
+		}}},
+		{`{service="api"} !~ "^DEBUG"`, &Query{Selector: api, Stages: []Stage{
+			LineFilter{Pos: at(1, 17), Op: LineNotMatches, Text: "^DEBUG"},
+		}}},
+		{`{service="api"} | json`, &Query{Selector: api, Stages: []Stage{
+			ParserStage{Pos: at(1, 19), Kind: ParserJSON},
+		}}},
+		{`{service="api"} | logfmt`, &Query{Selector: api, Stages: []Stage{
+			ParserStage{Pos: at(1, 19), Kind: ParserLogfmt},
+		}}},
+		{"{service=\"api\"} | regexp `(?P<status>\\d{3})`", &Query{Selector: api, Stages: []Stage{
+			ParserStage{Pos: at(1, 19), Kind: ParserRegexp, Pattern: `(?P<status>\d{3})`},
+		}}},
+		{`{service="api"} | json | status >= 500`, &Query{Selector: api, Stages: []Stage{
+			ParserStage{Pos: at(1, 19), Kind: ParserJSON},
+			LabelFilter{Pos: at(1, 26), Label: "status", Op: OpGte, Value: "500", Numeric: true},
+		}}},
+		{`{service="api"} | json | status = "500"`, &Query{Selector: api, Stages: []Stage{
+			ParserStage{Pos: at(1, 19), Kind: ParserJSON},
+			LabelFilter{Pos: at(1, 26), Label: "status", Op: OpEq, Value: "500"},
+		}}},
+		{`{service="api"} | json | latency < 1.5`, &Query{Selector: api, Stages: []Stage{
+			ParserStage{Pos: at(1, 19), Kind: ParserJSON},
+			LabelFilter{Pos: at(1, 26), Label: "latency", Op: OpLt, Value: "1.5", Numeric: true},
+		}}},
+		{`{service="api"} | json | path != "/health"`, &Query{Selector: api, Stages: []Stage{
+			ParserStage{Pos: at(1, 19), Kind: ParserJSON},
+			LabelFilter{Pos: at(1, 26), Label: "path", Op: OpNeq, Value: "/health"},
+		}}},
+		{`{service="api"} | json | user =~ "bob.*"`, &Query{Selector: api, Stages: []Stage{
+			ParserStage{Pos: at(1, 19), Kind: ParserJSON},
+			LabelFilter{Pos: at(1, 26), Label: "user", Op: OpRe, Value: "bob.*"},
+		}}},
+		{`{service="api"} | json | user !~ "bob.*"`, &Query{Selector: api, Stages: []Stage{
+			ParserStage{Pos: at(1, 19), Kind: ParserJSON},
+			LabelFilter{Pos: at(1, 26), Label: "user", Op: OpNre, Value: "bob.*"},
+		}}},
+		{`{service="api"} | level >= "warn"`, &Query{Selector: api, Stages: []Stage{
+			LabelFilter{Pos: at(1, 19), Label: "level", Op: OpGte, Value: "warn"},
+		}}},
+		// Line filters may follow a parser stage; the grammar does not order them.
+		{`{service="api"} | json |= "x"`, &Query{Selector: api, Stages: []Stage{
+			ParserStage{Pos: at(1, 19), Kind: ParserJSON},
+			LineFilter{Pos: at(1, 24), Op: LineContains, Text: "x"},
+		}}},
+		{`{service="api"} | json | status > 400 !~ "retry" | logfmt`, &Query{Selector: api, Stages: []Stage{
+			ParserStage{Pos: at(1, 19), Kind: ParserJSON},
+			LabelFilter{Pos: at(1, 26), Label: "status", Op: OpGt, Value: "400", Numeric: true},
+			LineFilter{Pos: at(1, 39), Op: LineNotMatches, Text: "retry"},
+			ParserStage{Pos: at(1, 52), Kind: ParserLogfmt},
+		}}},
+	})
+}
+
+const wantStage = `expected a stage (json, logfmt, regexp, a label filter, or an aggregation)`
+
+var stageErrorCases = []errCase{
+	{`{service="api"} | foo`, `1:19: ` + wantStage + `, got identifier "foo"`},
+	{`{service="api"} | status`, `1:19: ` + wantStage + `, got identifier "status"`},
+	{`{service="api"} |`, `1:18: ` + wantStage + `, got end of input`},
+	{`{service="api"} | "x"`, `1:19: ` + wantStage + `, got string "x"`},
+	{`{service="api"} | regexp`, `1:25: expected string, got end of input`},
+	{`{service="api"} | regexp "("`, "1:26: invalid regex: error parsing regexp: missing closing ): `(`"},
+	{`{service="api"} | json extra`, `1:24: expected line filter, "|" or end of input, got identifier "extra"`},
+	{`{service="api"} | json = "x"`, `1:24: expected line filter, "|" or end of input, got "="`},
+	{`{service="api"} | status =~ 500`, `1:29: expected string, got number "500"`},
+	{`{service="api"} | status =`, `1:27: expected string, got end of input`},
+	{`{service="api"} |= 500`, `1:20: expected string, got number "500"`},
+	{`{service="api"} |~ "("`, "1:20: invalid regex: error parsing regexp: missing closing ): `(`"},
+	{`{service="api"} | level =~ "warn"`, `1:25: level does not support =~`},
+	{`{service="api"} | level = "warnn"`, `1:27: unknown level "warnn"`},
+	{`{service="api"} | level >= 4`, `1:28: expected string, got number "4"`},
+}
+
+func TestParseStageErrors(t *testing.T) {
+	runErrCases(t, stageErrorCases)
+}
+
 func TestErrorFormat(t *testing.T) {
 	if got := (&Error{Pos: at(1, 17), Msg: "x"}).Error(); got != "1:17: x" {
 		t.Errorf("Error() = %q, want %q", got, "1:17: x")
