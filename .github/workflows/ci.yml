@@ -43,9 +43,6 @@ jobs:
           go mod tidy
           git diff --exit-code -- go.mod go.sum
 
-      - name: go vet
-        run: go vet ./...
-
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.13.2

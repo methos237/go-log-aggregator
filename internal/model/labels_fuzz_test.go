@@ -26,7 +26,7 @@ func FuzzLabelSetCanonicalIsDecodable(f *testing.F) {
 			ls.Extra = map[string]string{key: value}
 		}
 
-		encoded := ls.AppendCanonical(nil)
+		encoded := ls.canonical(nil)
 		decoded, rest, err := decodeCanonical(encoded)
 		if err != nil {
 			t.Fatalf("encoding of %s is not decodable: %v", ls, err)
@@ -47,7 +47,7 @@ func FuzzLabelSetCanonicalIsDecodable(f *testing.F) {
 	})
 }
 
-// decodeCanonical is the inverse of LabelSet.AppendCanonical. It exists only in
+// decodeCanonical is the inverse of LabelSet.canonical. It exists only in
 // tests: production code never needs to read the encoding back, it only hashes it.
 func decodeCanonical(b []byte) (LabelSet, []byte, error) {
 	var ls LabelSet

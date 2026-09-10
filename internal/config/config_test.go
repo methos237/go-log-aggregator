@@ -26,10 +26,6 @@ func TestLoadDefaults(t *testing.T) {
 	if got, want := cfg.Log.Level, slog.LevelInfo; got != want {
 		t.Errorf("Log.Level = %v, want %v", got, want)
 	}
-	if cfg.Cluster.Enabled {
-		t.Error("clustering should default to off so a single node needs no configuration")
-	}
-
 	// Agent defaults must make a bare `go run ./cmd/agent` reach the compose
 	// stack's collector with no configuration beyond a source, and must
 	// leave a collector process's own defaults untouched by anything
@@ -96,8 +92,6 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv(EnvPrefix+"HTTP_ADDR", ":18080")
 	t.Setenv(EnvPrefix+"INGEST_MAX_RECV_BYTES", "8MB")
 	t.Setenv(EnvPrefix+"SHUTDOWN_TIMEOUT", "45s")
-	t.Setenv(EnvPrefix+"CLUSTER_ENABLED", "true")
-	t.Setenv(EnvPrefix+"CLUSTER_PEERS", "a:7946, b:7946 ,")
 	t.Setenv(EnvPrefix+"LOG_LEVEL", "debug")
 	t.Setenv(EnvPrefix+"AGENT_FILES", "/var/log/app.log, /var/log/other.log ,")
 	t.Setenv(EnvPrefix+"AGENT_CONTAINERS", "web, worker")
@@ -129,9 +123,6 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if got, want := cfg.Node.ShutdownTimeout, 45*time.Second; got != want {
 		t.Errorf("Node.ShutdownTimeout = %s, want %s", got, want)
-	}
-	if got, want := len(cfg.Cluster.Peers), 2; got != want {
-		t.Errorf("Cluster.Peers = %v, want %d entries (blanks trimmed)", cfg.Cluster.Peers, want)
 	}
 	if got, want := cfg.Log.Level, slog.LevelDebug; got != want {
 		t.Errorf("Log.Level = %v, want %v", got, want)
@@ -241,11 +232,6 @@ func TestValidate(t *testing.T) {
 			name:   "min conns above max",
 			mutate: func(c *Config) { c.DB.MinConns, c.DB.MaxConns = 10, 4 },
 			want:   "exceeds max conns",
-		},
-		{
-			name:   "zero virtual nodes with clustering on",
-			mutate: func(c *Config) { c.Cluster.Enabled, c.Cluster.VirtualNodes = true, 0 },
-			want:   "virtual nodes must be at least 1",
 		},
 		{
 			name:   "unknown log format",

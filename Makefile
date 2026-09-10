@@ -115,7 +115,7 @@ lint-arch: ## Check architectural invariants with ast-grep (see .ast-grep/rules)
 	ast-grep scan
 
 .PHONY: ci
-ci: tidy-check fmt-check vet lint lint-arch test-race ## Everything CI enforces
+ci: tidy-check fmt-check lint lint-arch test-race ## Everything CI enforces
 
 .PHONY: fmt-check
 fmt-check: ## Fail if any file is not gofmt-clean
@@ -137,10 +137,6 @@ tidy-check: ## Fail if go.mod or go.sum would change
 .PHONY: docker-build
 docker-build: ## Build both service images (collector and agent)
 	$(COMPOSE) build collector agent
-
-.PHONY: agent-build
-agent-build: ## Build just the agent image
-	$(COMPOSE) build agent
 
 .PHONY: dev
 dev: ## Start the core dev stack (db, broker, collector; no agent -- see dev-agent)

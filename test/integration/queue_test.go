@@ -47,7 +47,7 @@ func TestPublishToAFullStreamClassifiesAsOverloaded(t *testing.T) {
 
 	var lastErr error
 	for i := 0; i < 200 && lastErr == nil; i++ {
-		_, lastErr = q.Publish(ctx, subject, payload)
+		lastErr = q.Publish(ctx, subject, payload)
 	}
 
 	require.Error(t, lastErr, "the stream never filled up, so nothing was classified")
@@ -82,7 +82,7 @@ func TestPublishOversizedPayloadClassifiesAsTooLarge(t *testing.T) {
 	require.Positive(t, q.MaxPayload(), "broker did not advertise a max payload")
 	oversized := make([]byte, q.MaxPayload()+1)
 
-	_, err = q.Publish(ctx, q.Subject("test", "oversized"), oversized)
+	err = q.Publish(ctx, q.Subject("test", "oversized"), oversized)
 	require.Error(t, err, "the broker accepted a payload above its own limit")
 	require.ErrorIs(t, err, queue.ErrTooLarge, "got %v", err)
 }

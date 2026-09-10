@@ -43,9 +43,6 @@ func New(cfg config.HTTP, health *observability.Health, log *slog.Logger) *Serve
 	}
 }
 
-// Addr reports the configured listen address.
-func (s *Server) Addr() string { return s.srv.Addr }
-
 // Handler exposes the routed handler for tests without binding a port.
 func (s *Server) Handler() http.Handler { return s.srv.Handler }
 

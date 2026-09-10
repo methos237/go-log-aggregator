@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -1158,54 +1157,17 @@ func TestShipper_IndependentDelayTimers(t *testing.T) {
 	waitForRun(t, done, 2*time.Second)
 }
 
-// TestSortedAccumIDsIsDeterministic covers the actual ordering guarantee: a
-// flush touching several accumulators emits them in ascending StreamID order,
-// not in Go's randomized map iteration order.
-//
-// This is asserted directly on the helper rather than through the flush timer.
-// Driving it through the timer looked like a stronger test and was a flakier
-// one: the accumulators are created as addLine processes each line, so their
-// deadlines differ by however long that takes, and under load a sweep can fire
-// after the first deadline but before the last. The batches then come out in
-// deadline order across two sweeps, which is correct behavior that the ordering
-// assertion cannot distinguish from the bug it was written to catch. The sort is
-// the part that is deterministic, so the sort is what gets asserted; that all
-// due accumulators eventually flush is covered separately below.
-func TestSortedAccumIDsIsDeterministic(t *testing.T) {
-	labelSets := []model.LabelSet{
-		{Service: "svc-1", Host: "host", Env: "test"},
-		{Service: "svc-2", Host: "host", Env: "test"},
-		{Service: "svc-3", Host: "host", Env: "test"},
-		{Service: "svc-4", Host: "host", Env: "test"},
-	}
-
-	want := make([]model.StreamID, 0, len(labelSets))
-	accums := make(map[model.StreamID]*accumulator, len(labelSets))
-	for _, ls := range labelSets {
-		accums[ls.ID()] = &accumulator{labels: ls}
-		want = append(want, ls.ID())
-	}
-	sort.Slice(want, func(i, j int) bool { return want[i] < want[j] })
-
-	// Repeated because map iteration order is randomized per range, so a single
-	// pass could match by luck.
-	for i := 0; i < 50; i++ {
-		got := sortedAccumIDs(accums)
-		if len(got) != len(want) {
-			t.Fatalf("got %d ids, want %d", len(got), len(want))
-		}
-		for j := range got {
-			if got[j] != want[j] {
-				t.Fatalf("pass %d: id %d = %d, want %d — order must not depend on map iteration", i, j, got[j], want[j])
-			}
-		}
-	}
-}
-
 // TestShipper_TimerSweepFlushesEveryDueAccumulator confirms the delay trigger
 // eventually ships every stream's partial batch, with none lost or merged.
-// Ordering is deliberately not asserted here — see
-// TestSortedAccumIDsIsDeterministic for why.
+//
+// Ordering is deliberately not asserted here. Driving it through the timer
+// looked like a stronger test and was a flakier one: the accumulators are
+// created as addLine processes each line, so their deadlines differ by however
+// long that takes, and under load a sweep can fire after the first deadline but
+// before the last. The batches then come out in deadline order across two
+// sweeps, which is correct behavior that an ordering assertion cannot
+// distinguish from a bug. The sort itself is slices.Sorted(maps.Keys(...)),
+// which needs no test of its own.
 func TestShipper_TimerSweepFlushesEveryDueAccumulator(t *testing.T) {
 	stub := &stubServer{}
 	addr, _ := startStubServer(t, stub, "127.0.0.1:0")
@@ -1521,9 +1483,9 @@ func TestShipper_OverloadedDemotesNewerOutstanding(t *testing.T) {
 	b2 := makeBatch("b2", "two")
 	b3 := makeBatch("b3", "three")
 	s.pendingAcks = []outstanding{
-		{batch: b1, recordCount: 1, sourceCursors: map[string]Cursor{"app.log": cur1}},
-		{batch: b2, recordCount: 1, sourceCursors: map[string]Cursor{"app.log": cur2}},
-		{batch: b3, recordCount: 1, sourceCursors: map[string]Cursor{"app.log": cur3}},
+		{batch: b1, sourceCursors: map[string]Cursor{"app.log": cur1}},
+		{batch: b2, sourceCursors: map[string]Cursor{"app.log": cur2}},
+		{batch: b3, sourceCursors: map[string]Cursor{"app.log": cur3}},
 	}
 
 	// OVERLOADED on the first outstanding batch.

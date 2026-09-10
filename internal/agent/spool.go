@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/jamespolk/go-log-aggregator/internal/observability"
@@ -193,7 +194,7 @@ type Spool struct {
 // A missing directory is created and treated as an empty spool, not an
 // error: a first run has no buffered data. An existing directory is fully
 // adopted — segments are sorted, the persisted read cursor is applied, the
-// tail segment's framing is verified, and Len/Bytes are recomputed from what
+// tail segment's framing is verified, and Len is recomputed from what
 // survives — because forgetting a directory's contents on restart would
 // silently drop everything an outage forced onto disk.
 func NewSpool(cfg SpoolConfig) (*Spool, error) {
@@ -422,7 +423,7 @@ func (s *Spool) openNewTailLocked() error {
 	}
 
 	seq := s.nextSeq
-	path := s.segmentPath(seq)
+	path := filepath.Join(s.dir, segmentFileName(seq))
 	// O_EXCL: nextSeq must never collide with a segment already on disk. If it
 	// somehow did, overwriting it would silently destroy unreleased entries.
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_EXCL|os.O_APPEND, 0o600)
@@ -457,7 +458,7 @@ func (s *Spool) reopenTailLocked() error {
 // currently writing to when there is only one, and evicting the file a
 // write is in flight to would corrupt the open handle's bookkeeping, not
 // just lose data. In that pathological case (a single entry, or MaxBytes
-// configured smaller than SegmentBytes) Bytes briefly exceeds MaxBytes
+// configured smaller than SegmentBytes) the on-disk total briefly exceeds MaxBytes
 // rather than the spool refusing the write; stalling the reader instead is
 // the one outcome this package exists to avoid.
 //
@@ -487,17 +488,16 @@ func (s *Spool) enforceMaxBytesLocked() int {
 	return evicted
 }
 
+// totalBytesLocked counts the whole file size of segments[0] even though part
+// of it may already be released: that part still occupies disk space until the
+// segment is fully consumed and deleted, and MaxBytes bounds actual disk usage,
+// not an accounting fiction of what is logically still pending.
 func (s *Spool) totalBytesLocked() int64 {
 	var total int64
 	for _, seg := range s.segments {
 		total += seg.bytes
 	}
 	return total
-}
-
-// segmentPath returns the on-disk path for a segment sequence number.
-func (s *Spool) segmentPath(seq uint64) string {
-	return filepath.Join(s.dir, segmentFileName(seq))
 }
 
 // Peek returns the oldest payload without removing it. Calling it again
@@ -523,7 +523,7 @@ func (s *Spool) Peek() ([]byte, bool, error) {
 // This never encounters a torn or corrupt entry the way recovery's scan
 // must: Append only ever completes one whole entry write before returning,
 // under the same lock this method runs under, and recovery has already
-// discarded anything torn or corrupt before Len/Bytes were ever computed
+// discarded anything torn or corrupt before Len was ever computed
 // from a segment's byte count. A checksum failure here would mean the
 // bookkeeping in this struct disagrees with what is actually on disk, which
 // is a bug in this package, not a fact about the data — hence the error
@@ -643,7 +643,7 @@ func (s *Spool) Release() error {
 	// Unlocked before the write: the only potentially slow step here is the
 	// fsync inside a durable persist, and holding the mutex across it would
 	// stall a concurrent Append behind however long the disk takes, the same
-	// reasoning writeAtomic's caller in checkpoint.go already follows. Nothing
+	// reasoning CheckpointStore.Commit already follows. Nothing
 	// below reads s.* again, so releasing the lock here is safe.
 	s.mu.Unlock()
 
@@ -651,10 +651,7 @@ func (s *Spool) Release() error {
 	if err != nil {
 		return err
 	}
-	if durable {
-		return writeAtomic(cursorPath, data)
-	}
-	return writeCursorCheap(cursorPath, data)
+	return writeAtomic(cursorPath, data, durable)
 }
 
 // pendingCursorLocked returns the (segment, offset) this Spool's state
@@ -680,18 +677,6 @@ func (s *Spool) Len() int {
 	return total - s.consumedEntries
 }
 
-// Bytes reports bytes currently on disk across every live segment.
-//
-// This counts the whole file size of segments[0] even though part of it may
-// already be released: that part still occupies disk space until the
-// segment is fully consumed and deleted, and MaxBytes bounds actual disk
-// usage, not an accounting fiction of what is logically still pending.
-func (s *Spool) Bytes() int64 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.totalBytesLocked()
-}
-
 // Close persists the read cursor durably and releases the open tail handle.
 // It is safe to call more than once.
 func (s *Spool) Close() error {
@@ -709,7 +694,7 @@ func (s *Spool) Close() error {
 	if err != nil {
 		return errors.Join(closeErr, err)
 	}
-	if err := writeAtomic(cursorPath, data); err != nil {
+	if err := writeAtomic(cursorPath, data, true); err != nil {
 		return errors.Join(closeErr, fmt.Errorf("spool: persist cursor on close: %w", err))
 	}
 	return closeErr
@@ -801,23 +786,13 @@ func segmentFileName(seq uint64) string {
 // or a subdirectory a caller left behind — reports false so recovery can
 // skip it rather than fail.
 func parseSegmentSeq(name string) (uint64, bool) {
-	if len(name) != segmentDigits+len(segmentSuffix) {
+	digits, ok := strings.CutSuffix(name, segmentSuffix)
+	if !ok || len(digits) != segmentDigits {
 		return 0, false
 	}
-	if name[segmentDigits:] != segmentSuffix {
-		return 0, false
-	}
-	digits := name[:segmentDigits]
-	for i := 0; i < len(digits); i++ {
-		if digits[i] < '0' || digits[i] > '9' {
-			return 0, false
-		}
-	}
+	// ParseUint already rejects a sign, underscores and any non-digit.
 	seq, err := strconv.ParseUint(digits, 10, 64)
-	if err != nil {
-		return 0, false
-	}
-	return seq, true
+	return seq, err == nil
 }
 
 // spoolCursorFile is the on-disk shape of the persisted read position,
@@ -871,44 +846,4 @@ func loadCursorFile(path string) (spoolCursorFile, bool, error) {
 		return spoolCursorFile{}, false, nil
 	}
 	return cf, true, nil
-}
-
-// writeCursorCheap persists data to path via the same temp-file-then-rename
-// shape as writeAtomic in checkpoint.go, so a crash mid-write can only ever
-// leave the previous complete cursor file or the new complete one, never a
-// torn one — but it skips both of writeAtomic's fsyncs. That is the "cheap"
-// persist Release uses on most calls: the temp file write and the rename are
-// ordinary buffered operations, a small fraction of the cost of two fsyncs,
-// at the cost of not knowing exactly when the update becomes durable. See
-// cursorDurableInterval for what bounds the resulting replay window, and
-// Release for when a durable persist is forced instead of this one.
-func writeCursorCheap(path string, data []byte) error {
-	dir := filepath.Dir(path)
-
-	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return fmt.Errorf("spool: create temp cursor in %s: %w", dir, err)
-	}
-	tmpPath := tmp.Name()
-
-	renamed := false
-	defer func() {
-		if !renamed {
-			_ = os.Remove(tmpPath)
-		}
-	}()
-
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("spool: write temp cursor: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("spool: close temp cursor: %w", err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("spool: rename cursor into place: %w", err)
-	}
-	renamed = true
-
-	return nil
 }

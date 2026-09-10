@@ -110,7 +110,7 @@ var _ Publisher = (*Conn)(nil)
 // silent data loss. Declaring it in code keeps that decision in one reviewable
 // place.
 //
-// metrics may be nil, which means "build the connection but record nothing".
+// metrics may be nil, which builds unregistered ones.
 //
 //nolint:gocritic // hugeParam: one copy per process; by value keeps it immutable
 func Connect(ctx context.Context, cfg config.Queue, metrics *Metrics, log *slog.Logger) (*Conn, error) {
@@ -118,6 +118,9 @@ func Connect(ctx context.Context, cfg config.Queue, metrics *Metrics, log *slog.
 		log = slog.New(slog.DiscardHandler)
 	}
 	log = log.With(slog.String("component", "queue"))
+	if metrics == nil {
+		metrics = NewMetrics(nil)
+	}
 
 	// Allocated before dialing because the connection-event handlers need to see
 	// this connection's closing flag, and nats.go can fire them during Connect.
@@ -238,22 +241,22 @@ func streamConfig(cfg config.Queue) jetstream.StreamConfig {
 // The wait is the point. Returning before the ack would let the ingest handler
 // tell an agent a batch is safe while it exists only in this process's memory, so
 // a crash would lose data the agent has already dropped from its spool.
-func (c *Conn) Publish(ctx context.Context, subject string, payload []byte) (PubAck, error) {
+func (c *Conn) Publish(ctx context.Context, subject string, payload []byte) error {
 	ctx, cancel := context.WithTimeout(ctx, c.cfg.PublishTimeout)
 	defer cancel()
 
 	started := time.Now()
-	ack, err := c.js.Publish(ctx, subject, payload)
+	_, err := c.js.Publish(ctx, subject, payload)
 	elapsed := time.Since(started)
 
 	if err != nil {
 		c.observePublish(outcomeFailure, elapsed, 0)
 		// Both wrapped: the kind is what the caller switches on, the original is what
 		// makes the log line diagnosable.
-		return PubAck{}, fmt.Errorf("publish to %s: %w: %w", subject, classify(err), err)
+		return fmt.Errorf("publish to %s: %w: %w", subject, classify(err), err)
 	}
 	c.observePublish(outcomeSuccess, elapsed, len(payload))
-	return PubAck{Stream: ack.Stream, Sequence: ack.Sequence, Duplicate: ack.Duplicate}, nil
+	return nil
 }
 
 // MaxPayload is the largest message this broker will accept, as it reported during
@@ -280,23 +283,18 @@ func (c *Conn) Subject(env, service string) string {
 // while a deferred close also covers the startup paths that fail before that
 // ordering exists. A second call must not report an error for a connection that is
 // already correctly closed.
-func (c *Conn) Close(ctx context.Context) error {
-	var err error
-	closed := false
+func (c *Conn) Close(ctx context.Context) (err error) {
 	c.closeOnce.Do(func() {
-		closed = true
 		c.closing.Store(true)
 		err = c.nc.FlushWithContext(ctx)
 		c.nc.Close()
+		if err != nil {
+			err = fmt.Errorf("flush queue on close: %w", err)
+			return
+		}
+		c.log.Info("queue closed")
 	})
-	if !closed {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("flush queue on close: %w", err)
-	}
-	c.log.Info("queue closed")
-	return nil
+	return err
 }
 
 // HealthCheck reports whether this node can reach JetStream.
@@ -318,9 +316,6 @@ func HealthCheck(c *Conn) observability.CheckFunc {
 }
 
 func (c *Conn) observePublish(outcome string, took time.Duration, payloadBytes int) {
-	if c.metrics == nil {
-		return
-	}
 	c.metrics.PublishDuration.WithLabelValues(outcome).Observe(took.Seconds())
 	if payloadBytes > 0 {
 		c.metrics.PublishBytes.Add(float64(payloadBytes))

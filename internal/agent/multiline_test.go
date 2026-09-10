@@ -1,10 +1,12 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -181,21 +183,21 @@ func TestJoinerNilContinuationPassesThrough(t *testing.T) {
 
 func TestJoinerMaxBytesSplits(t *testing.T) {
 	re := regexp.MustCompile(`^\s`)
-	const maxBytes = 20
-	j := mustJoiner(t, MultilineConfig{Continuation: re, MaxBytes: maxBytes})
+	j := mustJoiner(t, MultilineConfig{Continuation: re})
 
 	in := make(chan Line, 8)
 	out := make(chan Line, 8)
 	startJoiner(t, j, in, out)
 
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	// "head" (4) + " 12345678" (9, with separator) fits in 20. The next
-	// continuation line would push it to 4+1+9+1+9=24, over budget, so it must
-	// start a new record instead of growing this one past the bound.
+	// A head line already at the collector's limit (the assembler bounds every
+	// line there) leaves no room for a separator plus any continuation, so the
+	// next continuation line must start a new record instead of growing this
+	// one past the bound.
+	head := bytes.Repeat([]byte("h"), model.MaxMessageLen)
 	sent := []Line{
-		{Source: "app", Time: base, Bytes: []byte("head"), Cursor: Cursor{Start: 0, Offset: 5}},
-		{Source: "app", Time: base, Bytes: []byte(" 12345678"), Cursor: Cursor{Start: 5, Offset: 15}},
-		{Source: "app", Time: base, Bytes: []byte(" 87654321"), Cursor: Cursor{Start: 15, Offset: 25}},
+		{Source: "app", Time: base, Bytes: head, Cursor: Cursor{Start: 0, Offset: int64(len(head)) + 1}},
+		{Source: "app", Time: base, Bytes: []byte(" 87654321"), Cursor: Cursor{Start: int64(len(head)) + 1, Offset: int64(len(head)) + 11}},
 	}
 	for _, l := range sent {
 		in <- l
@@ -205,27 +207,14 @@ func TestJoinerMaxBytesSplits(t *testing.T) {
 	first := recvLine(t, out, time.Second)
 	second := recvLine(t, out, time.Second)
 
-	if len(first.Bytes) > maxBytes {
-		t.Errorf("first record is %d bytes, exceeds MaxBytes %d", len(first.Bytes), maxBytes)
+	if len(first.Bytes) > model.MaxMessageLen {
+		t.Errorf("first record is %d bytes, exceeds MaxMessageLen %d", len(first.Bytes), model.MaxMessageLen)
 	}
-	if len(second.Bytes) > maxBytes {
-		t.Errorf("second record is %d bytes, exceeds MaxBytes %d", len(second.Bytes), maxBytes)
-	}
-	if string(first.Bytes) != "head\n 12345678" {
-		t.Errorf("first record = %q, want %q", first.Bytes, "head\n 12345678")
+	if !bytes.Equal(first.Bytes, head) {
+		t.Errorf("first record = %d bytes of %q..., want the head line alone", len(first.Bytes), first.Bytes[:1])
 	}
 	if string(second.Bytes) != " 87654321" {
 		t.Errorf("second record (the offending line) = %q, want %q", second.Bytes, " 87654321")
-	}
-
-	// No bytes lost: every byte sent shows up in exactly one emitted record.
-	totalIn := 0
-	for _, l := range sent {
-		totalIn += len(l.Bytes)
-	}
-	totalOut := len(first.Bytes) + len(second.Bytes) - 1 // minus the joining '\n' in "first"
-	if totalOut != totalIn {
-		t.Errorf("total emitted payload bytes = %d, want %d (input bytes, none lost)", totalOut, totalIn)
 	}
 
 	if got := counterValue(t, j.metrics.MultilineMaxBytesSplits); got != 1 {
@@ -235,10 +224,9 @@ func TestJoinerMaxBytesSplits(t *testing.T) {
 
 func TestJoinerMaxLinesSplits(t *testing.T) {
 	re := regexp.MustCompile(`^\s`)
-	const maxLines = 3
-	j := mustJoiner(t, MultilineConfig{Continuation: re, MaxLines: maxLines})
+	j := mustJoiner(t, MultilineConfig{Continuation: re})
 
-	in := make(chan Line, 16)
+	in := make(chan Line, defaultMaxLines+8)
 	out := make(chan Line, 16)
 	startJoiner(t, j, in, out)
 
@@ -251,17 +239,18 @@ func TestJoinerMaxLinesSplits(t *testing.T) {
 	}
 
 	send("app", "head") // record 1, line 1
-	send("app", " a")   // record 1, line 2
-	send("app", " b")   // record 1, line 3 (at MaxLines)
-	send("app", " c")   // would be line 4: must start a new record instead
-	send("app", " d")   // record 2, line 2
+	for i := 1; i < defaultMaxLines; i++ {
+		send("app", " a") // record 1, lines 2..defaultMaxLines
+	}
+	send("app", " c") // would be line defaultMaxLines+1: must start a new record instead
+	send("app", " d") // record 2, line 2
 	close(in)
 
 	first := recvLine(t, out, time.Second)
 	second := recvLine(t, out, time.Second)
 
-	if string(first.Bytes) != "head\n a\n b" {
-		t.Errorf("first record = %q, want %q", first.Bytes, "head\n a\n b")
+	if want := "head" + strings.Repeat("\n a", defaultMaxLines-1); string(first.Bytes) != want {
+		t.Errorf("first record has %d lines, want %d", strings.Count(string(first.Bytes), "\n")+1, defaultMaxLines)
 	}
 	if string(second.Bytes) != " c\n d" {
 		t.Errorf("second record = %q, want %q", second.Bytes, " c\n d")
@@ -429,9 +418,6 @@ func TestNewJoinerValidation(t *testing.T) {
 		cfg  MultilineConfig
 	}{
 		{name: "negative flush timeout", cfg: MultilineConfig{FlushTimeout: -time.Second}},
-		{name: "negative max lines", cfg: MultilineConfig{MaxLines: -1}},
-		{name: "negative max bytes", cfg: MultilineConfig{MaxBytes: -1}},
-		{name: "max bytes exceeds collector limit", cfg: MultilineConfig{MaxBytes: model.MaxMessageLen + 1}},
 	}
 
 	for _, tt := range tests {
@@ -450,11 +436,5 @@ func TestNewJoinerDefaults(t *testing.T) {
 	}
 	if j.flushTimeout != defaultFlushTimeout {
 		t.Errorf("flushTimeout = %s, want default %s", j.flushTimeout, defaultFlushTimeout)
-	}
-	if j.maxLines != defaultMaxLines {
-		t.Errorf("maxLines = %d, want default %d", j.maxLines, defaultMaxLines)
-	}
-	if j.maxBytes != model.MaxMessageLen {
-		t.Errorf("maxBytes = %d, want default %d", j.maxBytes, model.MaxMessageLen)
 	}
 }

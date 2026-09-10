@@ -33,7 +33,6 @@ type Consumer struct {
 
 	log     *slog.Logger
 	metrics *Metrics
-	now     nowFunc
 
 	sub queue.Subscription
 
@@ -83,7 +82,6 @@ func NewConsumer(q Consumable, w Submitter, metrics *Metrics, log *slog.Logger) 
 		writer:  w,
 		log:     log.With(slog.String("component", "consumer")),
 		metrics: metrics,
-		now:     time.Now,
 	}, nil
 }
 
@@ -224,7 +222,7 @@ func (c *Consumer) handle(ctx context.Context, msg queue.Message) {
 		return
 	}
 
-	now := c.now()
+	now := time.Now()
 	stream := model.NewStream(labels, now)
 	records := make([]model.LogRecord, 0, len(batch.GetRecords()))
 	for _, pb := range batch.GetRecords() {

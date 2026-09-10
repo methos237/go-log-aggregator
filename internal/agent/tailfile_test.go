@@ -746,7 +746,7 @@ func TestTailSource_SlowConsumerNoDropsAcrossRotation(t *testing.T) {
 // emit built its Cursor without Head, so the running process detected a
 // truncate-and-rewrite correctly (resolveState tracks the fingerprint in a
 // local) while the value never reached the checkpoint. Everything looked right
-// until a restart, at which point the resumed Head was always zero, Comparable
+// until a restart, at which point the resumed Head was always zero, Differs
 // always reported false, and the rewrite-while-down case silently went
 // undetected. Asserting the fingerprint inside the process is not enough — the
 // assertion has to follow the cursor out through the store, which is the only
@@ -769,11 +769,11 @@ func TestTailSource_EmittedCursorCarriesHead(t *testing.T) {
 	out, _, _ := newTailTest(t, TailConfig{Path: path}, 4)
 
 	first := waitLine(t, out, time.Second)
-	if !first.Cursor.Head.Matches(want) {
+	if first.Cursor.Head != want {
 		t.Errorf("first line Cursor.Head = %+v, want %+v", first.Cursor.Head, want)
 	}
 	second := waitLine(t, out, time.Second)
-	if !second.Cursor.Head.Matches(want) {
+	if second.Cursor.Head != want {
 		t.Errorf("second line Cursor.Head = %+v, want %+v", second.Cursor.Head, want)
 	}
 
@@ -794,7 +794,7 @@ func TestTailSource_EmittedCursorCarriesHead(t *testing.T) {
 	if !ok {
 		t.Fatal("Get() found no cursor for the source")
 	}
-	if !got.Head.Matches(want) {
+	if got.Head != want {
 		t.Errorf("Head did not survive the checkpoint round trip: got %+v, want %+v", got.Head, want)
 	}
 	if got.Head.IsZero() {

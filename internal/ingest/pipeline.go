@@ -60,7 +60,6 @@ type pipeline struct {
 	in      chan *job
 	log     *slog.Logger
 	metrics *Metrics
-	now     nowFunc
 
 	// depth is queued records rather than queued jobs, matching the writer's gauge
 	// so both ends of the pipeline are measured in the same unit.
@@ -75,7 +74,7 @@ type pipeline struct {
 }
 
 //nolint:gocritic // hugeParam: one copy per process; by value keeps it immutable
-func newPipeline(ctx context.Context, cfg config.Ingest, q queue.Publisher, metrics *Metrics, log *slog.Logger, now nowFunc) *pipeline {
+func newPipeline(ctx context.Context, cfg config.Ingest, q queue.Publisher, metrics *Metrics, log *slog.Logger) *pipeline {
 	// Clamped rather than trusted. Config validation already rejects a
 	// non-positive count, but a pipeline with no publishers accepts batches and
 	// never drains them, which presents as every agent hanging — much worse to
@@ -88,7 +87,6 @@ func newPipeline(ctx context.Context, cfg config.Ingest, q queue.Publisher, metr
 		in:      make(chan *job, cfg.BufferSize),
 		log:     log,
 		metrics: metrics,
-		now:     now,
 		workers: workers,
 		quit:    make(chan struct{}),
 	}
@@ -119,7 +117,7 @@ func (p *pipeline) submit(ctx context.Context, j *job) error {
 		return errPipelineClosed
 	}
 
-	j.enqueued = p.now()
+	j.enqueued = time.Now()
 	j.reply = make(chan error, 1)
 
 	p.addDepth(j.records)
@@ -169,8 +167,7 @@ func (p *pipeline) run(j *job) {
 	// pubCtx, not the handler's context: the publish is bounded by the queue's own
 	// publish timeout, and a canceled client must not abort a batch that is already
 	// halfway to being durable.
-	_, err := p.queue.Publish(p.pubCtx, j.subject, j.payload)
-	j.reply <- err
+	j.reply <- p.queue.Publish(p.pubCtx, j.subject, j.payload)
 }
 
 func (p *pipeline) drain(log *slog.Logger) {
@@ -221,8 +218,5 @@ func (p *pipeline) addDepth(delta int) {
 }
 
 func (p *pipeline) observeWait(j *job) {
-	if j.enqueued.IsZero() {
-		return
-	}
-	p.metrics.QueueWait.WithLabelValues(observability.QueueIngest).Observe(p.now().Sub(j.enqueued).Seconds())
+	p.metrics.QueueWait.WithLabelValues(observability.QueueIngest).Observe(time.Since(j.enqueued).Seconds())
 }

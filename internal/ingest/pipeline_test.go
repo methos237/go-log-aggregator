@@ -20,7 +20,7 @@ func newPipe(t *testing.T, pub *queuetest.Publisher, metrics *Metrics, buffer, w
 	t.Helper()
 
 	cfg := config.Ingest{BufferSize: buffer, PublishWorkers: workers}
-	p := newPipeline(context.Background(), cfg, pub, metrics, slog.New(slog.DiscardHandler), time.Now)
+	p := newPipeline(context.Background(), cfg, pub, metrics, slog.New(slog.DiscardHandler))
 	p.start()
 
 	t.Cleanup(func() {
@@ -151,7 +151,7 @@ func TestPipelineRefusesAfterClose(t *testing.T) {
 
 	pub := &queuetest.Publisher{}
 	cfg := config.Ingest{BufferSize: 4, PublishWorkers: 1}
-	p := newPipeline(context.Background(), cfg, pub, NewMetrics(nil), slog.New(slog.DiscardHandler), time.Now)
+	p := newPipeline(context.Background(), cfg, pub, NewMetrics(nil), slog.New(slog.DiscardHandler))
 	p.start()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -188,15 +188,15 @@ func TestPipelineDrainsQueuedJobsOnClose(t *testing.T) {
 	})
 
 	p := newPipeline(context.Background(), config.Ingest{BufferSize: 4, PublishWorkers: 1}, pub,
-		NewMetrics(nil), slog.New(slog.DiscardHandler), time.Now)
+		NewMetrics(nil), slog.New(slog.DiscardHandler))
 	p.start()
 
 	// One job holds the publisher; two more sit in the buffer with no handler
 	// waiting on them, which is the state a hard client disconnect leaves behind.
 	go func() { _ = p.submit(context.Background(), &job{records: 1}) }()
 	<-inPublish
-	p.in <- &job{records: 1, reply: make(chan error, 1)}
-	p.in <- &job{records: 1, reply: make(chan error, 1)}
+	p.in <- &job{records: 1, enqueued: time.Now(), reply: make(chan error, 1)}
+	p.in <- &job{records: 1, enqueued: time.Now(), reply: make(chan error, 1)}
 
 	closed := make(chan error, 1)
 	go func() {

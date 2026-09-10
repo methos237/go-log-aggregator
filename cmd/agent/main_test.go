@@ -309,7 +309,6 @@ func TestPipelineEndToEnd(t *testing.T) {
 		Checkpoint:      checkpoint,
 		Extractor:       extractor,
 		Labels:          func(source string) (model.LabelSet, bool) { ls, ok := labels[source]; return ls, ok },
-		DefaultLevel:    model.LevelUnspecified,
 		MaxBatchRecords: cfg.BatchRecords,
 		MaxBatchBytes:   cfg.BatchBytes,
 		MaxBatchDelay:   cfg.BatchDelay,
@@ -325,18 +324,18 @@ func TestPipelineEndToEnd(t *testing.T) {
 	adminSrv := observability.NewAdminServer(config.Admin{Addr: "127.0.0.1:0"}, observability.NewMetrics("e2e-test"), discardLogger())
 
 	deps := &pipelineDeps{
-		cfg:           &config.Config{Node: config.Node{ShutdownTimeout: 5 * time.Second}},
-		log:           discardLogger(),
-		sources:       sources,
-		joiner:        joiner,
-		shipper:       shipper,
-		spool:         spool,
-		checkpoint:    checkpoint,
-		adminSrv:      adminSrv,
-		registerer:    nil,
-		lines:         make(chan agent.Line, cfg.QueueCapacity),
-		linesToJoiner: make(chan agent.Line, cfg.QueueCapacity),
-		joined:        make(chan agent.Line, cfg.QueueCapacity),
+		cfg: &config.Config{
+			Node:  config.Node{ShutdownTimeout: 5 * time.Second},
+			Agent: config.Agent{QueueCapacity: cfg.QueueCapacity},
+		},
+		log:        discardLogger(),
+		sources:    sources,
+		joiner:     joiner,
+		shipper:    shipper,
+		spool:      spool,
+		checkpoint: checkpoint,
+		adminSrv:   adminSrv,
+		registerer: nil,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
@@ -19,16 +18,11 @@ import (
 	"github.com/jamespolk/go-log-aggregator/migrations"
 )
 
-// ErrNoChange means the schema was already at the target version. Callers
-// generally treat it as success; it is exported so they can tell "nothing to do"
-// from "migrated".
-var ErrNoChange = migrate.ErrNoChange
-
 // Migrate applies every pending migration.
 //
 // Safe to call from every collector at startup: golang-migrate takes a Postgres
 // advisory lock, so with N replicas booting together one applies the migrations
-// and the rest block, then observe ErrNoChange. That is why config.DB
+// and the rest block, then observe migrate.ErrNoChange. That is why config.DB
 // MigrateOnStart can default to true without a separate migration job.
 func Migrate(ctx context.Context, dsn string, log *slog.Logger) error {
 	return withMigrator(ctx, dsn, log, func(m *migrate.Migrate) error {
@@ -119,7 +113,8 @@ func withMigrator(ctx context.Context, dsn string, log *slog.Logger, fn func(*mi
 	if err != nil {
 		return fmt.Errorf("create migrator: %w", err)
 	}
-	m.Log = migrateLogger{log: log}
+	// m.Log is left nil: golang-migrate skips its per-step output entirely when
+	// unset, and the from/to version log line in Migrate already says what happened.
 
 	// Each migration file is sent as one multi-statement query, which Postgres
 	// wraps in an implicit transaction, so a failure rolls the whole file back.
@@ -136,17 +131,3 @@ func withMigrator(ctx context.Context, dsn string, log *slog.Logger, fn func(*mi
 	}
 	return nil
 }
-
-// migrateLogger bridges golang-migrate's logging interface to slog so migration
-// output lands in the same structured stream as everything else.
-type migrateLogger struct{ log *slog.Logger }
-
-func (l migrateLogger) Printf(format string, v ...any) {
-	// golang-migrate terminates its messages with a newline, which would end up
-	// embedded in the JSON message field.
-	l.log.Debug("migrate: " + strings.TrimRight(fmt.Sprintf(format, v...), "\n"))
-}
-
-// Verbose off: golang-migrate's verbose output is per-statement noise that
-// duplicates what the from/to version log line already says.
-func (l migrateLogger) Verbose() bool { return false }

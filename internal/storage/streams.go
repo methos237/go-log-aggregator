@@ -117,15 +117,11 @@ func upsertStreams(ctx context.Context, tx pgx.Tx, streams []model.Stream) error
 	)
 
 	for i, s := range streams {
-		encoded, err := encodeLabels(s.Labels)
-		if err != nil {
-			return fmt.Errorf("encode labels for stream %d: %w", s.ID, err)
-		}
 		ids[i] = int64(s.ID)
 		services[i] = s.Labels.Service
 		hosts[i] = s.Labels.Host
 		envs[i] = s.Labels.Env
-		labels[i] = encoded
+		labels[i] = encodeLabels(s.Labels)
 		firstSeen[i] = s.FirstSeen
 		lastSeen[i] = s.LastSeen
 	}
@@ -144,26 +140,20 @@ func upsertStreams(ctx context.Context, tx pgx.Tx, streams []model.Stream) error
 // containment in generated queries is simpler when there is no null case.
 // encoding/json sorts map keys, so the same label set always produces identical
 // bytes, which keeps the stored value stable across rewrites.
-func encodeLabels(ls model.LabelSet) (string, error) {
+func encodeLabels(ls model.LabelSet) string {
 	if len(ls.Extra) == 0 {
-		return "{}", nil
+		return "{}"
 	}
-	encoded, err := marshalFields(ls.Extra)
-	if err != nil {
-		return "", err
-	}
-	return string(encoded), nil
+	return string(marshalFields(ls.Extra))
 }
 
 // marshalFields renders a string map as a JSON object for a JSONB column.
 //
 // Shared by the streams upsert and the per-record fields column so both produce
 // byte-identical encodings for the same map. encoding/json sorts map keys, which is
-// what makes that guarantee hold.
-func marshalFields(m map[string]string) ([]byte, error) {
-	encoded, err := json.Marshal(m)
-	if err != nil {
-		return nil, fmt.Errorf("marshal json object of %d keys: %w", len(m), err)
-	}
-	return encoded, nil
+// what makes that guarantee hold. Marshaling a map[string]string cannot fail
+// (invalid UTF-8 is coerced, not rejected), so the error is discarded.
+func marshalFields(m map[string]string) []byte {
+	encoded, _ := json.Marshal(m)
+	return encoded
 }

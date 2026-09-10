@@ -7,6 +7,27 @@
 # well-known password.
 name: logagg
 
+# Shared by the two images built from this repo's Dockerfile. Anchors, not
+# `extends`: the merge key keeps each service's own keys visible in place.
+x-build-args: &build-args
+  VERSION: ${VERSION:-dev}
+  COMMIT: ${COMMIT:-none}
+  BUILD_DATE: ${BUILD_DATE:-unknown}
+
+# Hardening that costs nothing here and catches accidental writes to the image
+# filesystem: distroless, non-root, no extra capabilities. /tmp stays writable
+# for pprof output and anything transient; named volumes are writable regardless
+# of read_only since a mount point is excluded from the read-only root.
+x-hardened: &hardened
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  restart: unless-stopped
+
 services:
   timescaledb:
     # timescale/timescaledb:2.22.1-pg17
@@ -56,10 +77,8 @@ services:
       context: ..
       dockerfile: Dockerfile
       args:
+        <<: *build-args
         BIN: collector
-        VERSION: ${VERSION:-dev}
-        COMMIT: ${COMMIT:-none}
-        BUILD_DATE: ${BUILD_DATE:-unknown}
     environment:
       LOGAGG_ENV: dev
       LOGAGG_LOG_LEVEL: ${LOGAGG_LOG_LEVEL:-info}
@@ -73,9 +92,6 @@ services:
       # a laptop sets the three LOGAGG_INGEST_TLS_* files instead — see `make certs`.
       LOGAGG_INGEST_ADDR: ":9095"
       LOGAGG_INGEST_ALLOW_PLAINTEXT: "true"
-      # Phase 5 flips this on; until then each replica runs standalone.
-      LOGAGG_CLUSTER_ENABLED: "false"
-      LOGAGG_CLUSTER_PEERS: collector:7946
     ports:
       # Fixed mappings, which means this file supports exactly one collector.
       # Compose assigns ports from a range in nondeterministic order, so ranges
@@ -98,16 +114,7 @@ services:
       timeout: 3s
       retries: 3
       start_period: 10s
-    # Hardening that costs nothing here and catches accidental writes to the
-    # image filesystem. /tmp stays writable for pprof output.
-    read_only: true
-    tmpfs:
-      - /tmp
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    restart: unless-stopped
+    <<: *hardened
 
   # Log sidecar for the agent demo (`make dev-agent`). Continuously appends
   # numbered, timestamped lines to a shared log file and rotates it on a
@@ -142,17 +149,15 @@ services:
       context: ..
       dockerfile: Dockerfile
       args:
+        <<: *build-args
         BIN: agent
-        VERSION: ${VERSION:-dev}
-        COMMIT: ${COMMIT:-none}
-        BUILD_DATE: ${BUILD_DATE:-unknown}
     environment:
-      # Same address family the collector's other in-network clients use
-      # (see LOGAGG_CLUSTER_PEERS above): Compose's embedded DNS resolves the
-      # service name. The collector's dev config runs its ingest listener in
-      # plaintext (LOGAGG_INGEST_ALLOW_PLAINTEXT above), so the agent matches
-      # it here by leaving LOGAGG_AGENT_CERT_FILE/_KEY_FILE/_CA_FILE unset --
-      # all three or none, and "none" is what the server side actually is.
+      # Compose's embedded DNS resolves the collector's service name, so this is
+      # the same address any in-network client would use. The collector's dev
+      # config runs its ingest listener in plaintext
+      # (LOGAGG_INGEST_ALLOW_PLAINTEXT above), so the agent matches it here by
+      # leaving LOGAGG_AGENT_CERT_FILE/_KEY_FILE/_CA_FILE unset -- all three or
+      # none, and "none" is what the server side actually is.
       LOGAGG_AGENT_FILES: /var/log/app/app.log
       LOGAGG_AGENT_INGEST_ADDR: collector:9095
       LOGAGG_AGENT_ENV: dev
@@ -168,18 +173,7 @@ services:
     depends_on:
       collector:
         condition: service_healthy
-    # Same hardening as collector: distroless, non-root, no extra
-    # capabilities. /tmp stays writable for anything transient; the two
-    # named volumes above are writable regardless of read_only since a mount
-    # point is excluded from the read-only root filesystem.
-    read_only: true
-    tmpfs:
-      - /tmp
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    restart: unless-stopped
+    <<: *hardened
 
 volumes:
   timescale-data:

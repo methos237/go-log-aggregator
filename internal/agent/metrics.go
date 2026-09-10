@@ -125,11 +125,11 @@ type Metrics struct {
 
 	// MultilineMaxBytesSplits counts held records the Joiner emitted early
 	// because the next continuation line would have pushed them past
-	// MultilineConfig.MaxBytes. Every byte still ships, split across two
+	// model.MaxMessageLen. Every byte still ships, split across two
 	// records instead of one, so this is not a drop.
 	MultilineMaxBytesSplits prometheus.Counter
 	// MultilineMaxLinesSplits is MultilineMaxBytesSplits' counterpart for
-	// MultilineConfig.MaxLines.
+	// defaultMaxLines.
 	MultilineMaxLinesSplits prometheus.Counter
 	// MultilineTimeoutFlushes counts held records the Joiner emitted because
 	// MultilineConfig.FlushTimeout elapsed with no further continuation line
@@ -183,78 +183,31 @@ type Metrics struct {
 // Metrics, or several Metrics against the same registry.
 func NewMetrics(reg prometheus.Registerer) *Metrics {
 	f := promauto.With(reg)
+	counter := func(name, help string) prometheus.Counter {
+		return f.NewCounter(prometheus.CounterOpts{
+			Namespace: observability.Namespace,
+			Subsystem: agentSubsystem,
+			Name:      name,
+			Help:      help,
+		})
+	}
 
 	m := &Metrics{
-		RotationsDetected: f.NewCounter(prometheus.CounterOpts{
-			Namespace: observability.Namespace,
-			Subsystem: agentSubsystem,
-			Name:      "rotations_detected_total",
-			Help:      "Rename-and-recreate rotations detected and drained without a gap.",
-		}),
-		TruncationsDetected: f.NewCounter(prometheus.CounterOpts{
-			Namespace: observability.Namespace,
-			Subsystem: agentSubsystem,
-			Name:      "truncations_detected_total",
-			Help:      "In-place truncations detected, by size shrink or by a head fingerprint mismatch.",
-		}),
-		GenerationsMissed: f.NewCounter(prometheus.CounterOpts{
-			Namespace: observability.Namespace,
-			Subsystem: agentSubsystem,
-			Name:      "generations_missed_total",
-			Help:      "Rotations discovered only at startup: the checkpointed file no longer exists at the path.",
-		}),
-		RecordsDropped: observability.RecordsDropped(reg),
+		RotationsDetected:   counter("rotations_detected_total", "Rename-and-recreate rotations detected and drained without a gap."),
+		TruncationsDetected: counter("truncations_detected_total", "In-place truncations detected, by size shrink or by a head fingerprint mismatch."),
+		GenerationsMissed:   counter("generations_missed_total", "Rotations discovered only at startup: the checkpointed file no longer exists at the path."),
+		RecordsDropped:      observability.RecordsDropped(reg),
 
-		MultilineMaxBytesSplits: f.NewCounter(prometheus.CounterOpts{
-			Namespace: observability.Namespace,
-			Subsystem: agentSubsystem,
-			Name:      "multiline_max_bytes_splits_total",
-			Help:      "Held records emitted early because the next continuation line would have exceeded MaxBytes.",
-		}),
-		MultilineMaxLinesSplits: f.NewCounter(prometheus.CounterOpts{
-			Namespace: observability.Namespace,
-			Subsystem: agentSubsystem,
-			Name:      "multiline_max_lines_splits_total",
-			Help:      "Held records emitted early because the next continuation line would have exceeded MaxLines.",
-		}),
-		MultilineTimeoutFlushes: f.NewCounter(prometheus.CounterOpts{
-			Namespace: observability.Namespace,
-			Subsystem: agentSubsystem,
-			Name:      "multiline_timeout_flushes_total",
-			Help:      "Held records emitted because FlushTimeout elapsed with no further continuation line.",
-		}),
+		MultilineMaxBytesSplits: counter("multiline_max_bytes_splits_total", "Held records emitted early because the next continuation line would have exceeded MaxBytes."),
+		MultilineMaxLinesSplits: counter("multiline_max_lines_splits_total", "Held records emitted early because the next continuation line would have exceeded MaxLines."),
+		MultilineTimeoutFlushes: counter("multiline_timeout_flushes_total", "Held records emitted because FlushTimeout elapsed with no further continuation line."),
 
-		ExtractRegexMismatches: f.NewCounter(prometheus.CounterOpts{
-			Namespace: observability.Namespace,
-			Subsystem: agentSubsystem,
-			Name:      "extract_regex_mismatches_total",
-			Help:      "Lines the configured extraction pattern did not match.",
-		}),
-		ExtractJSONUnparsed: f.NewCounter(prometheus.CounterOpts{
-			Namespace: observability.Namespace,
-			Subsystem: agentSubsystem,
-			Name:      "extract_json_unparsed_total",
-			Help:      "Lines JSON extraction could not use: not valid JSON, or not a top-level object.",
-		}),
-		ExtractValuesTruncated: f.NewCounter(prometheus.CounterOpts{
-			Namespace: observability.Namespace,
-			Subsystem: agentSubsystem,
-			Name:      "extract_values_truncated_total",
-			Help:      "Field values cut down to the collector's per-value limit and kept.",
-		}),
+		ExtractRegexMismatches: counter("extract_regex_mismatches_total", "Lines the configured extraction pattern did not match."),
+		ExtractJSONUnparsed:    counter("extract_json_unparsed_total", "Lines JSON extraction could not use: not valid JSON, or not a top-level object."),
+		ExtractValuesTruncated: counter("extract_values_truncated_total", "Field values cut down to the collector's per-value limit and kept."),
 
-		DockerTimestampParseFailures: f.NewCounter(prometheus.CounterOpts{
-			Namespace: observability.Namespace,
-			Subsystem: agentSubsystem,
-			Name:      "docker_timestamp_parse_failures_total",
-			Help:      "Container log lines that arrived without a timestamp this source could parse.",
-		}),
-		DockerReconnects: f.NewCounter(prometheus.CounterOpts{
-			Namespace: observability.Namespace,
-			Subsystem: agentSubsystem,
-			Name:      "docker_reconnects_total",
-			Help:      "Times a container's log stream ended or failed to open, and the source reconnected.",
-		}),
+		DockerTimestampParseFailures: counter("docker_timestamp_parse_failures_total", "Container log lines that arrived without a timestamp this source could parse."),
+		DockerReconnects:             counter("docker_reconnects_total", "Times a container's log stream ended or failed to open, and the source reconnected."),
 
 		Acks: f.NewCounterVec(prometheus.CounterOpts{
 			Namespace: observability.Namespace,
@@ -263,12 +216,7 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Help:      "Acknowledgements received from the collector, by code.",
 		}, []string{"code"}),
 
-		Reconnects: f.NewCounter(prometheus.CounterOpts{
-			Namespace: observability.Namespace,
-			Subsystem: agentSubsystem,
-			Name:      "reconnects_total",
-			Help:      "Attempts to (re)open the ingest stream, including the first one at startup.",
-		}),
+		Reconnects: counter("reconnects_total", "Attempts to (re)open the ingest stream, including the first one at startup."),
 	}
 
 	// Pre-created at zero so an alert on this series can fire the first time

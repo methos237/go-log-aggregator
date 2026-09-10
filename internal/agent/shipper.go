@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand/v2"
+	"maps"
 	"slices"
 	"time"
 
 	"google.golang.org/protobuf/proto"
 
 	logaggv1 "github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1"
+	"github.com/jamespolk/go-log-aggregator/internal/backoff"
 	"github.com/jamespolk/go-log-aggregator/internal/ingest"
 	"github.com/jamespolk/go-log-aggregator/internal/model"
 	"github.com/jamespolk/go-log-aggregator/internal/observability"
@@ -30,13 +31,6 @@ const (
 	defaultAckWindow     = 64
 	defaultMinBackoff    = 250 * time.Millisecond
 	defaultMaxBackoff    = 30 * time.Second
-
-	// noAccumWait is the accumulator delay timer's duration whenever no
-	// accumulator is active. Its value is arbitrary: the timer is reset the
-	// instant an accumulator is created or flushed (see rearmAccumTimer), so
-	// this only needs to not fire spuriously while nothing is being batched.
-	// Mirrors multiline.go's noHeldWait for the same reason.
-	noAccumWait = time.Hour
 
 	// defaultCheckpointCommitInterval bounds how long acked progress can
 	// sit uncommitted in memory. It is deliberately not part of
@@ -70,9 +64,6 @@ type ShipperConfig struct {
 	// stream. A source with no labels is a configuration error, not a
 	// reason to drop data silently — report it. Required.
 	Labels func(source string) (model.LabelSet, bool)
-	// DefaultLevel is the level recorded for a line whose level is not
-	// known. Level inference is deliberately out of scope for this phase.
-	DefaultLevel model.Level
 
 	// MaxBatchRecords bounds a batch by record count. Zero uses
 	// defaultMaxBatchRecords.
@@ -137,7 +128,6 @@ type accumulator struct {
 // outstanding is one batch sent but not yet acknowledged.
 type outstanding struct {
 	batch         *logaggv1.LogBatch
-	recordCount   int
 	sourceCursors map[string]Cursor
 	// fromSpool marks a batch that was Peek'd from the spool rather than
 	// built fresh this run. Its bytes are still safely on disk,
@@ -158,12 +148,11 @@ type ackResult struct {
 // durability contract it exists to uphold: a line's progress is durable only
 // once the collector has acknowledged it.
 type Shipper struct {
-	ingestCfg    ingest.ClientConfig
-	spool        *Spool
-	checkpoint   *CheckpointStore
-	extractor    *Extractor
-	labels       func(string) (model.LabelSet, bool)
-	defaultLevel model.Level
+	ingestCfg  ingest.ClientConfig
+	spool      *Spool
+	checkpoint *CheckpointStore
+	extractor  *Extractor
+	labels     func(string) (model.LabelSet, bool)
 
 	maxBatchRecords int
 	maxBatchBytes   int
@@ -264,7 +253,6 @@ func NewShipper(cfg *ShipperConfig) (*Shipper, error) {
 		checkpoint:      cfg.Checkpoint,
 		extractor:       cfg.Extractor,
 		labels:          cfg.Labels,
-		defaultLevel:    cfg.DefaultLevel,
 		maxBatchRecords: cfg.MaxBatchRecords,
 		maxBatchBytes:   cfg.MaxBatchBytes,
 		maxBatchDelay:   cfg.MaxBatchDelay,
@@ -277,7 +265,7 @@ func NewShipper(cfg *ShipperConfig) (*Shipper, error) {
 		shutdownAckWait:          defaultShutdownAckWait,
 
 		accums:     make(map[model.StreamID]*accumulator),
-		accumTimer: time.NewTimer(noAccumWait),
+		accumTimer: time.NewTimer(idleWait),
 	}
 
 	if s.maxBatchRecords <= 0 {
@@ -378,7 +366,13 @@ runLoop:
 			s.sendPaused = false
 			s.tryDrainSpool()
 		case res := <-ackCh:
-			s.handleAckResult(res)
+			// Either a genuine ack, or the stream ending (cleanly or not),
+			// which is handled identically to any other disconnect.
+			if res.err != nil {
+				s.teardownStream()
+			} else {
+				s.processAck(res.ack)
+			}
 		case <-commitTicker.C:
 			_ = s.checkpoint.Commit()
 		}
@@ -426,29 +420,15 @@ func (s *Shipper) armPause() {
 // after OVERLOADED because both describe the same thing — "wait, then try
 // again" — and ShipperConfig exposes only one pair of bounds for it.
 //
-// Full jitter (a uniform random draw in [0, backoff], not backoff itself or
-// backoff times a fixed multiplier) is what a fleet of agents restarting
-// together needs: without it, every agent computes the same deterministic
-// backoff schedule and they all retry in lockstep, turning a recovering
-// collector's first moments back up into a thundering herd.
+// Full jitter (a uniform random draw up to the backoff, not the backoff itself
+// or the backoff times a fixed multiplier) is what a fleet of agents
+// restarting together needs: without it, every agent computes the same
+// deterministic backoff schedule and they all retry in lockstep, turning a
+// recovering collector's first moments back up into a thundering herd.
 func (s *Shipper) backoffDelay() time.Duration {
-	d := s.minBackoff
-	for i := 0; i < s.attempt && d < s.maxBackoff; i++ {
-		d *= 2
-	}
-	if d > s.maxBackoff || d <= 0 {
-		d = s.maxBackoff
-	}
+	d := backoff.Delay(s.attempt+1, s.minBackoff, s.maxBackoff)
 	s.attempt++
-	return fullJitter(d)
-}
-
-// fullJitter returns a uniform random duration in [0, d].
-func fullJitter(d time.Duration) time.Duration {
-	if d <= 0 {
-		return 0
-	}
-	return time.Duration(rand.Int64N(int64(d) + 1)) //nolint:gosec // jitter, not security-sensitive
+	return d
 }
 
 // receiveAcks is the one-and-only reader of stream, run on its own
@@ -469,17 +449,6 @@ func receiveAcks(stream *ingest.Stream, out chan<- ackResult) {
 	}
 }
 
-// handleAckResult processes one message from the receiver goroutine: either
-// a genuine ack, or the stream ending (cleanly or not), which is handled
-// identically to any other disconnect.
-func (s *Shipper) handleAckResult(res ackResult) {
-	if res.err != nil {
-		s.teardownStream()
-		return
-	}
-	s.processAck(res.ack)
-}
-
 // teardownStream abandons the current stream and its receiver goroutine
 // (which will exit on its own once Recv finally errors, since nothing reads
 // its channel again) and requeues every outstanding batch.
@@ -498,9 +467,10 @@ func (s *Shipper) teardownStream() {
 
 // demoteOutstanding appends every batch in batches to the spool, in order,
 // skipping any that is already there (fromSpool). It is the common step
-// shared by teardownStream (the whole outstanding list) and demoteRemaining
-// (one acked batch plus whatever is left of the list) — see demoteRemaining
-// for why the caller's ordering matters here.
+// shared by teardownStream (the whole outstanding list), shutdown (whatever
+// is still unacked at the deadline) and demoteRemaining (one acked batch plus
+// whatever is left of the list) — see demoteRemaining for why the caller's
+// ordering matters here.
 func (s *Shipper) demoteOutstanding(batches ...outstanding) {
 	for _, o := range batches {
 		if !o.fromSpool {
@@ -571,9 +541,12 @@ func (s *Shipper) addLine(line *Line) {
 	}
 
 	rec := model.LogRecord{
-		Time:    line.Time,
-		Seq:     line.Cursor.Start,
-		Level:   s.defaultLevel,
+		Time: line.Time,
+		Seq:  line.Cursor.Start,
+		// Level inference is deliberately out of scope for this phase;
+		// LevelUnspecified is the model package's own answer for "no level
+		// known," not a guess.
+		Level:   model.LevelUnspecified,
 		Message: string(line.Bytes),
 	}
 	if s.extractor != nil {
@@ -690,16 +663,22 @@ func (s *Shipper) flushAccum(id model.StreamID) {
 		Labels:  a.labels.Proto(),
 		Records: a.records,
 	}
-	s.dispatch(batch, len(a.records), a.sourceCursors)
+	s.dispatch(batch, a.sourceCursors)
 }
 
 // flushDueAccums flushes every accumulator whose deadline has passed as of
-// now, in ascending StreamID order. See sortedAccumIDs for why that order
-// matters here.
+// now, in ascending StreamID order.
+//
+// Sorted because Go randomizes map iteration order, and more than one
+// accumulator can be flushed in a single pass — here, or on shutdown
+// (flushAllAccums) — which means more than one batch can be produced in a
+// single pass too. Sorting the keys first makes the sequence of batches a
+// collector sees in that case reproducible from one run to the next, rather
+// than dependent on map iteration order, which would otherwise make tests
+// asserting on batch order flaky under `go test -count=2`.
 func (s *Shipper) flushDueAccums(now time.Time) {
-	for _, id := range sortedAccumIDs(s.accums) {
-		a, ok := s.accums[id]
-		if !ok || a.deadline.After(now) {
+	for _, id := range slices.Sorted(maps.Keys(s.accums)) {
+		if s.accums[id].deadline.After(now) {
 			continue
 		}
 		s.flushAccum(id)
@@ -707,16 +686,16 @@ func (s *Shipper) flushDueAccums(now time.Time) {
 }
 
 // flushAllAccums flushes every remaining accumulator, in ascending StreamID
-// order. See sortedAccumIDs for why that order matters here.
+// order (see flushDueAccums for why sorted).
 func (s *Shipper) flushAllAccums() {
-	for _, id := range sortedAccumIDs(s.accums) {
+	for _, id := range slices.Sorted(maps.Keys(s.accums)) {
 		s.flushAccum(id)
 	}
 }
 
 // rearmAccumTimer resets the shared accumulator delay timer to fire when the
 // earliest deadline across every accumulator in s.accums is next due, or
-// after noAccumWait if nothing is accumulating. Called after every addLine
+// after idleWait if nothing is accumulating. Called after every addLine
 // (which may create, grow or flush an accumulator) and after every timer
 // sweep, so the timer always reflects the current set.
 //
@@ -725,44 +704,7 @@ func (s *Shipper) flushAllAccums() {
 // one goroutine running Run's select loop, so there is no concurrent
 // Stop/Reset race for the documented Timer.Reset caveats to apply to.
 func (s *Shipper) rearmAccumTimer() {
-	s.accumTimer.Reset(nextAccumWait(s.accums, time.Now()))
-}
-
-// nextAccumWait returns how long the accumulator delay timer should sleep
-// before the earliest accumulator deadline is due, or noAccumWait if accums
-// is empty.
-func nextAccumWait(accums map[model.StreamID]*accumulator, now time.Time) time.Duration {
-	var earliest time.Time
-	for _, a := range accums {
-		if earliest.IsZero() || a.deadline.Before(earliest) {
-			earliest = a.deadline
-		}
-	}
-	if earliest.IsZero() {
-		return noAccumWait
-	}
-	if d := earliest.Sub(now); d > 0 {
-		return d
-	}
-	return 0
-}
-
-// sortedAccumIDs returns accums' keys in ascending order.
-//
-// Go randomizes map iteration order, and more than one accumulator can be
-// flushed in a single pass — a timer sweep (flushDueAccums) or shutdown
-// (flushAllAccums) — which means more than one batch can be produced in a
-// single pass too. Sorting the keys first makes the sequence of batches a
-// collector sees in that case reproducible from one run to the next, rather
-// than dependent on map iteration order, which would otherwise make tests
-// asserting on batch order flaky under `go test -count=2`.
-func sortedAccumIDs(accums map[model.StreamID]*accumulator) []model.StreamID {
-	ids := make([]model.StreamID, 0, len(accums))
-	for id := range accums {
-		ids = append(ids, id)
-	}
-	slices.Sort(ids)
-	return ids
+	s.accumTimer.Reset(nextWait(s.accums, func(a *accumulator) time.Time { return a.deadline }, time.Now()))
 }
 
 // dispatch sends a freshly-built batch directly if the shipper is connected,
@@ -774,12 +716,12 @@ func sortedAccumIDs(accums map[model.StreamID]*accumulator) []model.StreamID {
 // live batch's ack advance a source's checkpoint past data an older,
 // still-unacked replayed batch from the very same source has not yet
 // delivered.
-func (s *Shipper) dispatch(batch *logaggv1.LogBatch, recordCount int, cursors map[string]Cursor) {
+func (s *Shipper) dispatch(batch *logaggv1.LogBatch, cursors map[string]Cursor) {
 	if s.stream == nil || s.sendPaused || s.spool.Len() > 0 || len(s.pendingAcks) >= s.ackWindow {
 		s.appendToSpool(batch, cursors)
 		return
 	}
-	s.sendNow(batch, recordCount, cursors, false)
+	s.sendNow(batch, cursors, false)
 }
 
 // sendNow puts batch on the wire and records it as outstanding regardless of
@@ -787,11 +729,9 @@ func (s *Shipper) dispatch(batch *logaggv1.LogBatch, recordCount int, cursors ma
 // is usually stale (the real reason arrives on Recv), so the batch is kept
 // exactly as if it had gone out cleanly and teardownStream — triggered
 // either here or later by the receiver goroutine — is what decides its fate.
-func (s *Shipper) sendNow(batch *logaggv1.LogBatch, recordCount int, cursors map[string]Cursor, fromSpool bool) {
+func (s *Shipper) sendNow(batch *logaggv1.LogBatch, cursors map[string]Cursor, fromSpool bool) {
 	err := s.stream.Send(batch)
-	s.pendingAcks = append(s.pendingAcks, outstanding{
-		batch: batch, recordCount: recordCount, sourceCursors: cursors, fromSpool: fromSpool,
-	})
+	s.pendingAcks = append(s.pendingAcks, outstanding{batch: batch, sourceCursors: cursors, fromSpool: fromSpool})
 	if err != nil {
 		s.teardownStream()
 	}
@@ -827,7 +767,7 @@ func (s *Shipper) tryDrainSpool() {
 			continue
 		}
 
-		s.sendNow(&batch, len(batch.GetRecords()), s.peekSpoolMeta(), true)
+		s.sendNow(&batch, s.peekSpoolMeta(), true)
 		return
 	}
 }
@@ -868,7 +808,7 @@ func (s *Shipper) processAck(ack *logaggv1.Ack) {
 		// in the proto), so this batch is done: drop it, count every
 		// record in it, and never advance the checkpoint for it — the data
 		// is gone, not merely delayed.
-		s.countDropped(reasonAckInvalid, o.recordCount)
+		s.countDropped(reasonAckInvalid, len(o.batch.GetRecords()))
 		if o.fromSpool {
 			_ = s.spool.Release()
 			s.popSpoolMeta()
@@ -1011,11 +951,7 @@ func (s *Shipper) shutdown() error {
 		_ = s.stream.CloseSend()
 	}
 
-	for _, o := range s.pendingAcks {
-		if !o.fromSpool {
-			s.appendToSpool(o.batch, o.sourceCursors)
-		}
-	}
+	s.demoteOutstanding(s.pendingAcks...)
 	s.pendingAcks = nil
 
 	return s.checkpoint.Commit()

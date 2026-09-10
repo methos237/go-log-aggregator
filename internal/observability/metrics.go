@@ -1,6 +1,8 @@
 package observability
 
 import (
+	"runtime"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 
@@ -44,10 +46,7 @@ func NewMetrics(node string) *Metrics {
 		},
 		[]string{"version", "commit", "build_date", "go_version"},
 	)
-	info := version.Info()
-	buildInfo.WithLabelValues(
-		info["version"], info["commit"], info["build_date"], info["go_version"],
-	).Set(1)
+	buildInfo.WithLabelValues(version.Version, version.Commit, version.BuildDate, runtime.Version()).Set(1)
 	reg.MustRegister(buildInfo)
 
 	return &Metrics{

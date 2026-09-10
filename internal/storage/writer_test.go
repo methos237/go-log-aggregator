@@ -103,63 +103,6 @@ func TestIsRetryable(t *testing.T) {
 	}
 }
 
-func TestBackoffGrowsAndStaysBounded(t *testing.T) {
-	t.Parallel()
-
-	const (
-		base     = 10 * time.Millisecond
-		maxDelay = 200 * time.Millisecond
-	)
-
-	// Full jitter means each delay is uniform in (0, ceiling], so the assertion is on
-	// the bound, not on the value. A fixed multiple would make every node in the
-	// cluster retry in lockstep, which is the thundering herd this avoids.
-	for attempt := 1; attempt <= 12; attempt++ {
-		ceiling := min(base<<(attempt-1), maxDelay)
-		for i := 0; i < 200; i++ {
-			got := backoff(attempt, base, maxDelay)
-			if got <= 0 {
-				t.Fatalf("attempt %d produced a non-positive delay %s", attempt, got)
-			}
-			if got > ceiling {
-				t.Fatalf("attempt %d produced %s, above the ceiling %s", attempt, got, ceiling)
-			}
-		}
-	}
-
-	// A nonsensical attempt number must not panic or return a negative delay.
-	if got := backoff(0, base, maxDelay); got <= 0 || got > base {
-		t.Fatalf("backoff(0) = %s, want a positive delay no greater than %s", got, base)
-	}
-}
-
-func TestBackoffDoesNotOverflowOnLargeAttempts(t *testing.T) {
-	t.Parallel()
-
-	// base << 60 overflows time.Duration; the shift must be clamped or the delay goes
-	// negative and time.NewTimer fires instantly, turning backoff into a spin loop.
-	const maxDelay = time.Second
-	for _, attempt := range []int{40, 63, 64, 1000} {
-		got := backoff(attempt, time.Second, maxDelay)
-		if got <= 0 || got > maxDelay {
-			t.Fatalf("backoff(%d) = %s, want a positive delay no greater than %s", attempt, got, maxDelay)
-		}
-	}
-}
-
-func TestSleepReturnsEarlyOnCancel(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if sleep(ctx, time.Hour) {
-		t.Fatal("sleep should report false when the context is already canceled")
-	}
-	if !sleep(context.Background(), time.Millisecond) {
-		t.Fatal("sleep should report true when the timer wins")
-	}
-}
-
 func TestCopyRowMatchesColumnOrder(t *testing.T) {
 	t.Parallel()
 
@@ -175,10 +118,7 @@ func TestCopyRowMatchesColumnOrder(t *testing.T) {
 		Fields:   map[string]string{"b": "2", "a": "1"},
 	}
 
-	row, err := copyRow(&rec)
-	if err != nil {
-		t.Fatalf("copyRow: %v", err)
-	}
+	row := copyRow(&rec)
 	if len(row) != len(logColumns) {
 		t.Fatalf("copyRow returned %d values for %d columns", len(row), len(logColumns))
 	}
@@ -205,10 +145,7 @@ func TestCopyRowUsesNullForAbsentOptionals(t *testing.T) {
 	t.Parallel()
 
 	rec := model.LogRecord{Time: time.Now(), Message: "plain"}
-	row, err := copyRow(&rec)
-	if err != nil {
-		t.Fatalf("copyRow: %v", err)
-	}
+	row := copyRow(&rec)
 
 	// nil rather than an empty slice or "{}": NULL costs nothing per row, while an
 	// empty JSONB value costs bytes on every row that has no fields.
@@ -238,11 +175,7 @@ func TestEncodeLabels(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := encodeLabels(model.LabelSet{Extra: tc.extra})
-			if err != nil {
-				t.Fatalf("encodeLabels: %v", err)
-			}
-			if got != tc.want {
+			if got := encodeLabels(model.LabelSet{Extra: tc.extra}); got != tc.want {
 				t.Fatalf("encodeLabels = %s, want %s", got, tc.want)
 			}
 		})

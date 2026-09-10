@@ -18,17 +18,6 @@ var (
 	BuildDate = "unknown"
 )
 
-// Info returns the build metadata as a flat map, suitable for log attributes and
-// for a Prometheus build_info metric.
-func Info() map[string]string {
-	return map[string]string{
-		"version":    Version,
-		"commit":     Commit,
-		"build_date": BuildDate,
-		"go_version": runtime.Version(),
-	}
-}
-
 // String renders a single-line summary for --version output.
 func String(binary string) string {
 	return fmt.Sprintf("%s %s (commit %s, built %s, %s)",

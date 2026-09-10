@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sync"
@@ -15,45 +16,13 @@ import (
 // unmarshal.
 const checkpointVersion = 1
 
-// checkpointFile is the on-disk shape of a checkpoint.
-//
-// Field names are lowercase in JSON deliberately: this file's whole purpose
-// is to be inspected with `cat` while diagnosing a restart, and short
-// lowercase keys read better in a terminal than exported Go names would.
+// checkpointFile is the on-disk shape of a checkpoint. The cursor's own json
+// tags (see source.go) are the per-source format; adding an in-memory-only
+// field to Cursor is therefore a file-format change and must be tagged
+// `json:"-"`.
 type checkpointFile struct {
-	Version int                       `json:"version"`
-	Cursors map[string]checkpointDisk `json:"cursors"`
-}
-
-// checkpointDisk is one source's cursor as it appears on disk. It mirrors
-// Cursor field-for-field rather than embedding it, so a change to Cursor's Go
-// shape (say, adding an in-memory-only field) does not silently change the
-// file format.
-type checkpointDisk struct {
-	Start  int64           `json:"start"`
-	Offset int64           `json:"offset"`
-	File   fileIDDisk      `json:"file"`
-	Head   fingerprintDisk `json:"head,omitempty"`
-}
-
-// fileIDDisk is FileID's on-disk shape.
-type fileIDDisk struct {
-	Dev uint64 `json:"dev"`
-	Ino uint64 `json:"ino"`
-}
-
-// fingerprintDisk is Fingerprint's on-disk shape.
-//
-// "omitempty" on the field above, plus this being the JSON zero value when
-// absent, is what makes a checkpoint written by a build before Head existed
-// load cleanly: an absent "head" key unmarshals to the zero fingerprintDisk,
-// which is exactly the zero Fingerprint — "unknown, fall back to size" — not
-// a parse error. A file written by an older build is not corrupt; it simply
-// predates a field, and Load must not treat that as the same failure as
-// hand-edited garbage.
-type fingerprintDisk struct {
-	Len  int64  `json:"len"`
-	Hash uint64 `json:"hash"`
+	Version int               `json:"version"`
+	Cursors map[string]Cursor `json:"cursors"`
 }
 
 // CheckpointStore persists per-source cursors so a restarted agent knows
@@ -117,17 +86,17 @@ func (s *CheckpointStore) Load() error {
 			s.path, file.Version, checkpointVersion)
 	}
 
-	cursors := make(map[string]Cursor, len(file.Cursors))
 	for source, c := range file.Cursors {
-		cur, err := validateCursor(source, c)
-		if err != nil {
+		if err := validateCursor(source, c); err != nil {
 			return fmt.Errorf("checkpoint %s: %w", s.path, err)
 		}
-		cursors[source] = cur
+	}
+	if file.Cursors == nil {
+		file.Cursors = make(map[string]Cursor)
 	}
 
 	s.mu.Lock()
-	s.cursors = cursors
+	s.cursors = file.Cursors
 	s.mu.Unlock()
 
 	return nil
@@ -140,28 +109,20 @@ func (s *CheckpointStore) Load() error {
 // collides with every other unnamed source instead of failing to look up,
 // and a negative Head.Len is not a length any fingerprintHead call could
 // have produced.
-func validateCursor(source string, c checkpointDisk) (Cursor, error) {
-	if source == "" {
-		return Cursor{}, errors.New("empty source name")
+func validateCursor(source string, c Cursor) error {
+	switch {
+	case source == "":
+		return errors.New("empty source name")
+	case c.Start < 0:
+		return fmt.Errorf("source %q: negative start %d", source, c.Start)
+	case c.Offset < 0:
+		return fmt.Errorf("source %q: negative offset %d", source, c.Offset)
+	case c.Start > c.Offset:
+		return fmt.Errorf("source %q: start %d is greater than offset %d", source, c.Start, c.Offset)
+	case c.Head.Len < 0:
+		return fmt.Errorf("source %q: negative head length %d", source, c.Head.Len)
 	}
-	if c.Start < 0 {
-		return Cursor{}, fmt.Errorf("source %q: negative start %d", source, c.Start)
-	}
-	if c.Offset < 0 {
-		return Cursor{}, fmt.Errorf("source %q: negative offset %d", source, c.Offset)
-	}
-	if c.Start > c.Offset {
-		return Cursor{}, fmt.Errorf("source %q: start %d is greater than offset %d", source, c.Start, c.Offset)
-	}
-	if c.Head.Len < 0 {
-		return Cursor{}, fmt.Errorf("source %q: negative head length %d", source, c.Head.Len)
-	}
-	return Cursor{
-		Start:  c.Start,
-		Offset: c.Offset,
-		File:   FileID{Dev: c.File.Dev, Ino: c.File.Ino},
-		Head:   Fingerprint{Len: c.Head.Len, Hash: c.Head.Hash},
-	}, nil
+	return nil
 }
 
 // Get returns the cursor recorded for a source and whether one exists.
@@ -197,18 +158,7 @@ func (s *CheckpointStore) Set(source string, c Cursor) {
 // snapshot is all Commit needs since Set only ever replaces a whole entry.
 func (s *CheckpointStore) Commit() error {
 	s.mu.Lock()
-	file := checkpointFile{
-		Version: checkpointVersion,
-		Cursors: make(map[string]checkpointDisk, len(s.cursors)),
-	}
-	for source, c := range s.cursors {
-		file.Cursors[source] = checkpointDisk{
-			Start:  c.Start,
-			Offset: c.Offset,
-			File:   fileIDDisk{Dev: c.File.Dev, Ino: c.File.Ino},
-			Head:   fingerprintDisk{Len: c.Head.Len, Hash: c.Head.Hash},
-		}
-	}
+	file := checkpointFile{Version: checkpointVersion, Cursors: maps.Clone(s.cursors)}
 	s.mu.Unlock()
 
 	data, err := json.MarshalIndent(&file, "", "  ")
@@ -216,90 +166,71 @@ func (s *CheckpointStore) Commit() error {
 		return fmt.Errorf("marshal checkpoint: %w", err)
 	}
 
-	return writeAtomic(s.path, data)
+	return writeAtomic(s.path, data, true)
 }
 
-// writeAtomic writes data to path via a temp file in the same directory,
-// syncing both the file and the directory before returning, and removes the
-// temp file on any failure so a crash loop cannot fill the directory with
-// abandoned partial checkpoints.
-func writeAtomic(path string, data []byte) error {
+// writeAtomic writes data to path via a temp file in the same directory and
+// renames it into place, so a crash mid-write can only ever leave the previous
+// complete file or the new complete one, never a torn one. The temp file is
+// removed on any failure so a crash loop cannot fill the directory with
+// abandoned partial files.
+//
+// sync=true also fsyncs the file before the rename and the directory after it.
+// The file sync comes before the rename, not after: without it the rename can
+// be durable while the content behind it is not, which after power loss looks
+// like a valid file full of zeros rather than a missing file — far more
+// dangerous, because a loader has no way to tell it apart from a real one. The
+// directory sync is the step that is almost always omitted: the rename is
+// metadata, and without it a crash can leave the directory entry still
+// pointing at the old inode even though the new file's content is safely on
+// disk. It is deliberately best-effort: some environments (a directory whose
+// mode disallows opening it for read, some non-POSIX or networked
+// filesystems) reject opening or syncing a directory at all, and the file
+// content is already durable, so this degrades to a weaker crash guarantee
+// instead of refusing to commit progress that is otherwise safely on disk.
+//
+// sync=false skips both fsyncs: the temp write and the rename are ordinary
+// buffered operations, a small fraction of the cost of two fsyncs, at the
+// cost of not knowing exactly when the update becomes durable. Spool.Release
+// uses that on most calls — see cursorDurableInterval for what bounds the
+// resulting replay window.
+//
+// The file is created 0o600 (os.CreateTemp's mode): offsets are not secret,
+// but they name log paths on the host, and there is no reason for that to be
+// world-readable.
+func writeAtomic(path string, data []byte, sync bool) (err error) {
 	dir := filepath.Dir(path)
-
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
 	if err != nil {
-		return fmt.Errorf("create temp checkpoint in %s: %w", dir, err)
+		return fmt.Errorf("create temp for %s: %w", path, err)
 	}
-	tmpPath := tmp.Name()
-
-	renamed := false
 	defer func() {
-		if !renamed {
-			_ = os.Remove(tmpPath)
+		if err != nil {
+			_ = tmp.Close()
+			_ = os.Remove(tmp.Name())
 		}
 	}()
 
-	if err := commitTemp(tmp, data, path, tmpPath); err != nil {
-		return err
+	if _, err = tmp.Write(data); err != nil {
+		return fmt.Errorf("write temp for %s: %w", path, err)
 	}
-	renamed = true
+	if sync {
+		if err = tmp.Sync(); err != nil {
+			return fmt.Errorf("sync temp for %s: %w", path, err)
+		}
+	}
+	if err = tmp.Close(); err != nil {
+		return fmt.Errorf("close temp for %s: %w", path, err)
+	}
+	if err = os.Rename(tmp.Name(), path); err != nil {
+		return fmt.Errorf("rename %s into place: %w", path, err)
+	}
 
-	syncDirBestEffort(dir)
-
+	if sync {
+		if d, derr := os.Open(dir); derr == nil {
+			_ = d.Sync()
+			_ = d.Close()
+		}
+	}
 	return nil
-}
-
-// commitTemp writes, mode-restricts, syncs, closes, and renames the temp
-// file into place. Split out of writeAtomic so the cleanup defer there has a
-// single, simple condition to guard.
-func commitTemp(tmp *os.File, data []byte, targetPath, tmpPath string) error {
-	// 0o600: offsets are not secret, but they name log paths on the host, and
-	// there is no reason for that to be world-readable.
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("chmod temp checkpoint: %w", err)
-	}
-
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("write temp checkpoint: %w", err)
-	}
-
-	// Sync before rename, not after: without this the rename can be durable
-	// while the content behind it is not, which after power loss looks like
-	// a valid checkpoint full of zeros rather than a missing file — far more
-	// dangerous, because Load has no way to tell it apart from a real one.
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("sync temp checkpoint: %w", err)
-	}
-
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("close temp checkpoint: %w", err)
-	}
-
-	if err := os.Rename(tmpPath, targetPath); err != nil {
-		return fmt.Errorf("rename checkpoint into place: %w", err)
-	}
-
-	return nil
-}
-
-// syncDirBestEffort fsyncs the directory containing a just-renamed file.
-// This is the step that is almost always omitted: the rename is metadata,
-// and without a directory sync a crash can leave the directory entry still
-// pointing at the old inode even though the new file's content is safely on
-// disk. It is deliberately not permitted to fail Commit: some environments
-// (a directory whose mode disallows opening it for read, some non-POSIX or
-// networked filesystems) reject opening or syncing a directory at all, and
-// the file content is already durable from the sync in commitTemp, so this
-// degrades to a weaker crash guarantee instead of refusing to commit
-// progress that is otherwise safely on disk.
-func syncDirBestEffort(dir string) {
-	dirFile, err := os.Open(dir)
-	if err != nil {
-		return
-	}
-	_ = dirFile.Sync()
-	_ = dirFile.Close()
 }

@@ -204,13 +204,13 @@ func TestLabelSetStringIsSelectorShaped(t *testing.T) {
 	}
 }
 
-func TestAppendCanonicalReusesBuffer(t *testing.T) {
+func TestCanonicalReusesBuffer(t *testing.T) {
 	t.Parallel()
 
 	ls := LabelSet{Service: "api", Host: "h", Env: "e"}
 	buf := make([]byte, 0, 64)
-	first := ls.AppendCanonical(buf)
-	second := ls.AppendCanonical(first)
+	first := ls.canonical(buf)
+	second := ls.canonical(first)
 
 	if len(second) != 2*len(first) {
 		t.Fatalf("expected appending twice to double the length: %d then %d", len(first), len(second))

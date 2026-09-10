@@ -3,10 +3,8 @@ package ingest
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"google.golang.org/grpc"
@@ -210,13 +208,9 @@ func clientCredentials(cfg ClientConfig) (credentials.TransportCredentials, erro
 		return nil, fmt.Errorf("load client key pair: %w", err)
 	}
 
-	pem, err := os.ReadFile(cfg.CAFile)
+	pool, err := clientCAs(cfg.CAFile)
 	if err != nil {
-		return nil, fmt.Errorf("read server CA: %w", err)
-	}
-	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(pem) {
-		return nil, fmt.Errorf("%s: no certificates found", cfg.CAFile)
+		return nil, err
 	}
 
 	return credentials.NewTLS(&tls.Config{

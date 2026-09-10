@@ -3,9 +3,7 @@ package observability
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
-	"sort"
 	"sync"
 	"time"
 )
@@ -28,9 +26,6 @@ type Health struct {
 
 // NewHealth creates a registry. Each check gets at most timeout to answer.
 func NewHealth(timeout time.Duration) *Health {
-	if timeout <= 0 {
-		timeout = 2 * time.Second
-	}
 	return &Health{
 		checks:  make(map[string]CheckFunc),
 		timeout: timeout,
@@ -120,23 +115,14 @@ func (h *Health) ReadyHandler() http.Handler {
 			return
 		}
 
-		names := make([]string, 0, len(failed))
-		for name := range failed {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-
+		// encoding/json sorts map keys, so the response is stable without sorting here.
 		detail := make(map[string]string, len(failed))
-		for _, name := range names {
-			detail[name] = failed[name].Error()
+		for name, err := range failed {
+			detail[name] = err.Error()
 		}
 		writeJSON(w, http.StatusServiceUnavailable, result{Status: "unready", Checks: detail})
 	})
 }
-
-// ErrNotReady is the conventional error for a component that has not finished
-// initializing yet, as opposed to one that has failed.
-var ErrNotReady = errors.New("not ready")
 
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")

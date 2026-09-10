@@ -36,7 +36,7 @@ func TestReadyHandlerNoChecks(t *testing.T) {
 func TestReadyHandlerReportsEveryFailure(t *testing.T) {
 	h := NewHealth(time.Second)
 	h.Register("db", func(context.Context) error { return errors.New("connection refused") })
-	h.Register("queue", func(context.Context) error { return ErrNotReady })
+	h.Register("queue", func(context.Context) error { return errors.New("not ready") })
 	h.Register("ring", func(context.Context) error { return nil })
 
 	rec := httptest.NewRecorder()

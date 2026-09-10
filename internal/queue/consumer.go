@@ -61,12 +61,10 @@ func (c *Conn) Consume(ctx context.Context, h Handler) (Subscription, error) {
 
 	sub, err := cons.Consume(func(msg jetstream.Msg) {
 		m := &message{msg: msg}
-		if m.Redeliveries() > 1 && c.metrics != nil {
+		if m.Redeliveries() > 1 {
 			c.metrics.Redeliveries.Inc()
 		}
-		if c.metrics != nil {
-			c.metrics.Consumed.Inc()
-		}
+		c.metrics.Consumed.Inc()
 		h(m)
 	})
 	if err != nil {

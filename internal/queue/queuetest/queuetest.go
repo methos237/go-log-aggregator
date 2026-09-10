@@ -18,12 +18,8 @@ import (
 //
 // The zero value is ready to use and behaves as a broker that accepts everything.
 type Publisher struct {
-	// Prefix is the subject prefix. Empty means "logs", matching the config default.
-	Prefix string
-
 	mu        sync.Mutex
 	published []Message
-	seq       uint64
 
 	// err, when set, is returned by every Publish instead of accepting the message.
 	err error
@@ -40,8 +36,8 @@ type Message struct {
 
 var _ queue.Publisher = (*Publisher)(nil)
 
-// Publish records the message and returns a synthetic ack.
-func (p *Publisher) Publish(ctx context.Context, subject string, payload []byte) (queue.PubAck, error) {
+// Publish records the message.
+func (p *Publisher) Publish(ctx context.Context, subject string, payload []byte) error {
 	p.mu.Lock()
 	hook, err := p.hook, p.err
 	p.mu.Unlock()
@@ -49,32 +45,27 @@ func (p *Publisher) Publish(ctx context.Context, subject string, payload []byte)
 	// Called outside the lock so a blocking hook does not also block Published.
 	if hook != nil {
 		if hookErr := hook(ctx, subject, payload); hookErr != nil {
-			return queue.PubAck{}, hookErr
+			return hookErr
 		}
 	}
 	if err != nil {
-		return queue.PubAck{}, err
+		return err
 	}
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return queue.PubAck{}, ctxErr
+		return ctxErr
 	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.seq++
 	// Copied because the caller owns the buffer it marshaled into and may reuse it.
 	p.published = append(p.published, Message{Subject: subject, Payload: append([]byte(nil), payload...)})
-	return queue.PubAck{Stream: "TEST", Sequence: p.seq}, nil
+	return nil
 }
 
 // Subject renders a subject using the same scheme as the real publisher, so a
 // test that asserts on subjects is asserting on production behavior.
 func (p *Publisher) Subject(env, service string) string {
-	prefix := p.Prefix
-	if prefix == "" {
-		prefix = "logs"
-	}
-	return queue.Subject(prefix, env, service)
+	return queue.Subject("logs", env, service)
 }
 
 // FailWith makes every subsequent Publish return err. A nil err restores normal

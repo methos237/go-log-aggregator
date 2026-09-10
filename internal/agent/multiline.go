@@ -9,21 +9,23 @@ import (
 	"github.com/jamespolk/go-log-aggregator/internal/model"
 )
 
-// Defaults applied when the corresponding MultilineConfig field is zero.
 const (
 	// defaultFlushTimeout is long enough that a legitimately slow producer (a
 	// handler that logs once every few hundred milliseconds mid-stack-trace)
 	// never gets its lines split apart, but short enough that a quiet source's
-	// last record ships promptly instead of sitting held indefinitely.
+	// last record ships promptly instead of sitting held indefinitely. Applied
+	// when MultilineConfig.FlushTimeout is zero.
 	defaultFlushTimeout = 5 * time.Second
 	// defaultMaxLines bounds a runaway loop that logs one short line per
-	// iteration. At that line count MaxBytes has almost certainly not fired
-	// yet, so without an independent line bound the record grows without limit.
+	// iteration. At that line count model.MaxMessageLen has almost certainly
+	// not fired yet, so without an independent line bound the record grows
+	// without limit.
 	defaultMaxLines = 500
-	// noHeldWait is the flush timer's duration whenever nothing is held. Its
-	// value is arbitrary: the timer is reset the instant a record is added, so
-	// this only needs to not fire spuriously while the joiner is idle.
-	noHeldWait = time.Hour
+	// idleWait is the duration of a deadline-driven timer (the Joiner's flush
+	// timer, the Shipper's accumulator timer) whenever nothing is pending. Its
+	// value is arbitrary: the timer is reset the instant something is added, so
+	// this only needs to not fire spuriously while idle.
+	idleWait = time.Hour
 )
 
 // MultilineConfig configures a Joiner.
@@ -38,21 +40,6 @@ type MultilineConfig struct {
 	// it, measured from the last line appended to that record rather than from
 	// a fixed tick. Defaults to defaultFlushTimeout when zero.
 	FlushTimeout time.Duration
-	// MaxLines caps how many lines one record may absorb. Defaults to
-	// defaultMaxLines when zero.
-	MaxLines int
-	// MaxBytes caps how large joining may grow a record. Defaults to
-	// model.MaxMessageLen when zero and must never exceed it.
-	//
-	// It bounds the joining, not the individual line: a single line that is
-	// already longer than MaxBytes is emitted whole rather than split or
-	// truncated. That is deliberate. Lines reach this stage already bounded at
-	// model.MaxMessageLen by the assembler, so such a record is still one the
-	// collector accepts, and chopping up a line that arrived intact would
-	// destroy a record to satisfy a limit that exists to stop *accumulation*.
-	// Setting MaxBytes below the longest single line a source produces
-	// therefore disables joining for those lines rather than truncating them.
-	MaxBytes int
 	// Metrics records splits and timeout flushes. Nil builds an unregistered
 	// set via NewMetrics(nil), which is what tests want; production wiring
 	// supplies one built against the real registry.
@@ -70,8 +57,6 @@ type MultilineConfig struct {
 type Joiner struct {
 	continuation *regexp.Regexp
 	flushTimeout time.Duration
-	maxLines     int
-	maxBytes     int
 	metrics      *Metrics
 }
 
@@ -81,31 +66,10 @@ func NewJoiner(cfg MultilineConfig) (*Joiner, error) {
 	if cfg.FlushTimeout < 0 {
 		return nil, fmt.Errorf("multiline: flush timeout must not be negative, got %s", cfg.FlushTimeout)
 	}
-	if cfg.MaxLines < 0 {
-		return nil, fmt.Errorf("multiline: max lines must not be negative, got %d", cfg.MaxLines)
-	}
-	if cfg.MaxBytes < 0 {
-		return nil, fmt.Errorf("multiline: max bytes must not be negative, got %d", cfg.MaxBytes)
-	}
-	// Clamped rather than trusted: the collector rejects any record longer than
-	// model.MaxMessageLen outright, so a Joiner configured above that limit
-	// would build records guaranteed to be dropped at ingest instead of caught
-	// here, where the operator can see why.
-	if cfg.MaxBytes > model.MaxMessageLen {
-		return nil, fmt.Errorf("multiline: max bytes %d exceeds collector limit %d", cfg.MaxBytes, model.MaxMessageLen)
-	}
 
 	flushTimeout := cfg.FlushTimeout
 	if flushTimeout == 0 {
 		flushTimeout = defaultFlushTimeout
-	}
-	maxLines := cfg.MaxLines
-	if maxLines == 0 {
-		maxLines = defaultMaxLines
-	}
-	maxBytes := cfg.MaxBytes
-	if maxBytes == 0 {
-		maxBytes = model.MaxMessageLen
 	}
 
 	metrics := cfg.Metrics
@@ -116,8 +80,6 @@ func NewJoiner(cfg MultilineConfig) (*Joiner, error) {
 	return &Joiner{
 		continuation: cfg.Continuation,
 		flushTimeout: flushTimeout,
-		maxLines:     maxLines,
-		maxBytes:     maxBytes,
 		metrics:      metrics,
 	}, nil
 }
@@ -151,7 +113,8 @@ func (j *Joiner) runPassthrough(ctx context.Context, in <-chan Line, out chan<- 
 	}
 }
 
-// heldRecord is the record being assembled for one source.
+// heldRecord is the record being assembled for one source: the Line that will
+// eventually be emitted, grown in place as continuation lines are absorbed.
 //
 // runJoin keys these by Line.Source because a single in channel carries lines
 // from every configured source interleaved: a line from source A must never
@@ -163,17 +126,8 @@ func (j *Joiner) runPassthrough(ctx context.Context, in <-chan Line, out chan<- 
 // map's size is bounded by the config file that started this agent, not by
 // anything arriving on in.
 type heldRecord struct {
-	source string
-	// start and t are the first constituent line's Cursor.Start and Time. See
-	// flushOne's comment for why these are the first line's while offset, file
-	// and head below are the last line's.
-	start  int64
-	t      time.Time
-	bytes  []byte
-	lines  int
-	offset int64
-	file   FileID
-	head   Fingerprint
+	line  Line
+	lines int
 	// deadline is when this record flushes if nothing more arrives for it. It
 	// is recomputed from FlushTimeout every time a line is appended, not held
 	// against a fixed tick: a record that just received a line should get a
@@ -186,13 +140,14 @@ type heldRecord struct {
 // emitted) and starts a new one.
 func (j *Joiner) runJoin(ctx context.Context, in <-chan Line, out chan<- Line) error {
 	held := make(map[string]*heldRecord)
+	heldDeadline := func(h *heldRecord) time.Time { return h.deadline }
 
 	// One timer, reused for the life of the loop. Firing a fresh time.After per
 	// line would allocate a timer per line and would still not answer "which
 	// of several sources with different deadlines is due right now" — this
 	// timer is instead reset to the single earliest deadline across every held
 	// record whenever that set changes, and re-armed after each firing.
-	timer := time.NewTimer(noHeldWait)
+	timer := time.NewTimer(idleWait)
 	defer timer.Stop()
 
 	for {
@@ -207,13 +162,13 @@ func (j *Joiner) runJoin(ctx context.Context, in <-chan Line, out chan<- Line) e
 			if err := j.absorb(ctx, out, held, &line, time.Now()); err != nil {
 				return err
 			}
-			timer.Reset(nextWait(held, time.Now()))
+			timer.Reset(nextWait(held, heldDeadline, time.Now()))
 
 		case now := <-timer.C:
 			if err := j.flushDue(ctx, out, held, now); err != nil {
 				return err
 			}
-			timer.Reset(nextWait(held, time.Now()))
+			timer.Reset(nextWait(held, heldDeadline, time.Now()))
 
 		case <-ctx.Done():
 			return ctx.Err()
@@ -223,6 +178,13 @@ func (j *Joiner) runJoin(ctx context.Context, in <-chan Line, out chan<- Line) e
 
 // absorb applies one line to held, sending a flush first if the line ends,
 // replaces, or would overflow the record held for its source.
+//
+// The byte bound (model.MaxMessageLen) bounds the joining, not the individual
+// line: a single line that is already at the limit is emitted whole rather
+// than split or truncated. That is deliberate. Lines reach this stage already
+// bounded at model.MaxMessageLen by the assembler, so such a record is still
+// one the collector accepts, and chopping up a line that arrived intact would
+// destroy a record to satisfy a limit that exists to stop *accumulation*.
 func (j *Joiner) absorb(ctx context.Context, out chan<- Line, held map[string]*heldRecord, line *Line, now time.Time) error {
 	h, ok := held[line.Source]
 	if !ok {
@@ -239,19 +201,19 @@ func (j *Joiner) absorb(ctx context.Context, out chan<- Line, held map[string]*h
 	}
 
 	sep := 0
-	if len(h.bytes) > 0 {
+	if len(h.line.Bytes) > 0 {
 		sep = 1
 	}
 
 	switch {
-	case len(h.bytes)+sep+len(line.Bytes) > j.maxBytes:
+	case len(h.line.Bytes)+sep+len(line.Bytes) > model.MaxMessageLen:
 		j.metrics.MultilineMaxBytesSplits.Inc()
 		if err := j.flushOne(ctx, out, h); err != nil {
 			return err
 		}
 		held[line.Source] = j.newHeld(line, now)
 
-	case h.lines+1 > j.maxLines:
+	case h.lines+1 > defaultMaxLines:
 		j.metrics.MultilineMaxLinesSplits.Inc()
 		if err := j.flushOne(ctx, out, h); err != nil {
 			return err
@@ -260,13 +222,15 @@ func (j *Joiner) absorb(ctx context.Context, out chan<- Line, held map[string]*h
 
 	default:
 		if sep == 1 {
-			h.bytes = append(h.bytes, '\n')
+			h.line.Bytes = append(h.line.Bytes, '\n')
 		}
-		h.bytes = append(h.bytes, line.Bytes...)
+		h.line.Bytes = append(h.line.Bytes, line.Bytes...)
 		h.lines++
-		h.offset = line.Cursor.Offset
-		h.file = line.Cursor.File
-		h.head = line.Cursor.Head
+		// Start and Time stay the first line's; Offset, File and Head advance
+		// to the last line's — see flushOne for why.
+		h.line.Cursor.Offset = line.Cursor.Offset
+		h.line.Cursor.File = line.Cursor.File
+		h.line.Cursor.Head = line.Cursor.Head
 		h.deadline = now.Add(j.flushTimeout)
 	}
 	return nil
@@ -278,17 +242,7 @@ func (j *Joiner) absorb(ctx context.Context, out chan<- Line, held map[string]*h
 // (if any) will reallocate anyway since the slice arrives with no spare
 // capacity.
 func (j *Joiner) newHeld(line *Line, now time.Time) *heldRecord {
-	return &heldRecord{
-		source:   line.Source,
-		start:    line.Cursor.Start,
-		t:        line.Time,
-		bytes:    line.Bytes,
-		lines:    1,
-		offset:   line.Cursor.Offset,
-		file:     line.Cursor.File,
-		head:     line.Cursor.Head,
-		deadline: now.Add(j.flushTimeout),
-	}
+	return &heldRecord{line: *line, lines: 1, deadline: now.Add(j.flushTimeout)}
 }
 
 // flushDue emits and removes every held record whose deadline has passed as
@@ -335,36 +289,23 @@ func (j *Joiner) flushAll(ctx context.Context, out chan<- Line, held map[string]
 // record's continuation lines span a rotation. Time is the first line's: the
 // record happened when it started, not when its last stack frame arrived.
 func (j *Joiner) flushOne(ctx context.Context, out chan<- Line, h *heldRecord) error {
-	line := Line{
-		Source: h.source,
-		Time:   h.t,
-		Bytes:  h.bytes,
-		Cursor: Cursor{
-			Start:  h.start,
-			Offset: h.offset,
-			File:   h.file,
-			Head:   h.head,
-		},
-	}
-	return send(ctx, out, &line)
+	return send(ctx, out, &h.line)
 }
 
-// nextWait returns how long the flush timer should sleep before the earliest
-// held record becomes due, or noHeldWait if nothing is held.
-func nextWait(held map[string]*heldRecord, now time.Time) time.Duration {
+// nextWait returns how long a deadline timer should sleep before the earliest
+// deadline across m is due, or idleWait if m is empty. Shared by the Joiner's
+// held records and the Shipper's accumulators.
+func nextWait[K comparable, V any](m map[K]V, deadline func(V) time.Time, now time.Time) time.Duration {
 	var earliest time.Time
-	for _, h := range held {
-		if earliest.IsZero() || h.deadline.Before(earliest) {
-			earliest = h.deadline
+	for _, v := range m {
+		if d := deadline(v); earliest.IsZero() || d.Before(earliest) {
+			earliest = d
 		}
 	}
 	if earliest.IsZero() {
-		return noHeldWait
+		return idleWait
 	}
-	if d := earliest.Sub(now); d > 0 {
-		return d
-	}
-	return 0
+	return max(earliest.Sub(now), 0)
 }
 
 // send delivers line to out, blocking rather than shedding. The data behind
