@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // roadmapExamples are the §4 queries the roadmap says the suite must cover.
@@ -246,6 +247,90 @@ var stageErrorCases = []errCase{
 
 func TestParseStageErrors(t *testing.T) {
 	runErrCases(t, stageErrorCases)
+}
+
+func TestParseAggregations(t *testing.T) {
+	runParseCases(t, []parseCase{
+		{`{service="api"} | rate(5m)`, &Query{Selector: api, Agg: &Aggregation{
+			Pos: at(1, 19), Func: AggRate, Range: 5 * time.Minute,
+		}}},
+		{`{service="api"} | count_over_time(1h)`, &Query{Selector: api, Agg: &Aggregation{
+			Pos: at(1, 19), Func: AggCountOverTime, Range: time.Hour,
+		}}},
+		{`{service="api"} | bytes_over_time(30s)`, &Query{Selector: api, Agg: &Aggregation{
+			Pos: at(1, 19), Func: AggBytesOverTime, Range: 30 * time.Second,
+		}}},
+		{`{service="api"} | rate(2d)`, &Query{Selector: api, Agg: &Aggregation{
+			Pos: at(1, 19), Func: AggRate, Range: 48 * time.Hour,
+		}}},
+		{`{service="api"} | rate(5m) by (level)`, &Query{Selector: api, Agg: &Aggregation{
+			Pos: at(1, 19), Func: AggRate, Range: 5 * time.Minute, By: []string{"level"},
+		}}},
+		{`{service="api"} | rate(5m) by (a, b)`, &Query{Selector: api, Agg: &Aggregation{
+			Pos: at(1, 19), Func: AggRate, Range: 5 * time.Minute, By: []string{"a", "b"},
+		}}},
+		{`{service="api"} |= "x" | json | rate ( 1h ) by ( a , b )`, &Query{
+			Selector: api,
+			Stages: []Stage{
+				LineFilter{Pos: at(1, 17), Op: LineContains, Text: "x"},
+				ParserStage{Pos: at(1, 26), Kind: ParserJSON},
+			},
+			Agg: &Aggregation{Pos: at(1, 33), Func: AggRate, Range: time.Hour, By: []string{"a", "b"}},
+		}},
+	})
+}
+
+var aggregationErrorCases = []errCase{
+	{`{service="api"} | rate(5m) | json`, `1:28: aggregation must be the last stage`},
+	{`{service="api"} | rate(5m) |= "x"`, `1:28: aggregation must be the last stage`},
+	{`{service="api"} | rate(5m) foo`, `1:28: aggregation must be the last stage`},
+	{`{service="api"} | rate()`, `1:24: expected duration, got ")"`},
+	{`{service="api"} | rate(5)`, `1:24: expected duration, got number "5"`},
+	{`{service="api"} | rate(5ms)`, `1:24: bad duration unit`},
+	{`{service="api"} | rate 5m`, `1:24: expected "(", got duration "5m"`},
+	{`{service="api"} | rate(5m`, `1:26: expected ")", got end of input`},
+	{`{service="api"} | rate(0s)`, `1:24: duration must be positive`},
+	{`{service="api"} | rate(99999999999999999999s)`, `1:24: duration out of range`},
+	{`{service="api"} | rate(9223372036854775807s)`, `1:24: duration out of range`},
+	{`{service="api"} | rate(5m) by`, `1:30: expected "(", got end of input`},
+	{`{service="api"} | rate(5m) by ()`, `1:32: expected label name, got ")"`},
+	{`{service="api"} | rate(5m) by (a, a)`, `1:35: duplicate label "a" in by (...)`},
+	{`{service="api"} | rate(5m) by (a`, `1:33: expected ")" or ",", got end of input`},
+	{`{service="api"} | rate(5m) by (a,)`, `1:34: expected label name, got ")"`},
+}
+
+func TestParseAggregationErrors(t *testing.T) {
+	runErrCases(t, aggregationErrorCases)
+}
+
+func TestParseRoadmapExamples(t *testing.T) {
+	want := []*Query{
+		{Selector: api},
+		{
+			Selector: Selector{Pos: at(1, 1), Matchers: []Matcher{
+				matcher(1, 2, "service", OpEq, "api"),
+				matcher(1, 17, "env", OpNeq, "dev"),
+			}},
+			Stages: []Stage{LineFilter{Pos: at(1, 29), Op: LineMatches, Text: "timeout|deadline"}},
+		},
+		{
+			Selector: Selector{Pos: at(1, 1), Matchers: []Matcher{
+				matcher(1, 2, "service", OpRe, "api-.*"),
+				matcher(1, 21, "level", OpGte, "warn"),
+			}},
+			Stages: []Stage{LineFilter{Pos: at(1, 36), Op: LineNotContains, Text: "healthcheck"}},
+		},
+		{
+			Selector: api,
+			Stages:   []Stage{ParserStage{Pos: at(1, 19), Kind: ParserJSON}},
+			Agg:      &Aggregation{Pos: at(1, 26), Func: AggRate, Range: 5 * time.Minute, By: []string{"level"}},
+		},
+	}
+	cases := make([]parseCase, len(roadmapExamples))
+	for i, src := range roadmapExamples {
+		cases[i] = parseCase{src, want[i]}
+	}
+	runParseCases(t, cases)
 }
 
 func TestErrorFormat(t *testing.T) {

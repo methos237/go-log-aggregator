@@ -9,7 +9,7 @@ func FuzzParse(f *testing.F) {
 	for _, seed := range roadmapExamples {
 		f.Add(seed)
 	}
-	for _, cases := range [][]errCase{selectorErrorCases, stageErrorCases} {
+	for _, cases := range [][]errCase{selectorErrorCases, stageErrorCases, aggregationErrorCases} {
 		for _, tc := range cases {
 			f.Add(tc.src)
 		}

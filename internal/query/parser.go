@@ -3,6 +3,9 @@ package query
 import (
 	"fmt"
 	"regexp"
+	"slices"
+	"strconv"
+	"time"
 
 	"github.com/jamespolk/go-log-aggregator/internal/model"
 )
@@ -45,7 +48,15 @@ func Parse(src string) (q *Query, err error) {
 			q.Stages = append(q.Stages, p.parseLineFilter())
 		case tokPipe:
 			p.advance()
-			q.Stages = append(q.Stages, p.parseStage())
+			kw := p.expect(tokIdent, stageWhat)
+			if fn, ok := aggFuncs[kw.Text]; ok {
+				q.Agg = p.parseAggregation(kw, fn)
+				if p.tok.Kind != tokEOF {
+					p.bail(p.tok.Pos, "aggregation must be the last stage")
+				}
+				return q, nil
+			}
+			q.Stages = append(q.Stages, p.parseStage(kw))
 		default:
 			p.bail(p.tok.Pos, `expected line filter, "|" or end of input, got %s`, describe(p.tok))
 		}
@@ -195,12 +206,11 @@ func (p *parser) parseLineFilter() LineFilter {
 
 const stageWhat = "a stage (json, logfmt, regexp, a label filter, or an aggregation)"
 
-// parseStage parses what follows a "|". The lexer hands keywords over as plain
-// identifiers, so this is where "json" is told apart from a label called json:
-// an identifier followed by an operator is a label filter, anything else has
-// to be a keyword.
-func (p *parser) parseStage() Stage {
-	kw := p.expect(tokIdent, stageWhat)
+// parseStage parses a stage given the identifier that follows the "|". The
+// lexer hands keywords over as plain identifiers, so this is where "json" is
+// told apart from a label called json: an identifier followed by an operator
+// is a label filter, anything else has to be a keyword.
+func (p *parser) parseStage(kw token) Stage {
 	switch kw.Text {
 	case "json":
 		return ParserStage{Pos: kw.Pos, Kind: ParserJSON}
@@ -231,4 +241,56 @@ func (p *parser) parseLabelFilter(label token) LabelFilter {
 	}
 	f.Value = p.parseValue(f.Label, f.Op, opPos)
 	return f
+}
+
+var aggFuncs = map[string]AggFunc{
+	"rate": AggRate, "count_over_time": AggCountOverTime, "bytes_over_time": AggBytesOverTime,
+}
+
+func (p *parser) parseAggregation(kw token, fn AggFunc) *Aggregation {
+	agg := &Aggregation{Pos: kw.Pos, Func: fn}
+	p.expect(tokLParen, `"("`)
+	agg.Range = p.parseDuration()
+	p.expect(tokRParen, `")"`)
+	if p.tok.Kind != tokIdent || p.tok.Text != "by" {
+		return agg
+	}
+	p.advance()
+	p.expect(tokLParen, `"("`)
+	for {
+		label := p.expect(tokIdent, "label name")
+		// GROUP BY a, a is legal SQL but never what the user meant.
+		if slices.Contains(agg.By, label.Text) {
+			p.bail(label.Pos, "duplicate label %q in by (...)", label.Text)
+		}
+		agg.By = append(agg.By, label.Text)
+		if p.tok.Kind != tokComma {
+			break
+		}
+		p.advance()
+	}
+	p.expect(tokRParen, `")" or ","`)
+	return agg
+}
+
+// units is keyed by the duration suffix the lexer accepts. Done by hand
+// because time.ParseDuration has no "d", and a retention-scale query needs
+// one.
+var units = map[byte]time.Duration{'s': time.Second, 'm': time.Minute, 'h': time.Hour, 'd': 24 * time.Hour}
+
+func (p *parser) parseDuration() time.Duration {
+	tok := p.want(tokDuration, "duration")
+	unit := units[tok.Text[len(tok.Text)-1]]
+	n, err := strconv.Atoi(tok.Text[:len(tok.Text)-1])
+	d := time.Duration(n) * unit
+	// Atoi catches digits that overflow an int; the division catches a count
+	// that fits but whose nanoseconds do not.
+	if err != nil || d/unit != time.Duration(n) {
+		p.bail(tok.Pos, "duration out of range")
+	}
+	if d == 0 {
+		p.bail(tok.Pos, "duration must be positive")
+	}
+	p.advance()
+	return d
 }
