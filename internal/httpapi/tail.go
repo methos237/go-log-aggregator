@@ -37,10 +37,14 @@ type tailAPI struct {
 }
 
 // tailRecord is one message on the wire: the query API's record plus the
-// stream's labels, which a tail client has no other way to learn.
+// stream's labels, which a tail client has no other way to learn, and how many
+// matches were dropped for this client since the previous message. Carried on
+// the next record rather than as a message of its own so a client that only
+// looks at records loses nothing but the count.
 type tailRecord struct {
 	record
-	Labels map[string]string `json:"labels"`
+	Labels  map[string]string `json:"labels"`
+	Dropped int64             `json:"dropped,omitempty"`
 }
 
 func (a *tailAPI) tail(w http.ResponseWriter, r *http.Request) {
@@ -88,9 +92,24 @@ func (a *tailAPI) tail(w http.ResponseWriter, r *http.Request) {
 	defer c.CloseNow() //nolint:errcheck // idempotent teardown
 
 	ctx := c.CloseRead(r.Context())
+	// Writes and pings are cut short by the subscription ending, so a client
+	// stalled mid-write cannot hold shutdown for the whole write timeout. The
+	// read context is left alone: canceling it would slam the connection shut
+	// before the goodbye below could be sent to a client that is still there.
+	wctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		select {
+		case <-sub.Done():
+			cancel()
+		case <-wctx.Done():
+		}
+	}()
+
 	heartbeat := time.NewTicker(a.ping)
 	defer heartbeat.Stop()
 
+	var reported int64
 	for {
 		select {
 		case <-ctx.Done():
@@ -100,13 +119,15 @@ func (a *tailAPI) tail(w http.ResponseWriter, r *http.Request) {
 			a.close(c, websocket.StatusGoingAway, "server shutting down")
 			return
 		case <-heartbeat.C:
-			if err := a.bounded(ctx, c.Ping); err != nil {
+			if err := a.bounded(wctx, c.Ping); err != nil {
 				return
 			}
 		case rec := <-sub.Records():
-			if err := a.send(ctx, c, &rec); err != nil {
+			dropped := sub.Dropped()
+			if err := a.send(wctx, c, &rec, dropped-reported); err != nil {
 				return
 			}
+			reported = dropped
 		}
 	}
 }
@@ -115,13 +136,14 @@ func (a *tailAPI) tail(w http.ResponseWriter, r *http.Request) {
 // expires the library closes the connection, which is the right outcome for a
 // client that has stopped reading — its buffer in the registry is already
 // dropping, and holding the socket open would only hold the goroutine.
-func (a *tailAPI) send(ctx context.Context, c *websocket.Conn, rec *tail.Record) error {
+func (a *tailAPI) send(ctx context.Context, c *websocket.Conn, rec *tail.Record, dropped int64) error {
 	body, err := json.Marshal(tailRecord{
 		record: record{
 			Time: rec.Time, StreamID: rec.StreamID, Seq: rec.Seq, Level: rec.Level, Message: rec.Message,
 			TraceID: hex.EncodeToString(rec.TraceID), SpanID: hex.EncodeToString(rec.SpanID), Fields: rec.Fields,
 		},
-		Labels: labelMap(rec.Labels),
+		Labels:  labelMap(rec.Labels),
+		Dropped: dropped,
 	})
 	if err != nil {
 		// A LogRecord always marshals; this is a programming error worth a log line.

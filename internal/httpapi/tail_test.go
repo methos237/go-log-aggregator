@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"google.golang.org/protobuf/proto"
 
 	logaggv1 "github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1"
@@ -26,14 +27,27 @@ import (
 
 const tailPing = 50 * time.Millisecond
 
-func newTailServer(t *testing.T) (*Server, *queuetest.Publisher, *httptest.Server) {
+// tailOpts are the knobs a tail test turns; the zero value is a healthy client.
+type tailOpts struct {
+	buffer  int
+	write   time.Duration
+	metrics *tail.Metrics
+}
+
+func newTailServer(t *testing.T, o tailOpts) (*Server, *queuetest.Publisher, *httptest.Server) {
 	t.Helper()
+	if o.buffer == 0 {
+		o.buffer = 8
+	}
+	if o.write == 0 {
+		o.write = time.Second
+	}
 	pub := &queuetest.Publisher{}
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	srv := New(&config.HTTP{
 		Addr: ":0", AuthToken: "secret", QueryTimeout: time.Second, QueryMaxRows: 50,
-		WriteTimeout: time.Second, TailPingInterval: tailPing,
-	}, observability.NewHealth(time.Second), Deps{Node: "solo", Tails: tail.New(pub, "tail", 8, nil, nil)}, log)
+		WriteTimeout: o.write, TailPingInterval: tailPing,
+	}, observability.NewHealth(time.Second), Deps{Node: "solo", Tails: tail.New(pub, "tail", o.buffer, o.metrics, nil)}, log)
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 	return srv, pub, ts
@@ -92,6 +106,9 @@ type message struct {
 // disconnects.
 func reader(t *testing.T, c *websocket.Conn) <-chan message {
 	t.Helper()
+	// The library's default read limit is 32KB and a record may carry a 64KB
+	// message; the server is the trusted party here, so the client sets none.
+	c.SetReadLimit(-1)
 	ch := make(chan message, 16)
 	go func() {
 		for {
@@ -128,7 +145,7 @@ func next(t *testing.T, ch <-chan message) (map[string]any, error) {
 
 func TestTailStreamsMatchingRecords(t *testing.T) {
 	t.Parallel()
-	_, pub, ts := newTailServer(t)
+	_, pub, ts := newTailServer(t, tailOpts{})
 	c, _, err := dial(t, ts, `{service="api"}%20|=%20"timeout"`, "secret")
 	if err != nil {
 		t.Fatal(err)
@@ -162,7 +179,7 @@ func TestTailStreamsMatchingRecords(t *testing.T) {
 
 func TestTailHandshakeErrors(t *testing.T) {
 	t.Parallel()
-	_, _, ts := newTailServer(t)
+	_, _, ts := newTailServer(t, tailOpts{})
 
 	tests := []struct {
 		name, query, token string
@@ -186,9 +203,82 @@ func TestTailHandshakeErrors(t *testing.T) {
 	}
 }
 
+// The rule the phase is built around: a client that stops reading loses
+// records, counted, is told how many when it next reads, is disconnected once
+// a write has stalled for the write timeout, and never once delays the
+// goroutine delivering fan-outs.
+func TestTailStalledClientIsCountedAndCut(t *testing.T) {
+	t.Parallel()
+	m := tail.NewMetrics(nil)
+	_, pub, ts := newTailServer(t, tailOpts{buffer: 4, write: 300 * time.Millisecond, metrics: m})
+	if _, _, err := dial(t, ts, `{service="api"}`, "secret"); err != nil {
+		t.Fatal(err)
+	}
+	// Never read from the connection: this client is the stalled browser tab.
+
+	api := model.LabelSet{Service: "api", Host: "web-1", Env: "prod"}
+	big := strings.Repeat("x", model.MaxMessageLen)
+	var slowest time.Duration
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		started := time.Now()
+		fanout(t, pub, api, big, big, big, big, big, big, big, big)
+		slowest = max(slowest, time.Since(started))
+		if testutil.ToFloat64(m.Dropped) > 0 && testutil.ToFloat64(m.Subscriptions) == 0 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if got := testutil.ToFloat64(m.Dropped); got == 0 {
+		t.Error("no records were dropped for a client that never reads")
+	}
+	if got := testutil.ToFloat64(m.Subscriptions); got != 0 {
+		t.Errorf("subscriptions = %v after the write timeout, want 0: the stalled client was not cut", got)
+	}
+	// Generous against a loaded runner; a blocked delivery would show as the
+	// full write timeout, 300ms, or worse.
+	if slowest > 100*time.Millisecond {
+		t.Errorf("slowest fan-out took %s: delivery blocked on the stalled client", slowest)
+	}
+}
+
+// A client that falls behind and recovers learns how much it missed.
+func TestTailReportsDropsOnTheNextRecord(t *testing.T) {
+	t.Parallel()
+	m := tail.NewMetrics(nil)
+	_, pub, ts := newTailServer(t, tailOpts{buffer: 1, metrics: m})
+	c, _, err := dial(t, ts, `{service="api"}`, "secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	api := model.LabelSet{Service: "api", Host: "web-1", Env: "prod"}
+	big := strings.Repeat("x", model.MaxMessageLen)
+
+	// Not reading yet, so the handler blocks on the socket once it is full and
+	// the one-slot buffer starts dropping.
+	for testutil.ToFloat64(m.Dropped) == 0 {
+		fanout(t, pub, api, big, big, big, big)
+	}
+	msgs := reader(t, c)
+	var sawDropped bool
+	for range 200 {
+		got, err := next(t, msgs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d, ok := got["dropped"].(float64); ok && d > 0 {
+			sawDropped = true
+			break
+		}
+	}
+	if !sawDropped {
+		t.Error("no record carried a dropped count after the buffer overflowed")
+	}
+}
+
 func TestTailShutdownSaysGoodbye(t *testing.T) {
 	t.Parallel()
-	srv, _, ts := newTailServer(t)
+	srv, _, ts := newTailServer(t, tailOpts{})
 	c, _, err := dial(t, ts, `{service="api"}`, "secret")
 	if err != nil {
 		t.Fatal(err)
