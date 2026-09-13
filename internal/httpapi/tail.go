@@ -62,13 +62,27 @@ func (a *tailAPI) tail(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	// Checked before the upgrade so an unsupported stage is a plain 400 the
-	// client can read, not a close frame it has to decode. Cheap to run twice;
-	// the registry compiles it again when it subscribes.
-	if _, err = query.NewEvaluator(q); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	// Subscribed before the upgrade, and the subscription is live on the broker
+	// before the 101 goes out. That is the guarantee a tail client relies on:
+	// anything accepted after the handshake completes is seen. It also makes an
+	// unsupported stage a plain 400 the client can read rather than a close
+	// frame. The cost is that an authenticated plain GET briefly holds a broker
+	// subscription; a probe that sends a bearer token to /v1/tail is the odd one.
+	sub, err := a.reg.Subscribe(q)
+	if err != nil {
+		var qe *query.Error
+		switch {
+		case errors.As(err, &qe):
+			writeError(w, http.StatusBadRequest, err.Error())
+		case errors.Is(err, tail.ErrClosed):
+			writeError(w, http.StatusServiceUnavailable, "shutting down")
+		default:
+			a.log.Error("tail subscribe failed", slog.String("query", src), slog.Any("error", err))
+			writeError(w, http.StatusInternalServerError, "subscribe failed")
+		}
 		return
 	}
+	defer sub.Close()
 
 	// Accept writes its own 4xx on a malformed handshake. Origin is left at the
 	// default, same-origin only: the CLI sends none, and a browser page served
@@ -80,21 +94,6 @@ func (a *tailAPI) tail(w http.ResponseWriter, r *http.Request) {
 	// CloseNow rather than Close on every exit path: by the time the handler
 	// returns, either the peer is gone or a close frame has already been sent.
 	defer c.CloseNow() //nolint:errcheck // idempotent teardown
-
-	// Subscribed after the upgrade, so an authenticated plain GET never costs
-	// the broker a subscription it will drop a moment later.
-	sub, err := a.reg.Subscribe(q)
-	if err != nil {
-		code, reason := websocket.StatusInternalError, "subscribe failed"
-		if errors.Is(err, tail.ErrClosed) {
-			code, reason = websocket.StatusGoingAway, "server shutting down"
-		} else {
-			a.log.Error("tail subscribe failed", slog.String("query", src), slog.Any("error", err))
-		}
-		a.close(c, code, reason)
-		return
-	}
-	defer sub.Close()
 
 	ctx := c.CloseRead(r.Context())
 	// Writes and pings are cut short by the subscription ending, so a client

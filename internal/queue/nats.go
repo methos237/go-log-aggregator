@@ -288,9 +288,19 @@ func (c *Conn) Fanout(subject string, payload []byte) error {
 // handler runs into. Its drops surface through the async error handler as
 // "slow consumer" warnings, which is the right severity — a tail handler that
 // blocks is a bug in this process, not a broker problem.
+//
+// The flush is what makes "subscribed" mean something: nats.go queues the SUB
+// in its outbound buffer and returns, so without the round trip a message
+// published a moment later by another connection could reach the broker first
+// and be missed. One PING/PONG per tail client is a price worth paying for a
+// handshake that promises nothing accepted after it goes unseen.
 func (c *Conn) Subscribe(subject string, h func(payload []byte)) (Subscription, error) {
 	sub, err := c.nc.Subscribe(subject, func(m *nats.Msg) { h(m.Data) })
 	if err != nil {
+		return nil, fmt.Errorf("subscribe to %s: %w", subject, err)
+	}
+	if err = c.nc.FlushTimeout(c.cfg.PublishTimeout); err != nil {
+		_ = sub.Unsubscribe()
 		return nil, fmt.Errorf("subscribe to %s: %w", subject, err)
 	}
 	return natsSubscription{sub}, nil
