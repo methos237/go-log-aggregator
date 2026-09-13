@@ -1,0 +1,18 @@
+-- query
+{service="api"} | rate(5m) by (status)
+-- source
+logs
+-- streams
+SELECT stream_id FROM streams WHERE service = $1
+-- streams args
+string "api"
+-- logs
+SELECT time_bucket($4::interval, time) AS bucket, count(*)::float8 / $5, fields ->> $6 FROM logs WHERE stream_id = ANY($1) AND time >= $2 AND time < $3 GROUP BY 1, 3 ORDER BY 1 DESC, 3 LIMIT $7
+-- logs args
+[]int64 []int64(nil)
+time.Time time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+time.Time time.Date(2026, time.September, 1, 1, 0, 0, 0, time.UTC)
+time.Duration 300000000000
+float64 300
+string "status"
+int 100

@@ -1,7 +1,6 @@
 package query
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -59,6 +58,13 @@ var goldenCases = []struct {
 	{name: "json_numeric", src: `{service="api"} | json | latency_ms > 250.5`},
 	{name: "logfmt_text", src: `{service="api"} | logfmt | method = "GET"`},
 	{name: "regexp_numeric", src: `{service="api"} | regexp "^(?P<method>\\w+) \\S+ (?P<status>\\d{3})$" | status >= 500`},
+	{name: "agg_rate_1h", src: `{service="api"} | rate(1h)`},
+	{name: "agg_rate_1m_by_level", src: `{service="api", level>="warn"} | rate(5m) by (level)`},
+	{name: "agg_count_by_service_env", src: `{env="prod"} | count_over_time(1h) by (service, env)`},
+	{name: "agg_bytes", src: `{service="api"} | bytes_over_time(5m)`},
+	{name: "agg_raw_by_field", src: `{service="api"} | rate(5m) by (status)`},
+	{name: "agg_after_pipeline", src: `{service="api"} |= "GET" | json | status >= 500 | count_over_time(1m) by (route, level)`},
+	{name: "agg_forward", src: `{service="api"} | rate(1m)`, forward: true},
 	{name: "pipeline_everything", src: `{service="api", level>="info"} |= "GET" !~ "healthz" | logfmt | route = "/v1/query" | json | status >= 400 | level != "warn"`},
 }
 
@@ -118,14 +124,31 @@ func TestCompileGolden(t *testing.T) {
 	}
 }
 
-func TestCompileRejectsUnsupported(t *testing.T) {
-	src := `{service="api"} | rate(5m)`
-	q, err := Parse(src)
-	if err != nil {
-		t.Fatalf("Parse(%s): %v", src, err)
+func TestChooseSource(t *testing.T) {
+	aligned := goldenRequest
+	offHour := Request{Start: goldenStart.Add(time.Minute), End: goldenStart.Add(61 * time.Minute), Limit: 100}
+	offMinute := Request{Start: goldenStart.Add(time.Second), End: goldenStart.Add(time.Hour), Limit: 100}
+	cases := []struct {
+		src  string
+		r    Request
+		want string
+	}{
+		{`{service="api"}`, aligned, "logs"},
+		{`{service="api"} | rate(1h)`, aligned, "logs_rate_1h"},
+		{`{service="api"} | rate(2h) by (level, service)`, aligned, "logs_rate_1h"},
+		{`{service="api"} | count_over_time(1d)`, aligned, "logs_rate_1h"},
+		{`{service="api"} | rate(1h)`, offHour, "logs_rate_1m"},
+		{`{service="api"} | rate(5m)`, aligned, "logs_rate_1m"},
+		{`{service="api"} | rate(90s)`, aligned, "logs"},
+		{`{service="api"} | rate(5m)`, offMinute, "logs"},
+		{`{service="api"} | bytes_over_time(5m)`, aligned, "logs"},
+		{`{service="api"} |= "x" | rate(5m)`, aligned, "logs"},
+		{`{service="api"} | rate(5m) by (status)`, aligned, "logs"},
 	}
-	if _, err := Compile(q, goldenRequest); !errors.Is(err, ErrUnsupported) {
-		t.Errorf("Compile(%s) error = %v, want ErrUnsupported", src, err)
+	for _, tc := range cases {
+		if got := compile(t, tc.src, tc.r).Source; got != tc.want {
+			t.Errorf("Source(%s, %v..%v) = %q, want %q", tc.src, tc.r.Start, tc.r.End, got, tc.want)
+		}
 	}
 }
 
@@ -275,6 +298,9 @@ var allowedWords = map[string]bool{
 	"DESC": true, "ASC": true, "LIMIT": true, "ANY": true, "coalesce": true, "jsonb": true,
 	"ILIKE": true, "NOT": true, "CASE": true, "WHEN": true, "THEN": true, "END": true,
 	"pg_input_is_valid": true, "numeric": true, "btrim": true, "substring": true, "regexp_match": true,
+	"time_bucket": true, "interval": true, "AS": true, "bucket": true, "GROUP": true, "JOIN": true,
+	"USING": true, "count": true, "sum": true, "n": true, "float8": true, "octet_length": true,
+	"logs_rate_1m": true, "logs_rate_1h": true,
 	"streams": true, "logs": true,
 	"stream_id": true, "service": true, "host": true, "env": true, "labels": true, "time": true,
 	"seq": true, "level": true, "message": true, "trace_id": true, "span_id": true, "fields": true,

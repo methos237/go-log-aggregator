@@ -106,6 +106,37 @@ func TestQueryPlansExecute(t *testing.T) {
 			require.NoError(t, err, src)
 			require.Equal(t, want, seqs, src)
 		}
+
+		// Aggregations: the request is minute-aligned, so anything the
+		// continuous aggregates can answer is routed to them and must agree
+		// with the raw scan. All six stream-1 rows fall in the first bucket.
+		aggregates := []struct {
+			src, source string
+			want        [][]any
+		}{
+			{`{service="api"} | count_over_time(1m)`, "logs_rate_1m", [][]any{{start, 6.0}}},
+			{`{service="api"} | count_over_time(1h) by (level)`, "logs_rate_1h", [][]any{{start, 5.0, int16(3)}, {start, 1.0, int16(4)}}},
+			{`{service="api"} | rate(1m) by (service, host)`, "logs_rate_1m", [][]any{{start, 0.1, "api", "web-1"}}},
+			{`{service="api"} |= "row" | count_over_time(1m)`, "logs", [][]any{{start, 3.0}}},
+			{`{service="api"} |= "row" | bytes_over_time(1m)`, "logs", [][]any{{start, 15.0}}},
+			{`{service="api"} | json | count_over_time(1m) by (user)`, "logs", [][]any{{start, 1.0, "root"}, {start, 5.0, nil}}},
+		}
+		for _, tc := range aggregates {
+			plan := compilePlan(t, tc.src, req)
+			require.Equal(t, tc.source, plan.Source, tc.src)
+			plan.Logs.Args[0] = ids
+			rows, err := pool.Query(ctx, plan.Logs.SQL, plan.Logs.Args...)
+			require.NoError(t, err, "%s: %s", tc.src, plan.Logs.SQL)
+			got, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) ([]any, error) {
+				vals, err := row.Values()
+				if err == nil {
+					vals[0] = vals[0].(time.Time).UTC()
+				}
+				return vals, err
+			})
+			require.NoError(t, err, tc.src)
+			require.Equal(t, tc.want, got, tc.src)
+		}
 	})
 }
 

@@ -35,7 +35,16 @@
 // and `regexp` exposes its named capture groups. Before any parser stage, label
 // filters read the structured fields the agent extracted at ingest. A missing
 // label compares as "" for text operators; for numeric operators (a bare
-// number on the right) a missing or non-numeric value never matches.
+// number on the right) a missing or non-numeric value never matches. The
+// promoted stream labels service, host and env are also usable in the pipeline
+// and in `by`; other stream labels are not, and belong in the selector.
+//
+// An aggregation buckets records by the duration and yields one row per bucket
+// and `by` group: `rate` is records per second, `count_over_time` records, and
+// `bytes_over_time` message bytes. The planner answers from a continuous
+// aggregate when the query has no stages, asks for counts, groups only by
+// level or promoted labels, and its buckets and time range align with the
+// aggregate's; the choice is reported as Plan.Source.
 package query
 
 import "time"

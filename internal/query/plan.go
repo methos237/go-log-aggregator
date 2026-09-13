@@ -38,12 +38,16 @@ type Stmt struct {
 type Plan struct {
 	// Streams resolves the selector against the streams table: SELECT stream_id ...
 	Streams Stmt
-	// Logs scans the hypertable. Logs.Args[0] is the []int64 stream-ID slot: nil
-	// here, filled by the executor from Streams' result. An empty set means the
+	// Logs scans Source. Logs.Args[0] is the []int64 stream-ID slot: nil here,
+	// filled by the executor from Streams' result. An empty set means the
 	// executor skips Logs entirely.
+	//
+	// Without an aggregation the rows are the eight logs columns in table
+	// order. With one they are (bucket timestamptz, value float8, then one
+	// column per `by` label in query order): level is a smallint, the rest text.
 	Logs Stmt
-	// Source is the relation Logs reads. Always "logs" until subtask 8 adds the
-	// continuous-aggregate choice.
+	// Source is the relation Logs reads: "logs", or one of the continuous
+	// aggregates when chooseSource can prove they answer the query exactly.
 	Source string
 }
 
@@ -63,9 +67,6 @@ type Request struct {
 	Limit      int
 	Direction  Direction
 }
-
-// ErrUnsupported is returned for aggregations until subtask 8.
-var ErrUnsupported = errors.New("query: aggregations are not supported yet")
 
 // sqlOps maps an Op to its Postgres spelling. Indexed by Op, so it must stay in
 // the grammar's order.
@@ -89,16 +90,20 @@ func Compile(q *Query, r Request) (*Plan, error) {
 	case r.Limit <= 0:
 		return nil, errors.New("query: limit must be positive")
 	}
-	if q.Agg != nil {
-		return nil, ErrUnsupported
-	}
-
 	var streams, logs stmt
 	streams.WriteString("SELECT stream_id FROM streams")
-	// The ids slot is typed even though it is nil so pgx knows it is binding an
-	// array and does not have to guess from a bare nil.
-	logs.WriteString("SELECT time, stream_id, seq, level, message, trace_id, span_id, fields FROM logs WHERE stream_id = ANY(" +
-		logs.arg([]int64(nil)) + ") AND time >= " + logs.arg(r.Start) + " AND time < " + logs.arg(r.End))
+
+	// logs accumulates only the WHERE conditions; the projection and FROM are
+	// prepended at the end, once the stages have said whether streams must be
+	// joined. The ids slot is typed even though it is nil so pgx knows it is
+	// binding an array and does not have to guess from a bare nil.
+	source := chooseSource(q, r)
+	timeCol := "time"
+	if source != "logs" {
+		timeCol = "bucket"
+	}
+	logs.WriteString("stream_id = ANY(" + logs.arg([]int64(nil)) + ") AND " +
+		timeCol + " >= " + logs.arg(r.Start) + " AND " + timeCol + " < " + logs.arg(r.End))
 
 	first := true
 	for _, m := range q.Selector.Matchers {
@@ -139,9 +144,54 @@ func Compile(q *Query, r Request) (*Plan, error) {
 	if r.Direction == Forward {
 		order = "ASC"
 	}
-	logs.WriteString(" ORDER BY time " + order + ", seq " + order + " LIMIT " + logs.arg(r.Limit))
+	var head, tail string
+	if q.Agg == nil {
+		head = "SELECT time, stream_id, seq, level, message, trace_id, span_id, fields"
+		tail = " ORDER BY time " + order + ", seq " + order
+	} else {
+		var err error
+		if head, tail, err = logs.aggregate(q.Agg, extract, source, timeCol, order); err != nil {
+			return nil, err
+		}
+	}
+	from := " FROM " + source
+	if logs.join {
+		from += " JOIN streams USING (stream_id)"
+	}
+	sql := head + from + " WHERE " + logs.String() + tail + " LIMIT " + logs.arg(r.Limit)
+	return &Plan{Streams: streams.stmt(), Logs: Stmt{SQL: sql, Args: logs.args}, Source: source}, nil
+}
 
-	return &Plan{Streams: streams.stmt(), Logs: logs.stmt(), Source: "logs"}, nil
+// grains are the continuous aggregates by bucket width, finest first, so the
+// coarsest one that fits is the last to match in chooseSource.
+var grains = []struct {
+	source string
+	width  time.Duration
+}{{"logs_rate_1m", time.Minute}, {"logs_rate_1h", time.Hour}}
+
+// chooseSource picks the relation that answers the query exactly at the least
+// cost. A continuous aggregate only has (bucket, stream_id, level, n), so it
+// serves an aggregation with no pipeline stages, no message bytes, and no
+// `by` label outside level and the promoted stream columns; and only when the
+// aggregation's buckets and the request's edges fall on its bucket boundaries,
+// since a partially covered bucket would be counted whole or not at all.
+func chooseSource(q *Query, r Request) string {
+	a := q.Agg
+	if a == nil || len(q.Stages) > 0 || a.Func == AggBytesOverTime {
+		return "logs"
+	}
+	for _, l := range a.By {
+		if l != "level" && !promoted[l] {
+			return "logs"
+		}
+	}
+	source := "logs"
+	for _, g := range grains {
+		if a.Range%g.width == 0 && r.Start.Truncate(g.width).Equal(r.Start) && r.End.Truncate(g.width).Equal(r.End) {
+			source = g.source
+		}
+	}
+	return source
 }
 
 // stmt accumulates SQL text and its arguments together, so a placeholder can
@@ -149,6 +199,9 @@ func Compile(q *Query, r Request) (*Plan, error) {
 type stmt struct {
 	strings.Builder
 	args []any
+	// join is set when a predicate or projection read a streams column, so the
+	// FROM clause must join streams.
+	join bool
 }
 
 // arg records v as the next argument and returns its placeholder. This is the
@@ -316,6 +369,50 @@ func namedGroups(pat string) (string, map[string]int) {
 	return out.String(), groups
 }
 
+// column returns the expression for a label name used in the pipeline: the
+// level column, a promoted stream column (which needs the join), or otherwise
+// a record field from the extractor in force. Extra stream labels are not
+// addressable here; they belong in the selector.
+func (s *stmt) column(name string, extract extractor) (string, error) {
+	switch {
+	case name == "level":
+		return "level", nil
+	case promoted[name]:
+		s.join = true
+		return name, nil
+	}
+	return extract(s, name)
+}
+
+// aggregate returns the projection and the GROUP BY/ORDER BY tail for an
+// aggregation. Grouping and ordering use ordinals so the `by` expressions,
+// which may carry placeholders, are written once.
+func (s *stmt) aggregate(a *Aggregation, extract extractor, source, timeCol, order string) (head, tail string, err error) {
+	head = "SELECT time_bucket(" + s.arg(a.Range) + "::interval, " + timeCol + ") AS bucket, "
+	count := "count(*)"
+	if source != "logs" {
+		count = "sum(n)"
+	}
+	switch a.Func {
+	case AggRate:
+		head += count + "::float8 / " + s.arg(a.Range.Seconds())
+	case AggCountOverTime:
+		head += count + "::float8"
+	case AggBytesOverTime:
+		head += "sum(octet_length(message))::float8"
+	}
+	group := "1"
+	for i, l := range a.By {
+		col, err := s.column(l, extract)
+		if err != nil {
+			return "", "", err
+		}
+		head += ", " + col
+		group += ", " + strconv.Itoa(i+3)
+	}
+	return head, " GROUP BY " + group + " ORDER BY 1 " + order + strings.TrimPrefix(group, "1"), nil
+}
+
 // labelFilter writes a predicate on an extracted label. Text comparisons
 // coalesce a missing label to "" for the same Prometheus semantics as matcher;
 // numeric ones compare as numeric and drop records whose value is missing or
@@ -324,7 +421,7 @@ func (s *stmt) labelFilter(f LabelFilter, extract extractor) error {
 	if f.Label == "level" {
 		return s.level(f.Op, f.Value)
 	}
-	v, err := extract(s, f.Label)
+	v, err := s.column(f.Label, extract)
 	if err != nil {
 		return err
 	}
