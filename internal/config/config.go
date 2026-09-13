@@ -65,6 +65,14 @@ type HTTP struct {
 	// QueryMaxRows caps the limit a request may ask for; larger and absent
 	// limits are clamped to it.
 	QueryMaxRows int
+	// TailBuffer is how many matched records one /v1/tail client may have
+	// waiting before further matches are dropped for it. It is what keeps a
+	// stalled client from holding memory or slowing anyone else.
+	TailBuffer int
+	// TailPingInterval is how often a tail connection is pinged. Under
+	// deploy/nginx.conf's 300s proxy_read_timeout it keeps an idle tail open;
+	// a client that does not answer within the interval is disconnected.
+	TailPingInterval time.Duration
 }
 
 // Admin is the internal listener: metrics and pprof. Never expose this port
@@ -353,6 +361,10 @@ func Load() (*Config, error) {
 			AuthToken:    e.str("HTTP_AUTH_TOKEN", ""),
 			QueryTimeout: e.dur("HTTP_QUERY_TIMEOUT", 20*time.Second),
 			QueryMaxRows: e.int("HTTP_QUERY_MAX_ROWS", 5000),
+			// A second or so of a busy service at the default; a client that
+			// falls further behind than that is stalled, not slow.
+			TailBuffer:       e.int("HTTP_TAIL_BUFFER", 1024),
+			TailPingInterval: e.dur("HTTP_TAIL_PING_INTERVAL", 30*time.Second),
 		},
 		Admin: Admin{
 			Addr:        e.str("ADMIN_ADDR", ":9090"),
@@ -557,6 +569,12 @@ func (c *Config) Validate() error {
 	}
 	if c.HTTP.QueryMaxRows <= 0 {
 		bad("http query max rows must be positive, got %d", c.HTTP.QueryMaxRows)
+	}
+	if c.HTTP.TailBuffer <= 0 {
+		bad("http tail buffer must be positive, got %d", c.HTTP.TailBuffer)
+	}
+	if c.HTTP.TailPingInterval <= 0 {
+		bad("http tail ping interval must be positive, got %s", c.HTTP.TailPingInterval)
 	}
 	if c.Admin.Addr == "" {
 		bad("admin addr must not be empty")

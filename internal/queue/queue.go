@@ -36,6 +36,17 @@ type Publisher interface {
 	TailSubject(env, service string) string
 }
 
+// Subscriber receives the fan-out copies Publisher.Fanout sends. Conn implements
+// it with a core NATS subscription; queuetest.Publisher delivers in memory.
+type Subscriber interface {
+	// Subscribe delivers every payload published to subject, which may use the
+	// NATS wildcards * and >, to h on the subscription's own goroutine. h must not
+	// block: a handler that stalls backs the subscription up until the client
+	// library drops messages for it, which is the broker-side half of the slow
+	// consumer story and not a substitute for the bounded buffer in the tail.
+	Subscribe(subject string, h func(payload []byte)) (Subscription, error)
+}
+
 // Subject-token limits.
 const (
 	// MaxSubjectTokenLen truncates one token of a subject. Label values are bounded
@@ -66,6 +77,23 @@ func Subject(prefix, env, service string) string {
 	b.WriteByte('.')
 	b.WriteString(sanitizeToken(service))
 	return b.String()
+}
+
+// Filter renders a subscription filter in the same token scheme as Subject,
+// where an empty env or service matches any value. A selector that pins
+// {service="api"} subscribes to prefix.*.api and never receives another
+// service's traffic; a regex or negation leaves its token a wildcard and the
+// evaluator does the work. Sanitizing is lossy, so a filter can over-match
+// ("a.b" and "a_b" share a token) but never under-match, which is the side
+// that would lose records.
+func Filter(prefix, env, service string) string {
+	tok := func(s string) string {
+		if s == "" {
+			return "*"
+		}
+		return sanitizeToken(s)
+	}
+	return prefix + "." + tok(env) + "." + tok(service)
 }
 
 // sanitizeToken makes an arbitrary label value safe to use as one subject token.

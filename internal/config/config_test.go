@@ -291,6 +291,16 @@ func TestValidate(t *testing.T) {
 			want:   "shutdown timeout must be positive",
 		},
 		{
+			name:   "zero tail buffer",
+			mutate: func(c *Config) { c.HTTP.TailBuffer = 0 },
+			want:   "tail buffer must be positive",
+		},
+		{
+			name:   "zero tail ping interval",
+			mutate: func(c *Config) { c.HTTP.TailPingInterval = 0 },
+			want:   "tail ping interval must be positive",
+		},
+		{
 			name:   "empty tail subject prefix",
 			mutate: func(c *Config) { c.Queue.TailSubjectPrefix = "" },
 			want:   "tail subject prefix must not be empty",

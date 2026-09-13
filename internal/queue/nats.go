@@ -281,6 +281,27 @@ func (c *Conn) Fanout(subject string, payload []byte) error {
 	return err
 }
 
+// Subscribe implements Subscriber with a core NATS subscription.
+//
+// Core subscriptions are the natural pair to Fanout: no consumer to declare, no
+// ack to send, and the client library's own pending limit is what a stalled
+// handler runs into. Its drops surface through the async error handler as
+// "slow consumer" warnings, which is the right severity — a tail handler that
+// blocks is a bug in this process, not a broker problem.
+func (c *Conn) Subscribe(subject string, h func(payload []byte)) (Subscription, error) {
+	sub, err := c.nc.Subscribe(subject, func(m *nats.Msg) { h(m.Data) })
+	if err != nil {
+		return nil, fmt.Errorf("subscribe to %s: %w", subject, err)
+	}
+	return natsSubscription{sub}, nil
+}
+
+// natsSubscription adapts *nats.Subscription to Subscription. Unsubscribe fails
+// only on a closed connection, where there is nothing left to release.
+type natsSubscription struct{ sub *nats.Subscription }
+
+func (s natsSubscription) Stop() { _ = s.sub.Unsubscribe() }
+
 // TailSubject renders the fan-out subject for a label set.
 func (c *Conn) TailSubject(env, service string) string {
 	return Subject(c.cfg.TailSubjectPrefix, env, service)
