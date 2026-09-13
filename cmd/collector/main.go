@@ -107,6 +107,15 @@ func runMigrations(up, down, status bool, dsnOverride string) error {
 	}
 }
 
+// clusterView hides the typed-nil trap: a nil *cluster.Cluster stored in the
+// interface would not compare equal to nil in the handler.
+func clusterView(c *cluster.Cluster) httpapi.ClusterView {
+	if c == nil {
+		return nil
+	}
+	return c
+}
+
 // loadConfig loads configuration and applies the DSN override, if any.
 func loadConfig(dsnOverride string) (*config.Config, error) {
 	cfg, err := config.Load()
@@ -222,7 +231,7 @@ func run(dsnOverride string) error {
 	}
 
 	// /readyz reports ready only once every registered dependency answers.
-	apiSrv := httpapi.New(&cfg.HTTP, health, pool, log)
+	apiSrv := httpapi.New(&cfg.HTTP, health, httpapi.Deps{DB: pool, Node: cfg.Node.Name, Cluster: clusterView(members)}, log)
 	adminSrv := observability.NewAdminServer(cfg.Admin, metrics, log)
 
 	// Binds its port here, so a conflict fails startup rather than surfacing as a

@@ -188,6 +188,26 @@ func inArc(lo, hi, h uint64) bool {
 	}
 }
 
+func TestRingShares(t *testing.T) {
+	if got := NewRing([]string{"one"}, 1).Shares(); got["one"] < 0.999 {
+		t.Errorf("single token share = %v, want 1", got)
+	}
+	shares := NewRing(nodeNames(4), DefaultVNodes).Shares()
+	var total float64
+	for n, s := range shares {
+		total += s
+		if s < 0.15 || s > 0.35 {
+			t.Errorf("%s share = %.3f, want near 0.25", n, s)
+		}
+	}
+	if total < 0.999 || total > 1.001 {
+		t.Errorf("shares sum to %.6f", total)
+	}
+	if got := NewRing(nil, 0).Shares(); len(got) != 0 {
+		t.Errorf("empty ring shares = %v", got)
+	}
+}
+
 func TestRingDistribution(t *testing.T) {
 	const keys = 200_000
 	r := NewRing(nodeNames(5), DefaultVNodes)

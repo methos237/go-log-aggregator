@@ -30,6 +30,10 @@ type queryAPI struct {
 	timeout time.Duration
 	maxRows int
 	log     *slog.Logger
+	// node is this process's name, reported by /v1/cluster when clustering is
+	// off; cluster is nil in that case.
+	node    string
+	cluster ClusterView
 }
 
 // queryRequest is the body of POST /v1/query. Times are RFC 3339; end

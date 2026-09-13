@@ -126,6 +126,23 @@ func (r *Ring) Arcs() []Arc {
 	return arcs
 }
 
+// Shares returns each member's fraction of the key space, summing to 1 on a
+// non-empty ring. It is the number /v1/cluster shows next to each member so
+// an uneven ring is visible without reading tokens.
+func (r *Ring) Shares() map[string]float64 {
+	shares := make(map[string]float64, len(r.nodes))
+	for _, a := range r.Arcs() {
+		// Hi - Lo wraps correctly in uint64 arithmetic for the arc that
+		// crosses the top; a single token owns the whole space.
+		span := a.Hi - a.Lo
+		if len(r.tokens) == 1 {
+			span = ^uint64(0)
+		}
+		shares[a.Owner] += float64(span) / (1 << 64)
+	}
+	return shares
+}
+
 // Transfer is a key range whose owner differs between two rings.
 type Transfer struct {
 	Lo, Hi   uint64
