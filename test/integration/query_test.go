@@ -108,13 +108,13 @@ func TestQueryPlansExecute(t *testing.T) {
 		} {
 			plan := compilePlan(t, src, req)
 			plan.Logs.Args[0] = ids
-			rows, err := pool.Query(ctx, plan.Logs.SQL, plan.Logs.Args...)
+			rows, err = pool.Query(ctx, plan.Logs.SQL, plan.Logs.Args...)
 			require.NoError(t, err, "%s: %s", src, plan.Logs.SQL)
-			seqs, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (int64, error) {
+			seqs, cerr := pgx.CollectRows(rows, func(row pgx.CollectableRow) (int64, error) {
 				var seq int64
 				return seq, row.Scan(nil, nil, &seq, nil, nil, nil, nil, nil)
 			})
-			require.NoError(t, err, src)
+			require.NoError(t, cerr, src)
 			require.Equal(t, want, seqs, src)
 		}
 
@@ -136,26 +136,26 @@ func TestQueryPlansExecute(t *testing.T) {
 			plan := compilePlan(t, tc.src, req)
 			require.Equal(t, tc.source, plan.Source, tc.src)
 			plan.Logs.Args[0] = ids
-			rows, err := pool.Query(ctx, plan.Logs.SQL, plan.Logs.Args...)
+			rows, err = pool.Query(ctx, plan.Logs.SQL, plan.Logs.Args...)
 			require.NoError(t, err, "%s: %s", tc.src, plan.Logs.SQL)
-			got, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) ([]any, error) {
-				vals, err := row.Values()
-				if err == nil {
+			got, cerr := pgx.CollectRows(rows, func(row pgx.CollectableRow) ([]any, error) {
+				vals, verr := row.Values()
+				if verr == nil {
 					vals[0] = vals[0].(time.Time).UTC()
 				}
-				return vals, err
+				return vals, verr
 			})
-			require.NoError(t, err, tc.src)
+			require.NoError(t, cerr, tc.src)
 			require.Equal(t, tc.want, got, tc.src)
 		}
 
 		// The executor over the same data: both statements, the empty-set
 		// short circuit, and every column and label type scanned.
 		run := func(src string) *executor.Result {
-			q, err := query.Parse(src)
-			require.NoError(t, err, src)
-			res, err := executor.Run(ctx, pool, q, req)
-			require.NoError(t, err, src)
+			q, perr := query.Parse(src)
+			require.NoError(t, perr, src)
+			res, rerr := executor.Run(ctx, pool, q, req)
+			require.NoError(t, rerr, src)
 			require.Positive(t, res.Elapsed)
 			return res
 		}

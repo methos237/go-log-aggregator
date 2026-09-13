@@ -67,8 +67,9 @@ tidy: ## Sync go.mod and go.sum
 	go mod tidy
 
 .PHONY: lint
-lint: ## Run golangci-lint
+lint: ## Run golangci-lint, including the integration-tagged tests CI lints
 	golangci-lint run ./...
+	golangci-lint run --build-tags=integration ./test/...
 
 .PHONY: vet
 vet: ## Run go vet
