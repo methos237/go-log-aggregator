@@ -65,13 +65,17 @@ func (c *Coordinator) Run(ctx context.Context, q *query.Query, r query.Request) 
 
 	shards := c.shards(ids)
 	shape := executor.ShapeOf(q)
+	// A peer compiles the same query for the same request, so it must be
+	// given the same over-fetched limit the local plan used.
+	shipped := r
+	shipped.Limit = limit + 1
 	results := make([]shardResult, len(shards))
 	var wg sync.WaitGroup
 	for i, s := range shards {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results[i] = c.execute(ctx, plan.Logs, &s, shape)
+			results[i] = c.execute(ctx, q, shipped, plan.Logs, &s, shape)
 		}()
 	}
 	wg.Wait()
@@ -86,7 +90,13 @@ func (c *Coordinator) Run(ctx context.Context, q *query.Query, r query.Request) 
 			// doing, not a partial result. The error text itself stays in the
 			// log, where execute put it: a database message does not belong
 			// in a response, which is the single-node handler's policy too.
-			if ctx.Err() != nil || shards[i].local {
+			if ctx.Err() != nil {
+				// A remote shard reports the deadline as a gRPC status, which
+				// is not the context error the HTTP layer maps to a 504; the
+				// context itself says what happened.
+				return nil, fmt.Errorf("cluster: shard %s: %w", shards[i].member.Name, ctx.Err())
+			}
+			if shards[i].local {
 				return nil, sr.err
 			}
 			res.Warnings = append(res.Warnings, fmt.Sprintf("%s unreachable: %d streams not searched", shards[i].member.Name, len(shards[i].ids)))
@@ -143,16 +153,17 @@ type shardResult struct {
 	err     error
 }
 
-// execute runs one shard, here or on its owner. The statement is copied so
-// concurrent shards each bind their own ids.
-func (c *Coordinator) execute(ctx context.Context, logs query.Stmt, s *shard, shape executor.Shape) shardResult {
-	stmt := query.Stmt{SQL: logs.SQL, Args: slices.Clone(logs.Args)}
-	stmt.Args[0] = s.ids
+// execute runs one shard: the local plan with this shard's ids bound, or the
+// query and request shipped to the owner to compile for itself. The statement
+// is copied so concurrent shards each bind their own ids.
+func (c *Coordinator) execute(ctx context.Context, q *query.Query, r query.Request, logs query.Stmt, s *shard, shape executor.Shape) shardResult {
 	var sr shardResult
 	if s.local {
+		stmt := query.Stmt{SQL: logs.SQL, Args: slices.Clone(logs.Args)}
+		stmt.Args[0] = s.ids
 		sr.records, sr.points, sr.err = executor.ExecLogs(ctx, c.db, stmt, shape)
 	} else {
-		sr.records, sr.points, sr.err = c.peers.Execute(ctx, s.member.PeerAddr(), stmt, shape)
+		sr.records, sr.points, sr.err = c.peers.Execute(ctx, s.member.PeerAddr(), q, r, s.ids)
 	}
 	if sr.err != nil && ctx.Err() == nil {
 		c.log.Warn("shard failed", slog.String("owner", s.member.Name), slog.Int("streams", len(s.ids)), slog.Any("error", sr.err))
@@ -223,7 +234,9 @@ func (h *recordHeap) Pop() any {
 // mergePoints combines per-shard series. Every aggregation is a count or a
 // sum, so the same bucket and group from two shards add. The merged points
 // are ordered like a single node's: bucket in the direction's order, then the
-// by values ascending with a missing value last.
+// by values ascending with a missing value last, where level compares by
+// severity as the smallint column does and text compares bytewise as the
+// planner's COLLATE "C" does.
 func mergePoints(shards [][]executor.Point, dir query.Direction, by []string) []executor.Point {
 	merged := make(map[string]*executor.Point)
 	var keys []string
@@ -260,12 +273,24 @@ func mergePoints(shards [][]executor.Point, dir query.Direction, by []string) []
 			case !aok && bok:
 				return false
 			case av != bv:
-				return av < bv
+				return labelLess(name, av, bv)
 			}
 		}
 		return false
 	})
 	return out
+}
+
+// labelLess orders two values of one by label the way the database did.
+func labelLess(name, a, b string) bool {
+	if name == "level" {
+		la, errA := model.ParseLevel(a)
+		lb, errB := model.ParseLevel(b)
+		if errA == nil && errB == nil {
+			return la < lb
+		}
+	}
+	return a < b
 }
 
 // pointKey identifies a bucket and group; a missing label is distinct from

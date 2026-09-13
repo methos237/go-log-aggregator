@@ -40,6 +40,7 @@ func runParseCases(t *testing.T, cases []parseCase) {
 			if err != nil {
 				t.Fatalf("Parse(%q) error: %v", tc.src, err)
 			}
+			tc.want.Text = tc.src
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("Parse(%q)\n got %#v\nwant %#v", tc.src, got, tc.want)
 			}

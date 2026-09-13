@@ -39,8 +39,8 @@ func TestPeerExecute(t *testing.T) {
 	srv, err := cluster.NewPeerServer(ctx, cfg, pool, log)
 	require.NoError(t, err)
 	go func() { _ = srv.Serve() }()
-	t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
-	peers, err := cluster.NewPeers(cfg)
+	t.Cleanup(func() { _ = srv.Shutdown(ctx) })
+	peers, err := cluster.NewPeers(cfg, 0)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = peers.Close() })
 
@@ -59,24 +59,33 @@ func TestPeerExecute(t *testing.T) {
 
 		wantRecords, wantPoints, lerr := executor.ExecLogs(ctx, pool, plan.Logs, shape)
 		require.NoError(t, lerr, src)
-		gotRecords, gotPoints, rerr := peers.Execute(ctx, srv.Addr(), plan.Logs, shape)
+		gotRecords, gotPoints, rerr := peers.Execute(ctx, srv.Addr(), q, req, []int64{1, 2})
 		require.NoError(t, rerr, src)
 		require.Equal(t, wantRecords, gotRecords, src)
 		require.Equal(t, wantPoints, gotPoints, src)
 		require.True(t, len(gotRecords)+len(gotPoints) > 0, "%s returned nothing", src)
 	}
 
-	// A statement outside the planner's vocabulary is refused before it
-	// reaches the database, with the offending word in the message.
-	_, _, err = peers.Execute(ctx, srv.Addr(), query.Stmt{SQL: "SELECT pg_sleep(1)", Args: nil}, executor.Shape{})
+	// The peer compiles for itself, so text its parser rejects is refused
+	// with the parser's message, and no shipped SQL of any kind is run.
+	bad := &query.Query{Text: `{service="api"`}
+	_, _, err = peers.Execute(ctx, srv.Addr(), bad, req, []int64{1})
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.Contains(t, err.Error(), "pg_sleep")
+	require.Contains(t, err.Error(), `expected "}"`)
+
+	// No ids means no statement and no rows.
+	q, err := query.Parse(`{env="prod"}`)
+	require.NoError(t, err)
+	records, points, err := peers.Execute(ctx, srv.Addr(), q, req, nil)
+	require.NoError(t, err)
+	require.Nil(t, records)
+	require.Nil(t, points)
 
 	// An unreachable peer is an error the coordinator can turn into a warning.
 	short, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()
-	_, _, err = peers.Execute(short, "127.0.0.1:1", query.Stmt{SQL: "SELECT 1"}, executor.Shape{})
+	_, _, err = peers.Execute(short, "127.0.0.1:1", q, req, []int64{1})
 	require.Error(t, err)
 }
 
@@ -132,7 +141,7 @@ func TestCoordinatorFanOut(t *testing.T) {
 		return ready == 2
 	}, 10*time.Second, 20*time.Millisecond, "a should see both members ready")
 
-	peers, err := cluster.NewPeers(&config.Cluster{})
+	peers, err := cluster.NewPeers(&config.Cluster{}, 0)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = peers.Close() })
 	coord := cluster.NewCoordinator(pool, a.cluster, peers, log)

@@ -86,7 +86,9 @@ func TestRingArcsTileKeySpace(t *testing.T) {
 func TestRingProperties(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		n := rapid.IntRange(1, 8).Draw(t, "nodes")
-		vnodes := rapid.SampledFrom([]int{16, 64, 128}).Draw(t, "vnodes")
+		// Below 64 virtual nodes the share variance is too wide for the 1/(N+1)
+		// bound below to be a test rather than a coin flip.
+		vnodes := rapid.SampledFrom([]int{64, 128}).Draw(t, "vnodes")
 		nodes := nodeNames(n)
 		// Keys are real stream ids in spirit: uniform hashes, all distinct.
 		// Drawing them raw lets rapid shrink to 500 zeros, which says nothing

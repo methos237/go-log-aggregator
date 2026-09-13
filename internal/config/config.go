@@ -510,9 +510,21 @@ func (c *Config) Validate() error {
 			}
 		}
 		if c.Cluster.AdvertiseAddr != "" {
-			if _, _, err := net.SplitHostPort(c.Cluster.AdvertiseAddr); err != nil {
+			host, _, err := net.SplitHostPort(c.Cluster.AdvertiseAddr)
+			switch {
+			case err != nil:
 				bad("cluster advertise addr %q must be host:port: %v", c.Cluster.AdvertiseAddr, err)
+			case host == "":
+				// An empty host would be advertised as 0.0.0.0 and every peer
+				// would dial itself.
+				bad("cluster advertise addr %q needs a host: peers dial what is advertised", c.Cluster.AdvertiseAddr)
 			}
+		}
+		if loopbackAddr(c.Cluster.PeerAddr) && !loopbackAddr(c.Cluster.BindAddr) {
+			// Peers dial the gossip address with the peer port, so a peer
+			// listener on loopback is unreachable from any other host and every
+			// fan-out to this node would degrade into a warning.
+			bad("cluster peer addr %s binds loopback while gossip binds %s: peers would dial an unreachable port", c.Cluster.PeerAddr, c.Cluster.BindAddr)
 		}
 		if c.Cluster.VNodes < 1 {
 			bad("cluster vnodes must be positive, got %d", c.Cluster.VNodes)

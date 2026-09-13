@@ -234,7 +234,7 @@ var allowedWords = map[string]bool{
 	"pg_input_is_valid": true, "numeric": true, "btrim": true, "substring": true, "regexp_match": true,
 	"time_bucket": true, "interval": true, "AS": true, "bucket": true, "GROUP": true, "JOIN": true,
 	"USING": true, "count": true, "sum": true, "n": true, "float8": true, "octet_length": true,
-	"logs_rate_1m": true, "logs_rate_1h": true,
+	"logs_rate_1m": true, "logs_rate_1h": true, "COLLATE": true, "C": true,
 	"streams": true, "logs": true,
 	"stream_id": true, "service": true, "host": true, "env": true, "labels": true, "time": true,
 	"seq": true, "level": true, "message": true, "trace_id": true, "span_id": true, "fields": true,
@@ -501,6 +501,13 @@ func (s *stmt) aggregate(a *Aggregation, extract extractor, source, timeCol, ord
 		col, err := s.column(l, extract)
 		if err != nil {
 			return "", "", err
+		}
+		// Text groups sort in the "C" collation, plain byte order, so the
+		// order a single node returns and the order a coordinator merges
+		// shards into are the same order whatever the database's default
+		// collation is. level is a smallint and sorts numerically.
+		if l != "level" {
+			col = "(" + col + `) COLLATE "C"`
 		}
 		head += ", " + col
 		group += ", " + strconv.Itoa(i+3)

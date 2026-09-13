@@ -62,7 +62,7 @@ Requires Docker. Go is only needed to run tests and linters locally.
 ```bash
 make dev          # build and start the stack, wait until healthy
 make dev-logs     # follow logs
-make dev-scale N=3  # run 3 collectors (host ports move to a range; see make dev-ps)
+make dev-scale N=3  # run 3 collectors behind a proxy on the same host ports
 make dev-down     # stop, keeping data
 make dev-nuke     # stop and delete volumes
 ```
@@ -172,9 +172,9 @@ exposes heap contents.
 
 Collectors find each other with `hashicorp/memberlist` gossip and build a consistent
 hash ring over their names, 128 virtual nodes each. Every collector writes through
-JetStream, so the ring divides reads, not data: a query is planned once by whichever
-collector takes it, the matching stream ids are split by owner, each owner scans its
-share, and the coordinator merges the rows. A peer that cannot be reached becomes a
+JetStream, so the ring divides reads, not data: whichever collector takes a query
+resolves the matching streams, splits the ids by owner, ships each owner the query
+text and its share of the ids to compile and scan itself, and merges the rows. A peer that cannot be reached becomes a
 `warnings` entry in the response instead of a failed query.
 
 ```bash

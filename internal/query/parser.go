@@ -42,7 +42,7 @@ func Parse(src string) (q *Query, err error) {
 		}
 	}()
 	p.advance()
-	q = &Query{Selector: p.parseSelector()}
+	q = &Query{Text: src, Selector: p.parseSelector()}
 	for p.tok.Kind != tokEOF {
 		switch p.tok.Kind {
 		case tokPipeExact, tokNeq, tokPipeRe, tokNre:

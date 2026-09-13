@@ -45,28 +45,46 @@ only those. The ring routes query fan-out and, in phase 6, tail
 subscriptions. Writes never consult it. Saying this plainly is better than
 implying ownership does more than it does.
 
-### Plan once, ship the plan
+### Ship the query, not the SQL
 
-The coordinator parses and plans a query once and ships each peer the planned
-logs statement with that peer's ids bound, as a typed argument list over
-gRPC. A peer never sees DSL text and never plans, so a parse error surfaces
-exactly once and every shard runs the same SQL.
+The roadmap said to plan once and ship the plan. The first version did: the
+coordinator sent each peer its planned logs statement with the ids bound, and
+the peer checked the text against `query.CheckSQL`, the planner's identifier
+allow-list, before running it. Review showed why that is the wrong depth. An
+allow-list bounds vocabulary, not meaning: `SELECT ... FROM logs` with no
+`WHERE` and no `LIMIT`, or a self cross join, is made entirely of words the
+planner writes. A peer port would have been an execute-SQL endpoint bounded
+by a word list, and in the compose stack that port is plaintext on the whole
+compose network.
 
-That makes the peer service an "execute this SQL" endpoint, which is a remote
-SQL console unless something stops it. Two things do. Every shipped statement
-must pass `query.CheckSQL`, the planner's identifier allow-list, now exported
-from the compiler and shared by the unit test, the fuzzer and the peer; a
-statement with a word the planner never writes is refused before it reaches
-the database. And the listener is mTLS or loopback unless the operator sets
-`LOGAGG_CLUSTER_PEER_ALLOW_PLAINTEXT`, the same rule ingest applies. One key
-pair serves both directions, so one CA signs every collector.
+So the coordinator ships the query text and the request half of the plan
+(range, over-fetched limit, direction) with the peer's share of the ids, and
+the peer runs the same compiler over the same inputs. The only statements a
+peer executes are ones its own planner wrote, with the time bound and row cap
+the planner always injects; the network cannot make it run anything the
+language cannot mean. The parse-once benefit is kept in the sense that
+matters: the coordinator already rejected anything malformed, so a peer parse
+error can only come from a version skew and surfaces as a shard warning.
+`query.CheckSQL` stays exported for the unit tests and the fuzzer.
+
+The listener is mTLS or loopback unless the operator sets
+`LOGAGG_CLUSTER_PEER_ALLOW_PLAINTEXT`, the same rule ingest applies; even
+then it is a query endpoint, not a SQL one. One key pair serves both
+directions, so one CA signs every collector. Configuration refuses a loopback
+peer port behind a routable gossip address, since peers dial the gossip host
+with the peer port and would find nothing there.
 
 ### Merge and degrade
 
 Records from the shards are k-way merged with a heap in the request's
 direction and cut at the limit. Points are summed per bucket and group, since
 every aggregation is a count or a sum, then ordered as a single node would
-order them. A shard whose owner is unreachable becomes a warning naming the
+order them: the planner sorts text group columns in the "C" collation and the
+merge compares bytewise, and both order level by severity, so the order does
+not depend on the database's default collation. A peer that has just died is
+still ready in gossip for a few seconds; the client gives up on a connection
+in three, well inside the query budget, so the shard degrades to a warning
+instead of timing out the query. A shard whose owner is unreachable becomes a warning naming the
 member and the number of streams not searched, and the rest of the result
 stands. Streams whose owner is not ready, or not in the ring, are scanned
 locally without a warning; the database is shared, so the coordinator can
@@ -90,11 +108,11 @@ at the collectors.
 
 ## Consequences
 
-- Adding a SQL construct to the planner means extending the allow-list, and
-  the peer enforces the same list, so a new construct that the peer does not
-  know about fails loudly rather than executing.
-- Every argument type the planner mints is a case in the wire format; the
-  round-trip test fails before a peer does when one is added.
+- Peers must run the same compiler version as the coordinator, or a query
+  the coordinator accepts may be a shard warning on a peer. Rolling upgrades
+  degrade rather than fail, and the warning names the member.
+- Shard replies are capped at the row cap times the largest record; a reply
+  past the cap is a warning, not silent truncation.
 - The chaos test (`make chaos`) is the phase's claim made executable: five
   collectors, two killed mid-ingest, zero gaps in the delivered sequence and a
   ring rebalanced onto the survivors. It waits out `ack_wait`, because a

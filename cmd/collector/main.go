@@ -28,6 +28,7 @@ import (
 	"github.com/jamespolk/go-log-aggregator/internal/config"
 	"github.com/jamespolk/go-log-aggregator/internal/httpapi"
 	"github.com/jamespolk/go-log-aggregator/internal/ingest"
+	"github.com/jamespolk/go-log-aggregator/internal/model"
 	"github.com/jamespolk/go-log-aggregator/internal/observability"
 	"github.com/jamespolk/go-log-aggregator/internal/query/executor"
 	"github.com/jamespolk/go-log-aggregator/internal/queue"
@@ -235,10 +236,10 @@ func run(dsnOverride string) error {
 		if err != nil {
 			return err
 		}
-		if joinErr := members.Join(ctx); joinErr != nil {
-			return joinErr
-		}
-		peers, peersErr := cluster.NewPeers(&cfg.Cluster)
+		// A shard's reply is at most the row cap of records, each bounded by
+		// the message limit plus some fields; gRPC's 4 MiB default is a few
+		// thousand records.
+		peers, peersErr := cluster.NewPeers(&cfg.Cluster, cfg.HTTP.QueryMaxRows*(model.MaxMessageLen+4096))
 		if peersErr != nil {
 			return peersErr
 		}
@@ -271,9 +272,19 @@ func run(dsnOverride string) error {
 
 	g, gctx := errgroup.WithContext(ctx)
 
-	// Every listener is bound, so peers may route to this node now.
+	// Joining happens alongside the listeners, not before them: memberlist
+	// dials every resolved seed with its own timeouts, so a partitioned seed
+	// list could otherwise hold the health endpoints hostage for longer than
+	// the container healthcheck allows. Readiness is advertised once the join
+	// has settled, by which point every port below has long been bound.
 	if members != nil {
-		members.SetReady(true)
+		g.Go(func() error {
+			if joinErr := members.Join(gctx); joinErr != nil {
+				return joinErr
+			}
+			members.SetReady(true)
+			return nil
+		})
 	}
 
 	g.Go(func() error {
@@ -346,8 +357,10 @@ func run(dsnOverride string) error {
 		// same reason readiness goes first: unready-then-drain is quiet,
 		// drain-then-unready is a burst of failed fan-outs.
 		if members != nil {
-			members.SetReady(false)
-			if leaveErr := members.Leave(cfg.Node.ShutdownTimeout); leaveErr != nil {
+			// Leave is what tells peers to stop routing here; it gets a slice
+			// of the budget, not all of it, so the drain below still has time.
+			deadline, _ := shutdownCtx.Deadline()
+			if leaveErr := members.Leave(min(time.Until(deadline)/4, 5*time.Second)); leaveErr != nil {
 				errs = append(errs, fmt.Errorf("cluster leave: %w", leaveErr))
 			}
 		}

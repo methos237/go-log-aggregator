@@ -234,6 +234,18 @@ func TestValidate(t *testing.T) {
 			want:   "cluster bind addr",
 		},
 		{
+			name:   "cluster advertise addr without host",
+			mutate: func(c *Config) { c.Cluster.Enabled, c.Cluster.AdvertiseAddr = true, ":7946" },
+			want:   "needs a host",
+		},
+		{
+			name: "cluster loopback peer port behind routable gossip",
+			mutate: func(c *Config) {
+				c.Cluster.Enabled, c.Cluster.BindAddr, c.Cluster.PeerAllowPlaintext = true, ":7946", true
+			},
+			want: "unreachable port",
+		},
+		{
 			name:   "cluster peer plaintext on routable addr",
 			mutate: func(c *Config) { c.Cluster.Enabled, c.Cluster.PeerAddr = true, ":9096" },
 			want:   "CLUSTER_PEER_ALLOW_PLAINTEXT",

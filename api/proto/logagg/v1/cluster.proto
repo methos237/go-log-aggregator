@@ -1,11 +1,12 @@
 // Wire format for collector <-> collector query fan-out.
 //
-// A coordinator parses and plans a query once, then ships each owning peer the
-// planned logs statement with that peer's stream ids already bound. The peer
-// never sees DSL text and never plans: it checks the statement against the
-// planner's identifier allow-list, runs it, and streams the rows back. Shipping
-// the plan rather than the text means a parse error surfaces exactly once, on
-// the coordinator, and every peer executes the same SQL.
+// A coordinator parses and plans a query, resolves the matching streams, and
+// asks each owning peer to answer for that peer's share of the stream ids. The
+// request carries the query text and the request parameters, not SQL: the
+// peer runs the same compiler over the same inputs, so the only statements a
+// peer ever executes are ones its own planner wrote, with the time bound and
+// row cap the planner always injects. A peer port is therefore never a way to
+// run arbitrary SQL, whatever reaches it.
 syntax = "proto3";
 
 package logagg.v1;
@@ -14,41 +15,18 @@ import "logagg/v1/ingest.proto";
 
 option go_package = "github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1;logaggv1";
 
-// Arg is one bound parameter of a planned statement. The cases mirror the Go
-// types the planner mints; anything else is a planner change and a wire change.
-message Arg {
-  oneof value {
-    string text = 1;
-    int64 integer = 2;
-    // level is the smallint column; kept apart from integer so the peer binds
-    // the type Postgres expects without a cast.
-    int32 level = 3;
-    double number = 4;
-    int64 time_unix_nano = 5;
-    int64 duration_nanos = 6;
-    // stream_ids is the id slot: the coordinator has resolved the selector and
-    // partitioned the ids by owner, so each peer receives only its own.
-    StreamIDs stream_ids = 7;
-  }
-}
-
-message StreamIDs {
-  repeated int64 ids = 1;
-}
-
-// Statement is a parameterized SQL statement with its arguments.
-message Statement {
-  string sql = 1;
-  repeated Arg args = 2;
-}
-
-// ExecuteRequest asks a peer to run a planned logs statement.
+// ExecuteRequest asks a peer to answer one shard of a query.
 message ExecuteRequest {
-  Statement logs = 1;
-  // aggregate says whether rows are (bucket, value, by...) points or log
-  // records, and by names the grouping columns in order.
-  bool aggregate = 2;
-  repeated string by = 3;
+  // query is the DSL text the coordinator already parsed.
+  string query = 1;
+  // The request half of the plan: the range, the row cap the coordinator
+  // wants back from this shard, and the order.
+  int64 start_unix_nano = 2;
+  int64 end_unix_nano = 3;
+  int32 limit = 4;
+  bool forward = 5;
+  // stream_ids is this peer's share of the resolved selector.
+  repeated int64 stream_ids = 6;
 }
 
 // Record is one log row, with its stream id since a peer's rows span streams.
@@ -70,12 +48,10 @@ message Point {
   map<string, string> labels = 3;
 }
 
-// ExecuteResponse carries either records or points, matching the request.
+// ExecuteResponse carries either records or points, matching the query.
 message ExecuteResponse {
   repeated Record records = 1;
   repeated Point points = 2;
-  // source is the relation the statement read, echoed for the response.
-  string source = 3;
 }
 
 // PeerService is the internal collector-to-collector API.

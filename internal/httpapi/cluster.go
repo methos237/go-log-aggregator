@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/jamespolk/go-log-aggregator/internal/cluster"
@@ -73,12 +74,4 @@ func (a *queryAPI) clusterState(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp)
 }
 
-func hex16(v uint64) string {
-	const digits = "0123456789abcdef"
-	var b [16]byte
-	for i := 15; i >= 0; i-- {
-		b[i] = digits[v&0xf]
-		v >>= 4
-	}
-	return string(b[:])
-}
+func hex16(v uint64) string { return fmt.Sprintf("%016x", v) }

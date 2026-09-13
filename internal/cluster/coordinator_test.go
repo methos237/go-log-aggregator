@@ -61,11 +61,13 @@ func TestMergePointsSumsAcrossShards(t *testing.T) {
 		{Bucket: t0, Value: 5, Labels: map[string]string{"level": "error"}},
 	}
 	got := mergePoints([][]executor.Point{a, b}, query.Backward, []string{"level"})
+	// Within a bucket, levels order by severity as the smallint column does,
+	// so warn precedes error even though "error" < "warn" bytewise.
 	want := []executor.Point{
 		{Bucket: m1, Value: 5, Labels: map[string]string{"level": "info"}},
 		{Bucket: m1, Value: 4},
-		{Bucket: t0, Value: 5, Labels: map[string]string{"level": "error"}},
 		{Bucket: t0, Value: 1, Labels: map[string]string{"level": "warn"}},
+		{Bucket: t0, Value: 5, Labels: map[string]string{"level": "error"}},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("merge =\n%+v\nwant\n%+v", got, want)
