@@ -80,12 +80,16 @@ func (c *Coordinator) Run(ctx context.Context, q *query.Query, r query.Request) 
 	var points [][]executor.Point
 	for i, sr := range results {
 		if sr.err != nil {
-			// A failed shard is a warning, unless the query itself was
-			// canceled, which is the caller's doing and not a partial result.
-			if ctx.Err() != nil {
+			// A failed remote shard is a warning. A failed local shard is the
+			// query failing, as it would on one node, since it is this node's
+			// own database that refused; and a canceled query is the caller's
+			// doing, not a partial result. The error text itself stays in the
+			// log, where execute put it: a database message does not belong
+			// in a response, which is the single-node handler's policy too.
+			if ctx.Err() != nil || shards[i].local {
 				return nil, sr.err
 			}
-			res.Warnings = append(res.Warnings, fmt.Sprintf("%s: %d streams not searched: %v", shards[i].member.Name, len(shards[i].ids), sr.err))
+			res.Warnings = append(res.Warnings, fmt.Sprintf("%s unreachable: %d streams not searched", shards[i].member.Name, len(shards[i].ids)))
 			continue
 		}
 		records = append(records, sr.records)

@@ -182,7 +182,7 @@ func TestCoordinatorFanOut(t *testing.T) {
 	got, err := coord.Run(short, q, req)
 	require.NoError(t, err)
 	require.Len(t, got.Warnings, 1)
-	require.Contains(t, got.Warnings[0], "b:")
+	require.Contains(t, got.Warnings[0], "b unreachable")
 	require.Equal(t, 12, got.Streams)
 	require.Len(t, got.Records, 3*owned["a"], "only a's shard should be answered")
 }
