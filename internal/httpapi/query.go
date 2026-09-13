@@ -27,6 +27,7 @@ const (
 
 type queryAPI struct {
 	db      executor.Querier
+	run     executor.Runner
 	timeout time.Duration
 	maxRows int
 	log     *slog.Logger
@@ -56,7 +57,10 @@ type queryResponse struct {
 	End       time.Time        `json:"end"`
 	Streams   int              `json:"streams"`
 	Truncated bool             `json:"truncated"`
-	ElapsedMS float64          `json:"elapsed_ms"`
+	// Warnings name shards a clustered query could not search; the rows are
+	// what the reachable members returned.
+	Warnings  []string `json:"warnings,omitempty"`
+	ElapsedMS float64  `json:"elapsed_ms"`
 }
 
 // record is the wire form of a model.LogRecord: ids as hex rather than the
@@ -102,7 +106,7 @@ func (a *queryAPI) query(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), a.timeout)
 	defer cancel()
-	res, err := executor.Run(ctx, a.db, q, qr)
+	res, err := a.run.Run(ctx, q, qr)
 	if err != nil {
 		a.fail(w, r, err, "query failed", slog.String("query", req.Query))
 		return
@@ -110,7 +114,7 @@ func (a *queryAPI) query(w http.ResponseWriter, r *http.Request) {
 
 	resp := queryResponse{
 		Source: res.Source, Start: res.Start, End: res.End, Streams: res.Streams, Truncated: res.Truncated,
-		ElapsedMS: float64(res.Elapsed) / float64(time.Millisecond), Points: res.Points,
+		Warnings: res.Warnings, ElapsedMS: float64(res.Elapsed) / float64(time.Millisecond), Points: res.Points,
 	}
 	if q.Agg == nil {
 		resp.Records = make([]record, len(res.Records))

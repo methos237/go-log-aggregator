@@ -23,9 +23,10 @@ type Server struct {
 }
 
 // Deps are the collaborators the /v1 handlers call. Cluster may be nil when
-// clustering is off.
+// clustering is off; Runner defaults to running every query on DB alone.
 type Deps struct {
 	DB      executor.Querier
+	Runner  executor.Runner
 	Cluster ClusterView
 	// Node is this process's name, shown by /v1/cluster.
 	Node string
@@ -37,7 +38,11 @@ func New(cfg *config.HTTP, health *observability.Health, deps Deps, log *slog.Lo
 	mux.Handle("GET /healthz", health.LiveHandler())
 	mux.Handle("GET /readyz", health.ReadyHandler())
 
-	api := &queryAPI{db: deps.DB, timeout: cfg.QueryTimeout, maxRows: cfg.QueryMaxRows, log: log, node: deps.Node, cluster: deps.Cluster}
+	runner := deps.Runner
+	if runner == nil {
+		runner = executor.Single{DB: deps.DB}
+	}
+	api := &queryAPI{db: deps.DB, run: runner, timeout: cfg.QueryTimeout, maxRows: cfg.QueryMaxRows, log: log, node: deps.Node, cluster: deps.Cluster}
 	auth := bearerAuth(cfg.AuthToken)
 	mux.Handle("POST /v1/query", auth(http.HandlerFunc(api.query)))
 	mux.Handle("GET /v1/labels", auth(http.HandlerFunc(api.labels)))

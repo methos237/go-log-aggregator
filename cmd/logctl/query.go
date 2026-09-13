@@ -48,6 +48,7 @@ type queryResponse struct {
 	End       time.Time `json:"end"`
 	Streams   int       `json:"streams"`
 	Truncated bool      `json:"truncated"`
+	Warnings  []string  `json:"warnings"`
 	ElapsedMS float64   `json:"elapsed_ms"`
 	Error     string    `json:"error"`
 }
@@ -160,9 +161,16 @@ func (r *queryResponse) print(out, summary io.Writer) error {
 	if r.Truncated {
 		more = ", more matched: raise -limit or narrow the range"
 	}
-	_, err := fmt.Fprintf(summary, "%d rows from %s (%d streams) over %s..%s in %.1fms%s\n",
-		rows, r.Source, r.Streams, r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), r.ElapsedMS, more)
-	return err
+	if _, err := fmt.Fprintf(summary, "%d rows from %s (%d streams) over %s..%s in %.1fms%s\n",
+		rows, r.Source, r.Streams, r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), r.ElapsedMS, more); err != nil {
+		return err
+	}
+	for _, w := range r.Warnings {
+		if _, err := fmt.Fprintf(summary, "warning: %s\n", w); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // kv renders labels or fields as "  k=v k=v" in key order, empty when there are none.

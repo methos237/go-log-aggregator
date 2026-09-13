@@ -29,6 +29,7 @@ import (
 	"github.com/jamespolk/go-log-aggregator/internal/httpapi"
 	"github.com/jamespolk/go-log-aggregator/internal/ingest"
 	"github.com/jamespolk/go-log-aggregator/internal/observability"
+	"github.com/jamespolk/go-log-aggregator/internal/query/executor"
 	"github.com/jamespolk/go-log-aggregator/internal/queue"
 	"github.com/jamespolk/go-log-aggregator/internal/storage"
 	"github.com/jamespolk/go-log-aggregator/internal/version"
@@ -222,6 +223,7 @@ func run(dsnOverride string) error {
 	var (
 		members *cluster.Cluster
 		peerSrv *cluster.PeerServer
+		runner  executor.Runner = executor.Single{DB: pool}
 	)
 	if cfg.Cluster.Enabled {
 		// The peer port is bound before gossip advertises it, so a member
@@ -236,10 +238,16 @@ func run(dsnOverride string) error {
 		if joinErr := members.Join(ctx); joinErr != nil {
 			return joinErr
 		}
+		peers, peersErr := cluster.NewPeers(&cfg.Cluster)
+		if peersErr != nil {
+			return peersErr
+		}
+		defer func() { _ = peers.Close() }()
+		runner = cluster.NewCoordinator(pool, members, peers, log)
 	}
 
 	// /readyz reports ready only once every registered dependency answers.
-	apiSrv := httpapi.New(&cfg.HTTP, health, httpapi.Deps{DB: pool, Node: cfg.Node.Name, Cluster: clusterView(members)}, log)
+	apiSrv := httpapi.New(&cfg.HTTP, health, httpapi.Deps{DB: pool, Runner: runner, Node: cfg.Node.Name, Cluster: clusterView(members)}, log)
 	adminSrv := observability.NewAdminServer(cfg.Admin, metrics, log)
 
 	// Binds its port here, so a conflict fails startup rather than surfacing as a

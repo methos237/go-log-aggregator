@@ -176,6 +176,10 @@ func (c *Cluster) Leave(timeout time.Duration) error {
 // Self is this node's name.
 func (c *Cluster) Self() string { return c.ml.LocalNode().Name }
 
+// GossipAddr is the address this node's memberlist advertises, which is what
+// another node passes as a seed peer.
+func (c *Cluster) GossipAddr() string { return c.ml.LocalNode().Address() }
+
 // Ring is the current ring. The value is immutable; callers may hold it.
 func (c *Cluster) Ring() *Ring {
 	c.mu.RLock()
