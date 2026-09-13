@@ -30,6 +30,8 @@ type collector struct {
 	server   *ingest.Server
 	pool     *pgxpool.Pool
 	addr     string
+	// opt is the configuration actually used, defaults applied.
+	opt collectorOptions
 
 	cancel context.CancelFunc
 }
@@ -40,6 +42,9 @@ type collectorOptions struct {
 	stream        string
 	durable       string
 	subjectPrefix string
+	// tailPrefix is the fan-out subject prefix. Derived from subjectPrefix so
+	// parallel tests on the shared broker never hear each other's tails.
+	tailPrefix string
 	// ackWait is short in tests so a kill-and-recover case does not wait out the
 	// production five-minute default.
 	ackWait time.Duration
@@ -54,6 +59,9 @@ type collectorOptions struct {
 }
 
 func (o *collectorOptions) withDefaults() {
+	if o.tailPrefix == "" {
+		o.tailPrefix = o.subjectPrefix + "_tail"
+	}
 	if o.ackWait <= 0 {
 		o.ackWait = 3 * time.Second
 	}
@@ -107,6 +115,7 @@ func startCollector(t *testing.T, opt collectorOptions, reg prometheus.Registere
 		server:   srv,
 		pool:     pool,
 		addr:     srv.Addr(),
+		opt:      opt,
 		cancel:   cancel,
 	}
 
@@ -159,16 +168,17 @@ func (c *collector) kill(t *testing.T) {
 
 func queueConfig(opt *collectorOptions) config.Queue {
 	return config.Queue{
-		URL:            natsURL,
-		StreamName:     opt.stream,
-		SubjectPrefix:  opt.subjectPrefix,
-		Durable:        opt.durable,
-		ConnectTimeout: 15 * time.Second,
-		PublishTimeout: 10 * time.Second,
-		MaxAckPending:  1024,
-		AckWait:        opt.ackWait,
-		StreamMaxBytes: 256 << 20,
-		StreamMaxAge:   time.Hour,
+		URL:               natsURL,
+		StreamName:        opt.stream,
+		SubjectPrefix:     opt.subjectPrefix,
+		Durable:           opt.durable,
+		ConnectTimeout:    15 * time.Second,
+		PublishTimeout:    10 * time.Second,
+		MaxAckPending:     1024,
+		AckWait:           opt.ackWait,
+		StreamMaxBytes:    256 << 20,
+		StreamMaxAge:      time.Hour,
+		TailSubjectPrefix: opt.tailPrefix,
 	}
 }
 
