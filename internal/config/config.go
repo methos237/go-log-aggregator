@@ -24,15 +24,16 @@ const EnvPrefix = "LOGAGG_"
 
 // Config is the fully resolved configuration for a collector process.
 type Config struct {
-	Node   Node
-	HTTP   HTTP
-	Admin  Admin
-	Ingest Ingest
-	DB     DB
-	Writer Writer
-	Queue  Queue
-	Log    Log
-	Agent  Agent
+	Node    Node
+	HTTP    HTTP
+	Admin   Admin
+	Ingest  Ingest
+	DB      DB
+	Writer  Writer
+	Queue   Queue
+	Cluster Cluster
+	Log     Log
+	Agent   Agent
 }
 
 // Node identifies this process within the cluster.
@@ -187,6 +188,33 @@ type Queue struct {
 	// safety valve for a writer that has been down long enough that catching up is
 	// hopeless, not a retention policy: TimescaleDB is the archive.
 	StreamMaxAge time.Duration
+}
+
+// Cluster is gossip membership and the consistent hash ring over the
+// collectors. Off by default so a single node needs no configuration; when on,
+// the node binds a memberlist port, joins the seed peers and serves the peer
+// gRPC service that query fan-out uses.
+type Cluster struct {
+	Enabled bool
+	// BindAddr is the gossip listener, host:port. Memberlist speaks UDP and TCP
+	// on the same port.
+	BindAddr string
+	// AdvertiseAddr is what other members are told to dial; empty lets
+	// memberlist pick the interface it bound to, or a private address when
+	// bound to every interface.
+	AdvertiseAddr string
+	// Peers are seed addresses to join at startup. A hostname that resolves to
+	// several addresses, as a compose service name does, seeds every replica.
+	Peers []string
+	// PeerAddr is the internal gRPC listener other collectors call for query
+	// fan-out. Its port is gossiped in the node metadata.
+	PeerAddr string
+	// VNodes is the virtual-node count per member on the ring. Every member
+	// must agree, since each computes the ring from names alone.
+	VNodes int
+	// JoinTimeout bounds how long startup keeps retrying the seeds before the
+	// node carries on alone and waits to be found.
+	JoinTimeout time.Duration
 }
 
 // Log configures the structured logger.
@@ -372,6 +400,15 @@ func Load() (*Config, error) {
 			StreamMaxBytes: e.bytes64("QUEUE_STREAM_MAX_BYTES", 8<<30),
 			StreamMaxAge:   e.dur("QUEUE_STREAM_MAX_AGE", 24*time.Hour),
 		},
+		Cluster: Cluster{
+			Enabled:       e.bool("CLUSTER_ENABLED", false),
+			BindAddr:      e.str("CLUSTER_BIND_ADDR", "127.0.0.1:7946"),
+			AdvertiseAddr: e.str("CLUSTER_ADVERTISE_ADDR", ""),
+			Peers:         e.list("CLUSTER_PEERS", nil),
+			PeerAddr:      e.str("CLUSTER_PEER_ADDR", "127.0.0.1:9096"),
+			VNodes:        e.int("CLUSTER_VNODES", 128),
+			JoinTimeout:   e.dur("CLUSTER_JOIN_TIMEOUT", 30*time.Second),
+		},
 		Log: Log{
 			Level:     e.level("LOG_LEVEL", slog.LevelInfo),
 			Format:    e.str("LOG_FORMAT", "json"),
@@ -451,6 +488,24 @@ func (c *Config) Validate() error {
 	}
 	if c.HTTP.QueryTimeout <= 0 {
 		bad("http query timeout must be positive, got %s", c.HTTP.QueryTimeout)
+	}
+	if c.Cluster.Enabled {
+		for name, addr := range map[string]string{"bind": c.Cluster.BindAddr, "peer": c.Cluster.PeerAddr} {
+			if _, _, err := net.SplitHostPort(addr); err != nil {
+				bad("cluster %s addr %q must be host:port: %v", name, addr, err)
+			}
+		}
+		if c.Cluster.AdvertiseAddr != "" {
+			if _, _, err := net.SplitHostPort(c.Cluster.AdvertiseAddr); err != nil {
+				bad("cluster advertise addr %q must be host:port: %v", c.Cluster.AdvertiseAddr, err)
+			}
+		}
+		if c.Cluster.VNodes < 1 {
+			bad("cluster vnodes must be positive, got %d", c.Cluster.VNodes)
+		}
+		if c.Cluster.JoinTimeout <= 0 {
+			bad("cluster join timeout must be positive, got %s", c.Cluster.JoinTimeout)
+		}
 	}
 	if c.HTTP.WriteTimeout > 0 && c.HTTP.QueryTimeout >= c.HTTP.WriteTimeout {
 		bad("http query timeout %s must be shorter than the write timeout %s, or a timed-out query cannot be answered", c.HTTP.QueryTimeout, c.HTTP.WriteTimeout)

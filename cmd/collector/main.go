@@ -24,6 +24,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/jamespolk/go-log-aggregator/internal/cluster"
 	"github.com/jamespolk/go-log-aggregator/internal/config"
 	"github.com/jamespolk/go-log-aggregator/internal/httpapi"
 	"github.com/jamespolk/go-log-aggregator/internal/ingest"
@@ -205,6 +206,21 @@ func run(dsnOverride string) error {
 
 	health.Register("queue", queue.HealthCheck(q))
 
+	// Membership comes up before the listeners so the ring already has this
+	// node in it when the first query arrives, and after the queue so a node
+	// that cannot write never advertises itself. Off by default: a single node
+	// is the cluster of one and needs no gossip.
+	var members *cluster.Cluster
+	if cfg.Cluster.Enabled {
+		members, err = cluster.New(&cfg.Cluster, cfg.Node.Name, cfg.HTTP.Addr, log, cluster.NewMetrics(metrics.Registerer))
+		if err != nil {
+			return err
+		}
+		if joinErr := members.Join(ctx); joinErr != nil {
+			return joinErr
+		}
+	}
+
 	// /readyz reports ready only once every registered dependency answers.
 	apiSrv := httpapi.New(&cfg.HTTP, health, pool, log)
 	adminSrv := observability.NewAdminServer(cfg.Admin, metrics, log)
@@ -229,6 +245,11 @@ func run(dsnOverride string) error {
 	}
 
 	g, gctx := errgroup.WithContext(ctx)
+
+	// Every listener is bound, so peers may route to this node now.
+	if members != nil {
+		members.SetReady(true)
+	}
 
 	g.Go(func() error {
 		if serveErr := apiSrv.ListenAndServe(); serveErr != nil {
@@ -288,6 +309,15 @@ func run(dsnOverride string) error {
 		var errs []error
 		health.Deregister("database")
 		health.Deregister("queue")
+		// Peers stop routing to this node before it stops answering, for the
+		// same reason readiness goes first: unready-then-drain is quiet,
+		// drain-then-unready is a burst of failed fan-outs.
+		if members != nil {
+			members.SetReady(false)
+			if leaveErr := members.Leave(cfg.Node.ShutdownTimeout); leaveErr != nil {
+				errs = append(errs, fmt.Errorf("cluster leave: %w", leaveErr))
+			}
+		}
 		if ingestErr := ingestSrv.Shutdown(shutdownCtx); ingestErr != nil {
 			errs = append(errs, fmt.Errorf("ingest shutdown: %w", ingestErr))
 		}

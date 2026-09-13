@@ -229,6 +229,16 @@ func TestValidate(t *testing.T) {
 			want:   "shorter than the write timeout",
 		},
 		{
+			name:   "cluster bind addr without port",
+			mutate: func(c *Config) { c.Cluster.Enabled, c.Cluster.BindAddr = true, "10.0.0.1" },
+			want:   "cluster bind addr",
+		},
+		{
+			name:   "cluster vnodes zero",
+			mutate: func(c *Config) { c.Cluster.Enabled, c.Cluster.VNodes = true, 0 },
+			want:   "cluster vnodes",
+		},
+		{
 			name:   "zero query row cap",
 			mutate: func(c *Config) { c.HTTP.QueryMaxRows = 0 },
 			want:   "query max rows must be positive",

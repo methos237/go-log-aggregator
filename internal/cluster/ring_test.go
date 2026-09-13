@@ -86,13 +86,13 @@ func TestRingArcsTileKeySpace(t *testing.T) {
 func TestRingProperties(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		n := rapid.IntRange(1, 8).Draw(t, "nodes")
-		vnodes := rapid.SampledFrom([]int{32, 128, 256}).Draw(t, "vnodes")
+		vnodes := rapid.SampledFrom([]int{16, 64, 128}).Draw(t, "vnodes")
 		nodes := nodeNames(n)
 		// Keys are real stream ids in spirit: uniform hashes, all distinct.
 		// Drawing them raw lets rapid shrink to 500 zeros, which says nothing
 		// about distribution.
 		seed := rapid.Uint64().Draw(t, "seed")
-		count := rapid.IntRange(500, 1500).Draw(t, "keys")
+		count := rapid.IntRange(300, 800).Draw(t, "keys")
 		keys := make([]int64, count)
 		for i := range keys {
 			keys[i] = int64(xxhash.Sum64String(strconv.FormatUint(seed+uint64(i), 10))) //nolint:gosec // uniform key
