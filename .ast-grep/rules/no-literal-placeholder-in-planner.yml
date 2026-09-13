@@ -1,0 +1,24 @@
+id: no-literal-placeholder-in-planner
+language: go
+severity: error
+message: literal "$n" in the planner; mint placeholders through (*stmt).arg so the value travels with them
+note: |
+  In internal/query a placeholder is only ever produced by (*stmt).arg, which
+  appends the value and returns "$" + its index. That single site is what makes
+  "no user bytes reach SQL text" a property the tests can prove: every $n has a
+  matching argument by construction. A hand-written "$1" in the planner would
+  be a placeholder with no value behind it, or a value bound by hand, and either
+  way the invariant is gone. Static statements with literal placeholders belong
+  in the executor package, which this rule does not cover.
+
+files:
+  - "internal/query/*.go"
+ignores:
+  - "internal/query/executor/**"
+  - "**/*_test.go"
+
+rule:
+  any:
+    - kind: interpreted_string_literal
+    - kind: raw_string_literal
+  regex: '\$[0-9]'

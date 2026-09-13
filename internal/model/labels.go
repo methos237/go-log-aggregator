@@ -133,9 +133,10 @@ func (ls LabelSet) Validate() error {
 			return err
 		}
 		switch name {
-		case "service", "host", "env":
+		case "service", "host", "env", "level":
 			// Otherwise a selector on {service="x"} would be ambiguous: it could
-			// mean the column or the JSONB key, and the two could disagree.
+			// mean the column or the JSONB key, and the two could disagree. The
+			// query DSL reserves level for the record's level column the same way.
 			return fmt.Errorf("extra label %q: %w", name, ErrReservedLabel)
 		}
 		if len(value) > MaxLabelValueLen {

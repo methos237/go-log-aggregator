@@ -1,0 +1,18 @@
+-- query
+{service="api"} | regexp "^(?P<method>\\w+) \\S+ (?P<status>\\d{3})$" | status >= 500
+-- source
+logs
+-- streams
+SELECT stream_id FROM streams WHERE service = $1
+-- streams args
+string "api"
+-- logs
+SELECT time, stream_id, seq, level, message, trace_id, span_id, fields FROM logs WHERE stream_id = ANY($1) AND time >= $2 AND time < $3 AND CASE WHEN pg_input_is_valid((regexp_match(message, $4))[$5], 'numeric') THEN ((regexp_match(message, $4))[$5])::numeric END >= $6::numeric ORDER BY time DESC, seq DESC LIMIT $7
+-- logs args
+[]int64 []int64(nil)
+time.Time time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+time.Time time.Date(2026, time.September, 1, 1, 0, 0, 0, time.UTC)
+string "^(\\w+) \\S+ (\\d{3})$"
+int 2
+string "500"
+int 100

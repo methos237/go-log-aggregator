@@ -206,7 +206,7 @@ func run(dsnOverride string) error {
 	health.Register("queue", queue.HealthCheck(q))
 
 	// /readyz reports ready only once every registered dependency answers.
-	apiSrv := httpapi.New(cfg.HTTP, health, log)
+	apiSrv := httpapi.New(&cfg.HTTP, health, pool, log)
 	adminSrv := observability.NewAdminServer(cfg.Admin, metrics, log)
 
 	// Binds its port here, so a conflict fails startup rather than surfacing as a

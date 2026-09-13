@@ -1,0 +1,23 @@
+-- query
+{service="api", level>="info"} |= "GET" !~ "healthz" | logfmt | route = "/v1/query" | json | status >= 400 | level != "warn"
+-- source
+logs
+-- streams
+SELECT stream_id FROM streams WHERE service = $1
+-- streams args
+string "api"
+-- logs
+SELECT time, stream_id, seq, level, message, trace_id, span_id, fields FROM logs WHERE stream_id = ANY($1) AND time >= $2 AND time < $3 AND level >= $4 AND message ILIKE $5 AND message !~ $6 AND coalesce(btrim(substring(message FROM $7), '"'), '') = $8 AND CASE WHEN pg_input_is_valid(CASE WHEN pg_input_is_valid(message, 'jsonb') THEN message::jsonb ->> $9 END, 'numeric') THEN (CASE WHEN pg_input_is_valid(message, 'jsonb') THEN message::jsonb ->> $9 END)::numeric END >= $10::numeric AND level <> $11 ORDER BY time DESC, seq DESC LIMIT $12
+-- logs args
+[]int64 []int64(nil)
+time.Time time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+time.Time time.Date(2026, time.September, 1, 1, 0, 0, 0, time.UTC)
+int16 3
+string "%GET%"
+string "healthz"
+string "(?:^|\\s)route=(\"[^\"]*\"|\\S*)"
+string "/v1/query"
+string "status"
+string "400"
+int16 4
+int 100

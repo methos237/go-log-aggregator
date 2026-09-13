@@ -67,8 +67,9 @@ tidy: ## Sync go.mod and go.sum
 	go mod tidy
 
 .PHONY: lint
-lint: ## Run golangci-lint
+lint: ## Run golangci-lint, including the integration-tagged tests CI lints
 	golangci-lint run ./...
+	golangci-lint run --build-tags=integration ./test/...
 
 .PHONY: vet
 vet: ## Run go vet
@@ -91,6 +92,18 @@ cover: ## Run tests with coverage and open the HTML report
 .PHONY: bench
 bench: ## Run Go benchmarks
 	go test -run '^$$' -bench . -benchmem ./...
+
+# The query compiler is the SQL-injection surface, so its fuzz targets are a
+# gate rather than a curiosity. Not part of `ci` because of the wall-clock cost;
+# run it before merging anything under internal/query.
+FUZZ_TIME ?= 60s
+
+.PHONY: fuzz
+fuzz: ## Fuzz the query lexer, parser and planner for FUZZ_TIME each (default 60s)
+	@for target in FuzzLexer FuzzParse FuzzCompile; do \
+		echo "== $$target ($(FUZZ_TIME))"; \
+		go test ./internal/query/ -run '^$$' -fuzz "^$$target$$" -fuzztime $(FUZZ_TIME) || exit 1; \
+	done
 
 .PHONY: vulncheck
 vulncheck: ## Scan dependencies for known vulnerabilities

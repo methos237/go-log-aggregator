@@ -1,0 +1,36 @@
+id: no-concatenated-sql
+language: go
+severity: error
+message: SQL text built by concatenation or formatting at the call site; bind a $n placeholder instead
+note: |
+  The query surface is parameterized everywhere. A statement handed to pgx must
+  be a literal or a value the planner assembled, never `"... WHERE x = " + v` or
+  `fmt.Sprintf(...)` at the call. Those are the two shapes an injection takes
+  when someone is in a hurry, and text grep cannot tell them from a comment.
+
+  Planner-built statements are exempt by construction: they arrive as a field
+  (plan.Logs.SQL), and internal/query enforces its own invariant with the
+  no-literal-placeholder-in-planner rule and TestCompileNoUserBytesInSQL.
+
+ignores:
+  - "**/*_test.go"
+
+# A call whose function is x.Query / x.QueryRow / x.Exec and whose second
+# argument (the SQL, after ctx) is an expression that assembles text.
+rule:
+  kind: call_expression
+  all:
+    - has:
+        field: function
+        kind: selector_expression
+        regex: '\.(Query|QueryRow|Exec)$'
+    - has:
+        field: arguments
+        has:
+          nthChild: 2
+          any:
+            - kind: binary_expression
+            - kind: call_expression
+              has:
+                field: function
+                regex: '^(fmt\.Sprintf|fmt\.Sprint|strings\.Join|strings\.Replace|strings\.ReplaceAll)$'

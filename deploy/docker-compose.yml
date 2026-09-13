@@ -85,6 +85,9 @@ services:
       LOGAGG_LOG_FORMAT: json
       LOGAGG_DB_DSN: postgres://logagg:logagg@timescaledb:5432/logagg?sslmode=disable
       LOGAGG_QUEUE_URL: nats://nats:4222
+      # Bearer token for /v1/*. Without one the query API refuses every request,
+      # so a dev stack needs a value; anything beyond a laptop sets a real secret.
+      LOGAGG_HTTP_AUTH_TOKEN: ${LOGAGG_HTTP_AUTH_TOKEN:-dev-token}
       # Inside the container the listener must bind every interface for Compose to
       # forward to it, which the loopback default deliberately does not. Plaintext is
       # opted into explicitly here: the published port is bound to 127.0.0.1 on the

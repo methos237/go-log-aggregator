@@ -1,12 +1,16 @@
 package httpapi
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
+
+	"github.com/jamespolk/go-log-aggregator/internal/config"
 )
 
 type middleware func(http.Handler) http.Handler
@@ -92,6 +96,32 @@ func recoverPanic(log *slog.Logger) middleware {
 				)
 				writeError(w, http.StatusInternalServerError, "internal error")
 			}()
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// bearerAuth requires "Authorization: Bearer <token>" on every request. The
+// scheme is case-insensitive as RFC 9110 says; the token compare is
+// constant-time so response timing does not leak how much of a guess was
+// right. An empty configured token refuses everything: the API is off until
+// an operator sets one, never open by accident.
+func bearerAuth(token string) middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			reject := func(msg string) {
+				w.Header().Set("WWW-Authenticate", `Bearer realm="logagg"`)
+				writeError(w, http.StatusUnauthorized, msg)
+			}
+			if token == "" {
+				reject("query API disabled: set " + config.EnvPrefix + "HTTP_AUTH_TOKEN")
+				return
+			}
+			scheme, got, _ := strings.Cut(r.Header.Get("Authorization"), " ")
+			if !strings.EqualFold(scheme, "Bearer") || subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
+				reject("invalid or missing bearer token")
+				return
+			}
 			next.ServeHTTP(w, r)
 		})
 	}

@@ -52,6 +52,58 @@ echo "hello from logctl" | ./bin/logctl send -addr 127.0.0.1:9095 -service demo
 rejected, so it works as a check and not only as a demo. Both are deliberately
 minimal this phase; the configurable-rate load generator arrives in phase 8.
 
+Then query them back:
+
+```bash
+export LOGAGG_HTTP_AUTH_TOKEN=dev-token           # what deploy/docker-compose.yml sets
+./bin/logctl query -since 15m '{service="demo"}'
+./bin/logctl query '{service="demo", level>="warn"} |= "hello"'
+./bin/logctl query '{service="demo"} | count_over_time(1m) by (level)'
+```
+
+## Query language
+
+A LogQL-shaped DSL, compiled to parameterized SQL. A stream selector, then
+optional line filters, parser stages and label filters, then an optional
+aggregation:
+
+```
+{service="api", env!="dev"} |~ "timeout|deadline"
+{service=~"api-.*", level>="warn"} != "healthcheck"
+{service="api"} | json | status >= 500
+{service="api"} | logfmt | route = "/v1/query" | rate(5m) by (level)
+```
+
+Selectors resolve against the `streams` table first, so the hypertable scan is a
+plain `stream_id = ANY($1)` range. `level` is a record column, not a stream label.
+Label filters read the fields the agent extracted, or those of the nearest `json`,
+`logfmt` or `regexp` stage. An aggregation that needs only counts by level or by
+`service`/`host`/`env`, on bucket boundaries, is answered from a continuous
+aggregate; the response says which relation was read as `source`.
+
+Every literal, including label names, is a `$n` argument. Tests assert the
+generated SQL contains no user bytes, an ast-grep rule forbids concatenated SQL
+at any query call, and `make fuzz` runs the lexer, parser and planner for a
+minute each. The grammar lives in the package doc of `internal/query`; the
+reasoning is in [`ADR-0004`](docs/decisions/ADR-0004-query-compiler.md).
+
+### HTTP API
+
+All `/v1` routes need `Authorization: Bearer <LOGAGG_HTTP_AUTH_TOKEN>`. With no
+token configured they refuse every request.
+
+| Method | Path | Body / result |
+|---|---|---|
+| `POST` | `/v1/query` | `{query, start, end, limit, direction}` → `records` or `points`, `source`, `start`, `end`, `streams`, `truncated`, `elapsed_ms` |
+| `GET` | `/v1/labels` | label names for autocomplete |
+| `GET` | `/v1/labels/{name}/values` | distinct values of one label |
+
+`start` and `end` are RFC 3339 and default to the last hour; for an aggregation
+they are widened to whole buckets and echoed back. `limit` defaults to 1000 and
+is capped by `LOGAGG_HTTP_QUERY_MAX_ROWS`; `truncated` is true when more rows
+matched. `direction` is `backward` (default) or `forward`. Requests are bounded
+by `LOGAGG_HTTP_QUERY_TIMEOUT`.
+
 ## Architecture
 
 ```
@@ -65,7 +117,7 @@ Ports, all bound to loopback in development:
 
 | Port | Listener | Notes |
 |---|---|---|
-| 8080 | Public HTTP API | health now; query and live tail in phases 4 and 6 |
+| 8080 | Public HTTP API | health, `/v1/query`, `/v1/labels`; live tail in phase 6 |
 | 9090 | Admin | Prometheus metrics and pprof. **Never expose this.** |
 | 9095 | gRPC ingest | mTLS when configured; plaintext by default |
 | 9096 | gRPC peer | query fan-out, phase 5 |
@@ -179,8 +231,8 @@ Label sets are deduplicated into a `streams` dimension table keyed by a 64-bit h
 their canonical encoding, so every node derives the same `stream_id` with no
 coordination. Log rows are narrow and reference it. `logs` is a TimescaleDB hypertable
 with 1 hour chunks, columnar compression segmented by stream, 30 day retention, and
-per-minute and per-hour count aggregates that the query planner will choose between in
-phase 4.
+per-minute and per-hour count aggregates that the query planner chooses between when an
+aggregation can be answered from them exactly.
 
 The ingest path's reasoning — why the ack comes after the JetStream publish, why a full
 buffer sheds instead of waiting, and why a corrupt message is terminated rather than

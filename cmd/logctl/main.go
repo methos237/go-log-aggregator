@@ -1,9 +1,9 @@
 // Command logctl is the operator CLI.
 //
-// This phase adds one subcommand, `send`, which ships lines from stdin or from a
-// flag into a collector. It exists so the ingest path can be exercised by hand
-// without a load generator or a real agent — "does this cluster accept a log line"
-// should be one command. Query, tail and cluster subcommands arrive in phases 4 to 6.
+// `send` ships lines from stdin or from a flag into a collector, so "does this
+// cluster accept a log line" is one command without a load generator or a real
+// agent. `query` runs a DSL query against the HTTP API and prints the rows.
+// Tail and cluster subcommands arrive in phases 5 and 6.
 package main
 
 import (
@@ -38,6 +38,7 @@ usage: logctl <command> [flags]
 
 commands:
   send       ship log lines to a collector
+  query      run a query against a collector and print the rows
   version    print version and exit
 
 run "logctl <command> -h" for a command's flags.
@@ -53,6 +54,8 @@ func run(args []string) error {
 	switch args[0] {
 	case "send":
 		return sendCmd(args[1:])
+	case "query":
+		return queryCmd(args[1:])
 	case "version", "-version", "--version":
 		fmt.Println(version.String("logctl"))
 		return nil
