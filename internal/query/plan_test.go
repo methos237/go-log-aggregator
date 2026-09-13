@@ -247,7 +247,8 @@ func TestCompileNoUserBytesInSQL(t *testing.T) {
 		LabelFilter{Label: hostile[4], Op: OpRe, Value: hostile[0]},
 		ParserStage{Kind: ParserRegexp, Pattern: "(?P<x>" + hostile[0] + ")"},
 		LabelFilter{Label: "x", Op: OpEq, Value: hostile[1]},
-	}}
+		ParserStage{Kind: ParserJSON},
+	}, Agg: &Aggregation{Func: AggRate, Range: 5 * time.Minute, By: []string{hostile[4], "level"}}}
 	p, err := Compile(q, goldenRequest)
 	if err != nil {
 		t.Fatal(err)
