@@ -118,6 +118,7 @@ func TestLexer(t *testing.T) {
 		{"non-ASCII outside a string", "é", []token{ill("é", `unexpected 'é'`, 1, 1), eof(1, 2)}},
 		{"rune whose low byte is a digit is not a number", "\u0130", []token{ill("\u0130", "unexpected '\u0130'", 1, 1), eof(1, 2)}},
 		{"invalid UTF-8", "\xff", []token{ill("\xff", "invalid UTF-8", 1, 1), eof(1, 2)}},
+		{"invalid UTF-8 in string", "\"\xff\"", []token{ill("\"\xff\"", "invalid UTF-8", 1, 1), eof(1, 4)}},
 		{
 			"multi-line positions",
 			"{\n  a=\"b\"\n}",

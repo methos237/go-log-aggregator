@@ -32,7 +32,9 @@ type Stmt struct {
 //
 // Resolving streams first and then scanning the hypertable by stream_id, rather
 // than joining, is what lets the streams table's indexes do the selector work
-// while the hypertable scan stays a plain (stream_id, time) range. It also
+// while the hypertable scan stays a (stream_id, time) range served by chunk
+// exclusion and the dedup index's stream_id prefix; whether a dedicated
+// (stream_id, time) index pays for its write cost is a phase 8 measurement. It also
 // gives the executor an early exit: a selector that matches nothing never
 // touches logs at all.
 type Plan struct {
@@ -49,6 +51,9 @@ type Plan struct {
 	// Source is the relation Logs reads: "logs", or one of the continuous
 	// aggregates when chooseSource can prove they answer the query exactly.
 	Source string
+	// Start and End are the range the statements actually cover: the request's
+	// own for a log query, widened to whole buckets for an aggregation.
+	Start, End time.Time
 }
 
 // Direction is the time order of the logs statement.
@@ -169,7 +174,7 @@ func Compile(q *Query, r Request) (*Plan, error) {
 		from += " JOIN streams USING (stream_id)"
 	}
 	sql := head + from + " WHERE " + logs.String() + tail + " LIMIT " + logs.arg(r.Limit)
-	return &Plan{Streams: streams.stmt(), Logs: Stmt{SQL: sql, Args: logs.args}, Source: source}, nil
+	return &Plan{Streams: streams.stmt(), Logs: Stmt{SQL: sql, Args: logs.args}, Source: source, Start: r.Start, End: r.End}, nil
 }
 
 // grains are the continuous aggregates by bucket width, finest first, so the
@@ -183,8 +188,10 @@ var grains = []struct {
 // cost. A continuous aggregate only has (bucket, stream_id, level, n), so it
 // serves an aggregation with no pipeline stages, no message bytes, and no
 // `by` label outside level and the promoted stream columns; and only when the
-// aggregation's buckets and the request's edges fall on its bucket boundaries,
-// since a partially covered bucket would be counted whole or not at all.
+// aggregation's bucket width is a whole number of its buckets, so each
+// aggregate bucket falls entirely inside one output bucket. Compile has
+// already widened the request to whole output buckets, which puts the edges
+// on the aggregate's boundaries too.
 func chooseSource(q *Query, r Request) string {
 	a := q.Agg
 	if a == nil || len(q.Stages) > 0 || a.Func == AggBytesOverTime {
@@ -197,7 +204,7 @@ func chooseSource(q *Query, r Request) string {
 	}
 	source := "logs"
 	for _, g := range grains {
-		if a.Range%g.width == 0 && snap(r.Start, g.width).Equal(r.Start) && snap(r.End, g.width).Equal(r.End) {
+		if a.Range%g.width == 0 {
 			source = g.source
 		}
 	}
@@ -249,7 +256,7 @@ func (s *stmt) level(op Op, value string) error {
 func (s *stmt) matcher(m Matcher) {
 	v := m.Value
 	if m.Op.IsRegex() {
-		v = anchor(v)
+		v = anchor(are(v))
 	}
 	switch {
 	case promoted[m.Label]:
@@ -269,11 +276,39 @@ func (s *stmt) matcher(m Matcher) {
 }
 
 // anchor makes a regex match the whole value, as Prometheus and LogQL do.
-//
-// The parser validated the pattern with Go's regexp; Postgres evaluates it as
-// an ARE. The two agree on everything a label selector realistically uses, but
-// exotic syntax may diverge. Accepted for now.
 func anchor(re string) string { return "^(?:" + re + ")$" }
+
+// are rewrites the escapes whose meaning differs between Go's syntax, which
+// validated the pattern, and Postgres's ARE dialect, which evaluates it: \b
+// and \B are word boundaries in Go but backspace and an error in ARE, where
+// \y and \Y mean the boundary; \z is Go's end of text, \Z in ARE. The parser
+// already rejected the Go-only escapes that have no ARE spelling, so after
+// this the two dialects agree on everything a log query realistically uses.
+func are(re string) string {
+	if !strings.Contains(re, `\`) {
+		return re
+	}
+	var out strings.Builder
+	for i := 0; i < len(re); i++ {
+		c := re[i]
+		out.WriteByte(c)
+		if c != '\\' || i+1 == len(re) {
+			continue
+		}
+		i++
+		switch re[i] {
+		case 'b':
+			out.WriteByte('y')
+		case 'B':
+			out.WriteByte('Y')
+		case 'z':
+			out.WriteByte('Z')
+		default:
+			out.WriteByte(re[i])
+		}
+	}
+	return out.String()
+}
 
 // lineSQL maps a LineOp to its Postgres spelling, indexed like sqlOps.
 var lineSQL = [...]string{LineContains: "ILIKE", LineNotContains: "NOT ILIKE", LineMatches: "~", LineNotMatches: "!~"}
@@ -288,7 +323,9 @@ var likeMeta = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 // deliberately unanchored: `|~ "timeout"` is a search, not a whole-line match.
 func (s *stmt) lineFilter(f LineFilter) {
 	v := f.Text
-	if !f.Op.IsRegex() {
+	if f.Op.IsRegex() {
+		v = are(v)
+	} else {
 		v = "%" + likeMeta.Replace(v) + "%"
 	}
 	s.WriteString(" AND message " + lineSQL[f.Op] + " " + s.arg(v))
@@ -328,13 +365,14 @@ func (p ParserStage) extractor() extractor {
 	case ParserLogfmt:
 		return fromLogfmt
 	}
-	are, groups := namedGroups(p.Pattern)
+	pat, groups := namedGroups(p.Pattern)
+	pat = are(pat)
 	return func(s *stmt, name string) (string, error) {
 		i, ok := groups[name]
 		if !ok {
 			return "", fmt.Errorf("query: label %q is not a capture group of the regexp stage", name)
 		}
-		return "(regexp_match(message, " + s.arg(are) + "))[" + s.arg(i) + "]", nil
+		return "(regexp_match(message, " + s.arg(pat) + "))[" + s.arg(i) + "]", nil
 	}
 }
 
@@ -455,7 +493,7 @@ func (s *stmt) labelFilter(f LabelFilter, extract extractor) error {
 	}
 	val := f.Value
 	if f.Op.IsRegex() {
-		val = anchor(val)
+		val = anchor(are(val))
 	}
 	s.WriteString(" AND coalesce(" + v + ", '') " + sqlOps[f.Op] + " " + s.arg(val))
 	return nil

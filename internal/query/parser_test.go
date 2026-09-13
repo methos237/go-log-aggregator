@@ -131,6 +131,21 @@ func TestParseSelectors(t *testing.T) {
 	})
 }
 
+// TestRegexAllowedForms pins the regex syntax checkRegex must keep accepting:
+// leading flags and every group form Postgres's ARE dialect also understands.
+func TestRegexAllowedForms(t *testing.T) {
+	for _, src := range []string{
+		`{service=~"(?i)api"}`,
+		`{service=~"(?i)a(?:b|c)+"}`,
+		`{service="x"} | regexp "(?P<a>x)(?<b>y)"`,
+		`{service="x"} |~ "\\bslow\\b"`,
+	} {
+		if _, err := Parse(src); err != nil {
+			t.Errorf("Parse(%s) rejected a supported regex: %v", src, err)
+		}
+	}
+}
+
 var selectorErrorCases = []errCase{
 	{`{}`, `1:1: selector needs at least one matcher`},
 	{`{service}`, `1:9: expected matcher operator, got "}"`},
@@ -149,6 +164,12 @@ var selectorErrorCases = []errCase{
 	{`{service="a`, `1:10: unterminated string`},
 	{`{service!"a"}`, `1:9: unexpected '!'`},
 	{"{service=\"a\"}\xff", `1:14: invalid UTF-8`},
+	{"{service=\"a\xffb\"}", `1:10: invalid UTF-8`},
+	{"{service=`a\xffb`}", `1:10: invalid UTF-8`},
+	{`{service=~"\\pL+"}`, `1:11: invalid regex: \p is not supported`},
+	{`{service=~"\\Qa.b\\E"}`, `1:11: invalid regex: \Q is not supported`},
+	{`{service=~"a(?i)b"}`, `1:11: invalid regex: flags like (?i) are only supported at the start of the pattern`},
+	{`{service=~"a(?i:b)"}`, `1:11: invalid regex: flags like (?i) are only supported at the start of the pattern`},
 	{"\xff{service=\"a\"}", `1:1: invalid UTF-8`},
 	{`{service="a"} }`, `1:15: expected line filter, "|" or end of input, got "}"`},
 }

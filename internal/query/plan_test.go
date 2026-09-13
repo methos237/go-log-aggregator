@@ -181,10 +181,38 @@ func TestAggregationRangeSnapsToBuckets(t *testing.T) {
 	if p.Source != "logs_rate_1h" {
 		t.Errorf("source = %q, want logs_rate_1h", p.Source)
 	}
+	if !p.Start.Equal(start) || !p.End.Equal(end) {
+		t.Errorf("Plan range = %v..%v, want the statement's %v..%v", p.Start, p.End, start, end)
+	}
 	// A non-aggregate request is left exactly as given.
 	p = compile(t, `{service="api"}`, r)
 	if !p.Logs.Args[1].(time.Time).Equal(r.Start) || !p.Logs.Args[2].(time.Time).Equal(r.End) {
 		t.Errorf("record query range changed: %v..%v", p.Logs.Args[1], p.Logs.Args[2])
+	}
+}
+
+func TestAREEscapes(t *testing.T) {
+	cases := map[string]string{
+		`\berror\b`: `\yerror\y`,
+		`\Bx\B`:     `\Yx\Y`,
+		`^a\z`:      `^a\Z`,
+		`\\b`:       `\\b`, // an escaped backslash followed by a literal b
+		`\d+\s\w`:   `\d+\s\w`,
+		`plain`:     `plain`,
+	}
+	for in, want := range cases {
+		if got := are(in); got != want {
+			t.Errorf("are(%q) = %q, want %q", in, got, want)
+		}
+	}
+	// Every regex position goes through the rewrite, including the regexp stage.
+	p := compile(t, `{service=~"\\bapi\\b"} |~ "\\bslow\\b" | regexp "(?P<w>\\b\\w+\\b)" | w !~ "\\bx\\b"`, goldenRequest)
+	for _, s := range []Stmt{p.Streams, p.Logs} {
+		for _, a := range s.Args {
+			if str, ok := a.(string); ok && strings.Contains(str, `\b`) {
+				t.Errorf("argument %q still carries Go's \\b", str)
+			}
+		}
 	}
 }
 

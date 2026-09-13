@@ -135,6 +135,13 @@ func (l *lexer) next() token {
 			}
 		}
 		t := tok(tokString)
+		// Unquote maps a bad byte in a "quoted" string to U+FFFD and passes one
+		// in a `raw` string through; both would turn a typo into a silent miss
+		// or a database error, so the source bytes get the same check as text
+		// outside strings, before Unquote can paper over them.
+		if !utf8.ValidString(t.Text) {
+			return illegal("invalid UTF-8")
+		}
 		s, err := strconv.Unquote(t.Text)
 		if err != nil {
 			return illegal("invalid string escape")

@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jamespolk/go-log-aggregator/internal/model"
@@ -179,12 +180,31 @@ func (p *parser) checkLevel(val token) {
 	}
 }
 
+// checkRegex validates a pattern with Go's regexp, then rejects the Go-only
+// syntax Postgres's ARE dialect cannot evaluate, so the mismatch is a parse
+// error rather than a failed statement: \p and \P Unicode classes, \Q...\E
+// quoting, and inline flags anywhere but the very start. The planner handles
+// the escapes that merely differ in spelling (\b, \B, \z).
 func (p *parser) checkRegex(val token) {
 	if len(val.Text) > MaxRegexLen {
 		p.bail(val.Pos, "regex is %d bytes, max %d", len(val.Text), MaxRegexLen)
 	}
 	if _, err := regexp.Compile(val.Text); err != nil {
 		p.bail(val.Pos, "invalid regex: %s", err.Error())
+	}
+	re := val.Text
+	for i := 0; i < len(re); i++ {
+		switch re[i] {
+		case '\\':
+			if i+1 < len(re) && strings.IndexByte("pPQE", re[i+1]) >= 0 {
+				p.bail(val.Pos, `invalid regex: \%c is not supported`, re[i+1])
+			}
+			i++
+		case '(':
+			if i > 0 && strings.HasPrefix(re[i:], "(?") && i+2 < len(re) && strings.IndexByte(":P<", re[i+2]) < 0 {
+				p.bail(val.Pos, "invalid regex: flags like (?i) are only supported at the start of the pattern")
+			}
+		}
 	}
 }
 
