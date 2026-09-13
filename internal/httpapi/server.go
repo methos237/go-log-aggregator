@@ -1,8 +1,8 @@
-// Package httpapi serves the public HTTP surface: health probes now, query and
-// live tail in later phases.
+// Package httpapi serves the public HTTP surface: health probes, the query API
+// under /v1 behind a bearer token, and live tail in a later phase.
 //
 // Metrics and pprof deliberately live on the separate admin listener in
-// internal/observability, so nothing here needs authentication yet.
+// internal/observability.
 package httpapi
 
 import (
@@ -13,6 +13,7 @@ import (
 
 	"github.com/jamespolk/go-log-aggregator/internal/config"
 	"github.com/jamespolk/go-log-aggregator/internal/observability"
+	"github.com/jamespolk/go-log-aggregator/internal/query/executor"
 )
 
 // Server is the public API listener.
@@ -21,11 +22,18 @@ type Server struct {
 	log *slog.Logger
 }
 
-// New builds the public server. Handlers for /v1/* arrive in phases 4 and 6.
-func New(cfg config.HTTP, health *observability.Health, log *slog.Logger) *Server {
+// New builds the public server. db answers /v1 queries; the tail endpoint
+// arrives in phase 6.
+func New(cfg *config.HTTP, health *observability.Health, db executor.Querier, log *slog.Logger) *Server {
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health.LiveHandler())
 	mux.Handle("GET /readyz", health.ReadyHandler())
+
+	api := &queryAPI{db: db, timeout: cfg.QueryTimeout, maxRows: cfg.QueryMaxRows, log: log}
+	auth := bearerAuth(cfg.AuthToken)
+	mux.Handle("POST /v1/query", auth(http.HandlerFunc(api.query)))
+	mux.Handle("GET /v1/labels", auth(http.HandlerFunc(api.labels)))
+	mux.Handle("GET /v1/labels/{name}/values", auth(http.HandlerFunc(api.labelValues)))
 	mux.HandleFunc("/", notFound)
 
 	handler := recoverPanic(log)(requestLog(log)(mux))

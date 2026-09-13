@@ -23,12 +23,12 @@ func newTestServer(t *testing.T, health *observability.Health, w io.Writer) *Ser
 		w = io.Discard
 	}
 	log := slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	return New(config.HTTP{
+	return New(&config.HTTP{
 		Addr:         ":0",
 		ReadTimeout:  time.Second,
 		WriteTimeout: time.Second,
 		IdleTimeout:  time.Second,
-	}, health, log)
+	}, health, nil, log)
 }
 
 func TestHealthz(t *testing.T) {
@@ -62,7 +62,7 @@ func TestUnknownPathReturnsJSONError(t *testing.T) {
 	srv := newTestServer(t, observability.NewHealth(time.Second), nil)
 
 	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/query", nil))
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/nope", nil))
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)

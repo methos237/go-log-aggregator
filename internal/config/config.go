@@ -53,6 +53,15 @@ type HTTP struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	IdleTimeout  time.Duration
+	// AuthToken is the static bearer token the /v1 endpoints require. Empty
+	// means the query API is disabled: every /v1 request is refused, so an
+	// unconfigured node fails closed rather than serving logs to anyone.
+	AuthToken string
+	// QueryTimeout bounds one /v1/query round trip, database time included.
+	QueryTimeout time.Duration
+	// QueryMaxRows caps the limit a request may ask for; larger and absent
+	// limits are clamped to it.
+	QueryMaxRows int
 }
 
 // Admin is the internal listener: metrics and pprof. Never expose this port
@@ -297,6 +306,9 @@ func Load() (*Config, error) {
 			ReadTimeout:  e.dur("HTTP_READ_TIMEOUT", 15*time.Second),
 			WriteTimeout: e.dur("HTTP_WRITE_TIMEOUT", 30*time.Second),
 			IdleTimeout:  e.dur("HTTP_IDLE_TIMEOUT", 120*time.Second),
+			AuthToken:       e.str("HTTP_AUTH_TOKEN", ""),
+			QueryTimeout:    e.dur("HTTP_QUERY_TIMEOUT", 30*time.Second),
+			QueryMaxRows:    e.int("HTTP_QUERY_MAX_ROWS", 5000),
 		},
 		Admin: Admin{
 			Addr:        e.str("ADMIN_ADDR", ":9090"),
@@ -434,6 +446,12 @@ func (c *Config) Validate() error {
 	}
 	if c.HTTP.Addr == "" {
 		bad("http addr must not be empty")
+	}
+	if c.HTTP.QueryTimeout <= 0 {
+		bad("http query timeout must be positive, got %s", c.HTTP.QueryTimeout)
+	}
+	if c.HTTP.QueryMaxRows <= 0 {
+		bad("http query max rows must be positive, got %d", c.HTTP.QueryMaxRows)
 	}
 	if c.Admin.Addr == "" {
 		bad("admin addr must not be empty")

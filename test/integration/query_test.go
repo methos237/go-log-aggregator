@@ -3,7 +3,13 @@
 package integration
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,7 +20,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/jamespolk/go-log-aggregator/internal/config"
+	"github.com/jamespolk/go-log-aggregator/internal/httpapi"
 	"github.com/jamespolk/go-log-aggregator/internal/model"
+	"github.com/jamespolk/go-log-aggregator/internal/observability"
 	"github.com/jamespolk/go-log-aggregator/internal/query"
 	"github.com/jamespolk/go-log-aggregator/internal/query/executor"
 )
@@ -157,8 +166,7 @@ func TestQueryPlansExecute(t *testing.T) {
 		res = run(`{service="api"} |= "row"`)
 		require.Equal(t, 1, res.Streams)
 		require.Len(t, res.Records, 3)
-		require.Equal(t, model.LogRecord{StreamID: 1, Time: res.Records[0].Time, Seq: 2, Level: model.LevelInfo, Message: "row 2"}, res.Records[0])
-		require.Equal(t, start.Add(2*time.Second), res.Records[0].Time.UTC())
+		require.Equal(t, model.LogRecord{StreamID: 1, Time: start.Add(2 * time.Second), Seq: 2, Level: model.LevelInfo, Message: "row 2"}, res.Records[0])
 
 		res = run(`{service="api"} | json | user = "root"`)
 		require.Len(t, res.Records, 1)
@@ -171,25 +179,18 @@ func TestQueryPlansExecute(t *testing.T) {
 		require.Equal(t, []executor.Point{
 			{Bucket: start, Value: 5, Labels: map[string]string{"level": "info"}},
 			{Bucket: start, Value: 1, Labels: map[string]string{"level": "warn"}},
-		}, utc(res.Points))
+		}, res.Points)
 
 		res = run(`{service="api"} | json | count_over_time(1m) by (user)`)
 		require.Equal(t, "logs", res.Source)
 		require.Equal(t, []executor.Point{
 			{Bucket: start, Value: 1, Labels: map[string]string{"user": "root"}},
 			{Bucket: start, Value: 5, Labels: map[string]string{}},
-		}, utc(res.Points))
+		}, res.Points)
 
 		res = run(`{service="api"} | rate(1m)`)
-		require.Equal(t, []executor.Point{{Bucket: start, Value: 0.1}}, utc(res.Points))
+		require.Equal(t, []executor.Point{{Bucket: start, Value: 0.1}}, res.Points)
 	})
-}
-
-func utc(points []executor.Point) []executor.Point {
-	for i := range points {
-		points[i].Bucket = points[i].Bucket.UTC()
-	}
-	return points
 }
 
 // goldenQuery reads the query source from a golden file's header, so the
@@ -220,4 +221,69 @@ func streamIDs(ctx context.Context, t *testing.T, pool *pgxpool.Pool, plan *quer
 	ids, err := pgx.CollectRows(rows, pgx.RowTo[int64])
 	require.NoError(t, err)
 	return ids
+}
+
+// TestHTTPQuery drives the /v1 endpoints over a real pool: the JSON shapes,
+// the label lookups, and the timeout path, which needs a database to time out
+// against.
+func TestHTTPQuery(t *testing.T) {
+	t.Parallel()
+	pool, _ := migratedDB(t)
+	ctx := testContext(t)
+	start := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	seedStream(ctx, t, pool, 1, "api", "web-1", "prod")
+	_, err := pool.Exec(ctx, `UPDATE streams SET labels = '{"region":"eu"}' WHERE stream_id = 1`)
+	require.NoError(t, err)
+	insertRows(ctx, t, pool, 1, start, 2)
+
+	newServer := func(timeout time.Duration) http.Handler {
+		cfg := config.HTTP{Addr: ":0", AuthToken: "t", QueryTimeout: timeout, QueryMaxRows: 100}
+		return httpapi.New(&cfg, observability.NewHealth(time.Second), pool, slog.New(slog.NewJSONHandler(io.Discard, nil))).Handler()
+	}
+	call := func(h http.Handler, method, path, body string) (int, map[string]any) {
+		req := httptest.NewRequest(method, path, bytes.NewReader([]byte(body)))
+		req.Header.Set("Authorization", "Bearer t")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		var out map[string]any
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out), rec.Body.String())
+		return rec.Code, out
+	}
+	h := newServer(10 * time.Second)
+	window := `"start":"2026-09-01T00:00:00Z","end":"2026-09-01T01:00:00Z"`
+
+	code, out := call(h, http.MethodPost, "/v1/query", `{"query":"{service=\"api\"} |= \"row\"",`+window+`}`)
+	require.Equal(t, http.StatusOK, code, out)
+	require.Equal(t, "logs", out["source"])
+	require.Equal(t, 1.0, out["streams"])
+	records := out["records"].([]any)
+	require.Len(t, records, 2)
+	require.Equal(t, map[string]any{"time": "2026-09-01T00:00:01Z", "stream_id": 1.0, "seq": 1.0, "level": "info", "message": "row 1"}, records[0])
+
+	code, out = call(h, http.MethodPost, "/v1/query", `{"query":"{service=\"api\"} | count_over_time(1h) by (level, region)",`+window+`}`)
+	require.Equal(t, http.StatusOK, code, out)
+	require.Equal(t, "logs", out["source"], "region is not a promoted label, so the raw table answers")
+	require.Nil(t, out["records"])
+	require.Equal(t, []any{map[string]any{"bucket": "2026-09-01T00:00:00Z", "value": 2.0, "labels": map[string]any{"level": "info"}}}, out["points"])
+
+	code, out = call(h, http.MethodPost, "/v1/query", `{"query":"{service=\"nope\"}"}`)
+	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, 0.0, out["streams"])
+
+	code, out = call(h, http.MethodGet, "/v1/labels", "")
+	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, []any{"env", "host", "level", "region", "service"}, out["values"])
+	for path, want := range map[string][]any{
+		"/v1/labels/service/values": {"api"},
+		"/v1/labels/region/values":  {"eu"},
+		"/v1/labels/nope/values":    {},
+		"/v1/labels/level/values":   {"unspecified", "trace", "debug", "info", "warn", "error", "fatal"},
+	} {
+		code, out = call(h, http.MethodGet, path, "")
+		require.Equal(t, http.StatusOK, code, path)
+		require.Equal(t, want, out["values"], path)
+	}
+
+	code, out = call(newServer(time.Nanosecond), http.MethodPost, "/v1/query", `{"query":"{service=\"api\"}"}`)
+	require.Equal(t, http.StatusGatewayTimeout, code, out)
 }

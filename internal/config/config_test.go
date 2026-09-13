@@ -219,6 +219,16 @@ func TestValidate(t *testing.T) {
 			want:   "must not be publicly reachable",
 		},
 		{
+			name:   "zero query timeout",
+			mutate: func(c *Config) { c.HTTP.QueryTimeout = 0 },
+			want:   "query timeout must be positive",
+		},
+		{
+			name:   "zero query row cap",
+			mutate: func(c *Config) { c.HTTP.QueryMaxRows = 0 },
+			want:   "query max rows must be positive",
+		},
+		{
 			name:   "tls cert without key",
 			mutate: func(c *Config) { c.Ingest.TLSCertFile = "server.pem" },
 			want:   "needs both cert and key",

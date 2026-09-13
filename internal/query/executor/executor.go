@@ -20,12 +20,12 @@ import (
 
 // Point is one bucket of one `by` group in an aggregation result.
 type Point struct {
-	Bucket time.Time
-	Value  float64
+	Bucket time.Time `json:"bucket"`
+	Value  float64   `json:"value"`
 	// Labels are the `by` values keyed by label name. A group whose value was
 	// NULL, such as a field the record did not have, has no key. Nil when the
 	// aggregation had no `by`.
-	Labels map[string]string
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 // Result is a query's answer. Exactly one of Records and Points is populated,
@@ -90,10 +90,12 @@ func Run(ctx context.Context, db Querier, q *query.Query, r query.Request) (*Res
 }
 
 // scanRecord reads the eight logs columns in table order, the shape
-// query.Plan documents for a non-aggregate statement.
+// query.Plan documents for a non-aggregate statement. Times come back in UTC
+// rather than the connection's zone so every consumer renders them the same.
 func scanRecord(row pgx.CollectableRow) (model.LogRecord, error) {
 	var rec model.LogRecord
 	err := row.Scan(&rec.Time, &rec.StreamID, &rec.Seq, &rec.Level, &rec.Message, &rec.TraceID, &rec.SpanID, &rec.Fields)
+	rec.Time = rec.Time.UTC()
 	return rec, err
 }
 
@@ -109,6 +111,7 @@ func scanPoint(row pgx.CollectableRow, by []string) (Point, error) {
 	if err := row.Scan(dst...); err != nil {
 		return p, err
 	}
+	p.Bucket = p.Bucket.UTC()
 	if len(by) > 0 {
 		p.Labels = make(map[string]string, len(by))
 	}

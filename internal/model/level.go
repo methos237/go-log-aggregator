@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -35,6 +36,9 @@ var levelNames = [...]string{
 	LevelError:       "error",
 	LevelFatal:       "fatal",
 }
+
+// LevelNames returns the canonical name of every level, in severity order.
+func LevelNames() []string { return slices.Clone(levelNames[:]) }
 
 // levelAliases maps every accepted spelling to a level. Agents emit whatever
 // their source used, so "warning", "err" and "critical" all have to land
