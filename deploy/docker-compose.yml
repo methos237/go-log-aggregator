@@ -95,6 +95,20 @@ services:
       # a laptop sets the three LOGAGG_INGEST_TLS_* files instead — see `make certs`.
       LOGAGG_INGEST_ADDR: ":9095"
       LOGAGG_INGEST_ALLOW_PLAINTEXT: "true"
+      # Clustering is on even for one collector, so /v1/cluster and the ring
+      # are always there to look at, and `make dev-scale` only adds replicas.
+      # The service name resolves to every replica, so it is the whole seed
+      # list. The peer port is plaintext on the same reasoning as ingest: it
+      # binds every interface for Compose, is never published to the host, and
+      # anything beyond a laptop sets the LOGAGG_CLUSTER_PEER_TLS_* files.
+      LOGAGG_CLUSTER_ENABLED: "true"
+      LOGAGG_CLUSTER_BIND_ADDR: ":7946"
+      LOGAGG_CLUSTER_PEERS: collector:7946
+      LOGAGG_CLUSTER_PEER_ADDR: ":9096"
+      LOGAGG_CLUSTER_PEER_ALLOW_PLAINTEXT: "true"
+      # Passed through so the chaos test can shorten redelivery after a kill;
+      # the default is the collector's own.
+      LOGAGG_QUEUE_ACK_WAIT: ${LOGAGG_QUEUE_ACK_WAIT:-5m}
     ports:
       # Fixed mappings, which means this file supports exactly one collector.
       # Compose assigns ports from a range in nondeterministic order, so ranges
@@ -162,7 +176,9 @@ services:
       # leaving LOGAGG_AGENT_CERT_FILE/_KEY_FILE/_CA_FILE unset -- all three or
       # none, and "none" is what the server side actually is.
       LOGAGG_AGENT_FILES: /var/log/app/app.log
-      LOGAGG_AGENT_INGEST_ADDR: collector:9095
+      # The chaos test points this at the proxy instead, so the agent's next
+      # connection after a kill lands on a survivor.
+      LOGAGG_AGENT_INGEST_ADDR: ${LOGAGG_AGENT_INGEST_ADDR:-collector:9095}
       LOGAGG_AGENT_ENV: dev
       LOGAGG_AGENT_HOST: agent
     volumes:

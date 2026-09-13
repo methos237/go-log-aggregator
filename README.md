@@ -165,10 +165,11 @@ The admin listener is separate from the public one, and configuration validation
 refuses to start if they share an address, because pprof is unauthenticated and
 exposes heap contents.
 
-`make dev` publishes fixed host ports, so a single collector is always on 8080.
-`make dev-scale` swaps in a port range, since replicas cannot share fixed ports.
-Compose assigns from that range in arbitrary order; `make dev-ps` shows which replica
-landed where. Phase 5 puts a reverse proxy on a stable port in front of the cluster.
+`make dev` publishes fixed host ports for its single collector. `make dev-scale N=5`
+puts an nginx proxy on the same 8080 and 9095 in front of N collectors, resolving
+them through Compose's DNS on every connection, so the host addresses never change
+and a killed replica drops out of rotation within seconds. Only the admin port stays
+per replica, on 9190-9199; `make dev-ps` shows which is which.
 
 ## Configuration
 
