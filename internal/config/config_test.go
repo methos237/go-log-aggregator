@@ -224,6 +224,11 @@ func TestValidate(t *testing.T) {
 			want:   "query timeout must be positive",
 		},
 		{
+			name:   "query timeout not under write timeout",
+			mutate: func(c *Config) { c.HTTP.QueryTimeout = c.HTTP.WriteTimeout },
+			want:   "shorter than the write timeout",
+		},
+		{
 			name:   "zero query row cap",
 			mutate: func(c *Config) { c.HTTP.QueryMaxRows = 0 },
 			want:   "query max rows must be positive",

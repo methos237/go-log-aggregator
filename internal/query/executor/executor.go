@@ -36,8 +36,15 @@ type Result struct {
 	Points  []Point
 	// Source is the relation the planner read: "logs" or a continuous aggregate.
 	Source string
+	// Start and End are the range actually covered, which for an aggregation
+	// is the request widened to whole buckets.
+	Start, End time.Time
 	// Streams is how many streams the selector matched.
 	Streams int
+	// Truncated reports that more rows matched than r.Limit allowed, so the
+	// caller sees a prefix: the newest records, or the newest buckets of a
+	// series, and must not read the result as complete.
+	Truncated bool
 	// Elapsed covers both statements, from the first Query to the last row.
 	Elapsed time.Duration
 }
@@ -51,6 +58,12 @@ type Querier interface {
 // Run compiles q for r and executes it. Deadlines and cancellation come from
 // ctx; the row cap is r.Limit, which query.Compile requires.
 func Run(ctx context.Context, db Querier, q *query.Query, r query.Request) (*Result, error) {
+	// One row past the cap is fetched so truncation is a fact, not a guess
+	// from len == limit.
+	limit := r.Limit
+	if limit > 0 {
+		r.Limit++
+	}
 	plan, err := query.Compile(q, r)
 	if err != nil {
 		return nil, err
@@ -64,7 +77,7 @@ func Run(ctx context.Context, db Querier, q *query.Query, r query.Request) (*Res
 	if err != nil {
 		return nil, fmt.Errorf("executor: resolve streams: %w", err)
 	}
-	res := &Result{Source: plan.Source, Streams: len(ids)}
+	res := &Result{Source: plan.Source, Start: plan.Start, End: plan.End, Streams: len(ids)}
 	if len(ids) == 0 {
 		res.Elapsed = time.Since(started)
 		return res, nil
@@ -84,6 +97,12 @@ func Run(ctx context.Context, db Querier, q *query.Query, r query.Request) (*Res
 	}
 	if err != nil {
 		return nil, fmt.Errorf("executor: scan %s: %w", plan.Source, err)
+	}
+	if len(res.Records) > limit {
+		res.Records, res.Truncated = res.Records[:limit], true
+	}
+	if len(res.Points) > limit {
+		res.Points, res.Truncated = res.Points[:limit], true
 	}
 	res.Elapsed = time.Since(started)
 	return res, nil

@@ -43,10 +43,13 @@ type queryResponse struct {
 		Value  float64           `json:"value"`
 		Labels map[string]string `json:"labels"`
 	} `json:"points"`
-	Source    string  `json:"source"`
-	Streams   int     `json:"streams"`
-	ElapsedMS float64 `json:"elapsed_ms"`
-	Error     string  `json:"error"`
+	Source    string    `json:"source"`
+	Start     time.Time `json:"start"`
+	End       time.Time `json:"end"`
+	Streams   int       `json:"streams"`
+	Truncated bool      `json:"truncated"`
+	ElapsedMS float64   `json:"elapsed_ms"`
+	Error     string    `json:"error"`
 }
 
 func queryCmd(args []string) error {
@@ -153,7 +156,12 @@ func (r *queryResponse) print(out, summary io.Writer) error {
 			}
 		}
 	}
-	_, err := fmt.Fprintf(summary, "%d rows from %s (%d streams) in %.1fms\n", rows, r.Source, r.Streams, r.ElapsedMS)
+	more := ""
+	if r.Truncated {
+		more = ", more matched: raise -limit or narrow the range"
+	}
+	_, err := fmt.Fprintf(summary, "%d rows from %s (%d streams) over %s..%s in %.1fms%s\n",
+		rows, r.Source, r.Streams, r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), r.ElapsedMS, more)
 	return err
 }
 

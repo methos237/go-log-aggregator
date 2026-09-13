@@ -64,6 +64,24 @@ func TestBearerAuth(t *testing.T) {
 			}
 		})
 	}
+
+	// The scheme is case-insensitive per RFC 9110, and the challenge header
+	// belongs on refusals only.
+	req := httptest.NewRequest(http.MethodPost, "/v1/query", strings.NewReader("x"))
+	req.Header.Set("Authorization", "bearer s3cret")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("lowercase scheme: status %d, want 400 (accepted)", rec.Code)
+	}
+	if rec.Header().Get("WWW-Authenticate") != "" {
+		t.Error("WWW-Authenticate set on an authenticated response")
+	}
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/query", nil))
+	if rec.Header().Get("WWW-Authenticate") == "" {
+		t.Error("WWW-Authenticate missing on a 401")
+	}
 }
 
 func TestNoTokenConfiguredFailsClosed(t *testing.T) {

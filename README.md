@@ -94,13 +94,15 @@ token configured they refuse every request.
 
 | Method | Path | Body / result |
 |---|---|---|
-| `POST` | `/v1/query` | `{query, start, end, limit, direction}` → `records` or `points`, `source`, `streams`, `elapsed_ms` |
+| `POST` | `/v1/query` | `{query, start, end, limit, direction}` → `records` or `points`, `source`, `start`, `end`, `streams`, `truncated`, `elapsed_ms` |
 | `GET` | `/v1/labels` | label names for autocomplete |
 | `GET` | `/v1/labels/{name}/values` | distinct values of one label |
 
-`start` and `end` are RFC 3339 and default to the last hour; `limit` defaults to
-1000 and is capped by `LOGAGG_HTTP_QUERY_MAX_ROWS`; `direction` is `backward`
-(default) or `forward`. Requests are bounded by `LOGAGG_HTTP_QUERY_TIMEOUT`.
+`start` and `end` are RFC 3339 and default to the last hour; for an aggregation
+they are widened to whole buckets and echoed back. `limit` defaults to 1000 and
+is capped by `LOGAGG_HTTP_QUERY_MAX_ROWS`; `truncated` is true when more rows
+matched. `direction` is `backward` (default) or `forward`. Requests are bounded
+by `LOGAGG_HTTP_QUERY_TIMEOUT`.
 
 ## Architecture
 

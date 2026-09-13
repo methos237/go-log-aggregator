@@ -42,11 +42,16 @@ type queryRequest struct {
 	Direction string    `json:"direction"`
 }
 
+// queryResponse echoes the range actually covered, since an aggregation's is
+// widened to whole buckets, and says when the row cap cut the result short.
 type queryResponse struct {
 	Records   []record         `json:"records,omitempty"`
 	Points    []executor.Point `json:"points,omitempty"`
 	Source    string           `json:"source"`
+	Start     time.Time        `json:"start"`
+	End       time.Time        `json:"end"`
 	Streams   int              `json:"streams"`
+	Truncated bool             `json:"truncated"`
 	ElapsedMS float64          `json:"elapsed_ms"`
 }
 
@@ -95,21 +100,14 @@ func (a *queryAPI) query(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	res, err := executor.Run(ctx, a.db, q, qr)
 	if err != nil {
-		switch {
-		case errors.Is(ctx.Err(), context.DeadlineExceeded):
-			writeError(w, http.StatusGatewayTimeout, "query exceeded "+a.timeout.String())
-		case r.Context().Err() != nil:
-			// The client went away; there is nobody to answer.
-		default:
-			// Logged in full, reported generically: a database error message
-			// can carry schema and statement text.
-			a.log.Error("query failed", slog.String("query", req.Query), slog.Any("error", err))
-			writeError(w, http.StatusInternalServerError, "query failed")
-		}
+		a.fail(w, r, err, "query failed", slog.String("query", req.Query))
 		return
 	}
 
-	resp := queryResponse{Source: res.Source, Streams: res.Streams, ElapsedMS: float64(res.Elapsed) / float64(time.Millisecond), Points: res.Points}
+	resp := queryResponse{
+		Source: res.Source, Start: res.Start, End: res.End, Streams: res.Streams, Truncated: res.Truncated,
+		ElapsedMS: float64(res.Elapsed) / float64(time.Millisecond), Points: res.Points,
+	}
 	if q.Agg == nil {
 		resp.Records = make([]record, len(res.Records))
 		for i, rec := range res.Records {
@@ -120,6 +118,22 @@ func (a *queryAPI) query(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, resp)
+}
+
+// fail answers a database-side error. The error itself decides: pgx wraps the
+// context's error, so a deadline is a 504 whether it fired before the
+// statement or during it. Anything else is logged in full and reported
+// generically, since a database error message can carry schema and statement
+// text. A client that has gone away gets nothing.
+func (a *queryAPI) fail(w http.ResponseWriter, r *http.Request, err error, msg string, attrs ...slog.Attr) {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		writeError(w, http.StatusGatewayTimeout, "query exceeded "+a.timeout.String())
+	case r.Context().Err() != nil:
+	default:
+		a.log.LogAttrs(r.Context(), slog.LevelError, msg, append(attrs, slog.Any("error", err))...)
+		writeError(w, http.StatusInternalServerError, msg)
+	}
 }
 
 // request applies the defaults and caps that turn a body into a
@@ -160,8 +174,7 @@ func (a *queryAPI) list(w http.ResponseWriter, r *http.Request, fetch func(conte
 	defer cancel()
 	values, err := fetch(ctx)
 	if err != nil {
-		a.log.Error("label lookup failed", slog.String("path", r.URL.Path), slog.Any("error", err))
-		writeError(w, http.StatusInternalServerError, "lookup failed")
+		a.fail(w, r, err, "lookup failed", slog.String("path", r.URL.Path))
 		return
 	}
 	if values == nil {

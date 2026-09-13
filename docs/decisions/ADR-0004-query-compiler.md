@@ -71,20 +71,29 @@ addressable in the pipeline; they belong in the selector.
 (PostgreSQL 16+) so one malformed line yields NULL instead of aborting the
 query. `logfmt` is a `substring` over a regex built from the escaped key,
 carried as an argument. `regexp` rewrites Go named groups, which PostgreSQL's
-ARE dialect lacks, to plain groups and subscripts `regexp_match` by index. Go
-validates patterns at parse time and PostgreSQL evaluates them; the dialects
-agree on everything a log query realistically uses and the divergence on
-exotic syntax is accepted.
+ARE dialect lacks, to plain groups and subscripts `regexp_match` by index.
 
 ### Source selection is an exactness rule
 
-An aggregation is answered from `logs_rate_1m` or `logs_rate_1h` only when the
-query has no stages, counts rather than bytes, groups only by level or
-promoted labels, and its bucket width is a multiple of the aggregate's grain
-with the request edges on that grain. A partially covered bucket would be
-counted whole or not at all, so alignment is the condition for a correct
-answer, not a tuning knob. The coarsest aggregate that fits is used and the
-choice is reported as `source`, which the integration test asserts.
+An aggregation's request range is first widened outward to whole buckets,
+counting from `time_bucket`'s origin so the boundaries agree with Postgres's
+for every width; the range actually covered is returned as `start` and `end`.
+It is then answered from `logs_rate_1m` or `logs_rate_1h` only when the query
+has no stages, counts rather than bytes, groups only by level or promoted
+labels, and its bucket width is a multiple of the aggregate's grain, so each
+aggregate bucket lies entirely inside one output bucket. A partially covered
+bucket would be counted whole or not at all, so this is the condition for a
+correct answer, not a tuning knob. The coarsest aggregate that fits is used
+and the choice is reported as `source`, which the integration test asserts.
+
+### Regex dialects
+
+Go's `regexp` validates patterns at parse time; Postgres's ARE dialect
+evaluates them. The parser rejects the Go-only syntax with no ARE spelling
+(`\p`, `\Q...\E`, inline flags anywhere but the start) so the mismatch is a
+400, and the planner rewrites the escapes that only differ in spelling
+(`\b`/`\B` to `\y`/`\Y`, `\z` to `\Z`). Anything else the two dialects
+agree on for the patterns a log query realistically uses.
 
 ### Fail-closed API
 
@@ -102,3 +111,11 @@ generically and logged in full.
   syntax to disambiguate stream labels from fields or a decision to shadow
   one with the other.
 - Substring search is case-insensitive and unindexed until phase 8.
+- The row cap applies to aggregations too; the response says `truncated` so
+  a cut series is never mistaken for a complete one.
+- Two performance questions are left to phase 8's benchmarks: whether a
+  dedicated `(stream_id, time DESC, seq DESC)` index on `logs` pays for its
+  write cost (today the scan relies on chunk exclusion and the dedup index's
+  `stream_id` prefix), and whether extractor expressions should be hoisted
+  into a `LATERAL` subquery, since a `json` label used in a numeric filter
+  and a `by` clause is parsed once per reference today.

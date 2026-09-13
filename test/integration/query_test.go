@@ -161,7 +161,7 @@ func TestQueryPlansExecute(t *testing.T) {
 		}
 
 		res := run(`{service="nope"}`)
-		require.Equal(t, &executor.Result{Source: "logs", Elapsed: res.Elapsed}, res)
+		require.Equal(t, &executor.Result{Source: "logs", Start: req.Start, End: req.End, Elapsed: res.Elapsed}, res)
 
 		res = run(`{service="api"} |= "row"`)
 		require.Equal(t, 1, res.Streams)
@@ -190,6 +190,19 @@ func TestQueryPlansExecute(t *testing.T) {
 
 		res = run(`{service="api"} | rate(1m)`)
 		require.Equal(t, []executor.Point{{Bucket: start, Value: 0.1}}, res.Points)
+		require.False(t, res.Truncated)
+		require.Equal(t, start, res.Start)
+		require.Equal(t, start.Add(time.Hour), res.End)
+
+		// The cap fetches one row past the limit so truncation is reported.
+		small := req
+		small.Limit = 2
+		q, err := query.Parse(`{service="api"}`)
+		require.NoError(t, err)
+		res, err = executor.Run(ctx, pool, q, small)
+		require.NoError(t, err)
+		require.Len(t, res.Records, 2)
+		require.True(t, res.Truncated)
 	})
 }
 
@@ -256,6 +269,8 @@ func TestHTTPQuery(t *testing.T) {
 	require.Equal(t, http.StatusOK, code, out)
 	require.Equal(t, "logs", out["source"])
 	require.Equal(t, 1.0, out["streams"])
+	require.Equal(t, false, out["truncated"])
+	require.Equal(t, "2026-09-01T00:00:00Z", out["start"])
 	records := out["records"].([]any)
 	require.Len(t, records, 2)
 	require.Equal(t, map[string]any{"time": "2026-09-01T00:00:01Z", "stream_id": 1.0, "seq": 1.0, "level": "info", "message": "row 1"}, records[0])

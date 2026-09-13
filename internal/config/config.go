@@ -58,6 +58,8 @@ type HTTP struct {
 	// unconfigured node fails closed rather than serving logs to anyone.
 	AuthToken string
 	// QueryTimeout bounds one /v1/query round trip, database time included.
+	// It must be shorter than WriteTimeout, or the 504 it produces would be
+	// written after net/http has already closed the response.
 	QueryTimeout time.Duration
 	// QueryMaxRows caps the limit a request may ask for; larger and absent
 	// limits are clamped to it.
@@ -307,7 +309,7 @@ func Load() (*Config, error) {
 			WriteTimeout: e.dur("HTTP_WRITE_TIMEOUT", 30*time.Second),
 			IdleTimeout:  e.dur("HTTP_IDLE_TIMEOUT", 120*time.Second),
 			AuthToken:       e.str("HTTP_AUTH_TOKEN", ""),
-			QueryTimeout:    e.dur("HTTP_QUERY_TIMEOUT", 30*time.Second),
+			QueryTimeout:    e.dur("HTTP_QUERY_TIMEOUT", 20*time.Second),
 			QueryMaxRows:    e.int("HTTP_QUERY_MAX_ROWS", 5000),
 		},
 		Admin: Admin{
@@ -449,6 +451,9 @@ func (c *Config) Validate() error {
 	}
 	if c.HTTP.QueryTimeout <= 0 {
 		bad("http query timeout must be positive, got %s", c.HTTP.QueryTimeout)
+	}
+	if c.HTTP.WriteTimeout > 0 && c.HTTP.QueryTimeout >= c.HTTP.WriteTimeout {
+		bad("http query timeout %s must be shorter than the write timeout %s, or a timed-out query cannot be answered", c.HTTP.QueryTimeout, c.HTTP.WriteTimeout)
 	}
 	if c.HTTP.QueryMaxRows <= 0 {
 		bad("http query max rows must be positive, got %d", c.HTTP.QueryMaxRows)

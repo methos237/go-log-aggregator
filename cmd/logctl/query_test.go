@@ -37,7 +37,7 @@ func TestQueryBodyRange(t *testing.T) {
 
 func TestQueryPrint(t *testing.T) {
 	var resp queryResponse
-	err := json.Unmarshal([]byte(`{"records":[{"time":"2026-09-01T00:00:01Z","level":"warn","message":"slow","fields":{"b":"2","a":"1"}}],"source":"logs","streams":1,"elapsed_ms":3.25}`), &resp)
+	err := json.Unmarshal([]byte(`{"records":[{"time":"2026-09-01T00:00:01Z","level":"warn","message":"slow","fields":{"b":"2","a":"1"}}],"source":"logs","start":"2026-09-01T00:00:00Z","end":"2026-09-01T01:00:00Z","streams":1,"truncated":true,"elapsed_ms":3.25}`), &resp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestQueryPrint(t *testing.T) {
 	if want := "2026-09-01T00:00:01Z  warn   slow  a=1 b=2\n"; out.String() != want {
 		t.Errorf("out = %q, want %q", out.String(), want)
 	}
-	if want := "1 rows from logs (1 streams) in 3.2ms\n"; summary.String() != want {
+	if want := "1 rows from logs (1 streams) over 2026-09-01T00:00:00Z..2026-09-01T01:00:00Z in 3.2ms, more matched: raise -limit or narrow the range\n"; summary.String() != want {
 		t.Errorf("summary = %q, want %q", summary.String(), want)
 	}
 
