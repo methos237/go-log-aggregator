@@ -59,6 +59,9 @@ type Pos struct {
 // Query is a parsed query: a stream selector, zero or more pipeline stages in
 // source order, and an optional trailing aggregation.
 type Query struct {
+	// Text is the source Parse was given, kept so a coordinator can hand the
+	// exact query to a peer for it to compile itself.
+	Text     string
 	Selector Selector
 	Stages   []Stage
 	Agg      *Aggregation

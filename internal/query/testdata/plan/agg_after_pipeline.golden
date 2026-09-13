@@ -7,7 +7,7 @@ SELECT stream_id FROM streams WHERE service = $1
 -- streams args
 string "api"
 -- logs
-SELECT time_bucket($7::interval, time) AS bucket, count(*)::float8, CASE WHEN pg_input_is_valid(message, 'jsonb') THEN message::jsonb ->> $8 END, level FROM logs WHERE stream_id = ANY($1) AND time >= $2 AND time < $3 AND message ILIKE $4 AND CASE WHEN pg_input_is_valid(CASE WHEN pg_input_is_valid(message, 'jsonb') THEN message::jsonb ->> $5 END, 'numeric') THEN (CASE WHEN pg_input_is_valid(message, 'jsonb') THEN message::jsonb ->> $5 END)::numeric END >= $6::numeric GROUP BY 1, 3, 4 ORDER BY 1 DESC, 3, 4 LIMIT $9
+SELECT time_bucket($7::interval, time) AS bucket, count(*)::float8, (CASE WHEN pg_input_is_valid(message, 'jsonb') THEN message::jsonb ->> $8 END) COLLATE "C", level FROM logs WHERE stream_id = ANY($1) AND time >= $2 AND time < $3 AND message ILIKE $4 AND CASE WHEN pg_input_is_valid(CASE WHEN pg_input_is_valid(message, 'jsonb') THEN message::jsonb ->> $5 END, 'numeric') THEN (CASE WHEN pg_input_is_valid(message, 'jsonb') THEN message::jsonb ->> $5 END)::numeric END >= $6::numeric GROUP BY 1, 3, 4 ORDER BY 1 DESC, 3, 4 LIMIT $9
 -- logs args
 []int64 []int64(nil)
 time.Time time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)

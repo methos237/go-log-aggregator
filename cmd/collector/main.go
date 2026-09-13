@@ -24,10 +24,13 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/jamespolk/go-log-aggregator/internal/cluster"
 	"github.com/jamespolk/go-log-aggregator/internal/config"
 	"github.com/jamespolk/go-log-aggregator/internal/httpapi"
 	"github.com/jamespolk/go-log-aggregator/internal/ingest"
+	"github.com/jamespolk/go-log-aggregator/internal/model"
 	"github.com/jamespolk/go-log-aggregator/internal/observability"
+	"github.com/jamespolk/go-log-aggregator/internal/query/executor"
 	"github.com/jamespolk/go-log-aggregator/internal/queue"
 	"github.com/jamespolk/go-log-aggregator/internal/storage"
 	"github.com/jamespolk/go-log-aggregator/internal/version"
@@ -104,6 +107,15 @@ func runMigrations(up, down, status bool, dsnOverride string) error {
 	default:
 		return errors.New("no migration action requested")
 	}
+}
+
+// clusterView hides the typed-nil trap: a nil *cluster.Cluster stored in the
+// interface would not compare equal to nil in the handler.
+func clusterView(c *cluster.Cluster) httpapi.ClusterView {
+	if c == nil {
+		return nil
+	}
+	return c
 }
 
 // loadConfig loads configuration and applies the DSN override, if any.
@@ -205,8 +217,38 @@ func run(dsnOverride string) error {
 
 	health.Register("queue", queue.HealthCheck(q))
 
+	// Membership comes up before the listeners so the ring already has this
+	// node in it when the first query arrives, and after the queue so a node
+	// that cannot write never advertises itself. Off by default: a single node
+	// is the cluster of one and needs no gossip.
+	var (
+		members *cluster.Cluster
+		peerSrv *cluster.PeerServer
+		runner  executor.Runner = executor.Single{DB: pool}
+	)
+	if cfg.Cluster.Enabled {
+		// The peer port is bound before gossip advertises it, so a member
+		// that appears in the ring can already be called.
+		if peerSrv, err = cluster.NewPeerServer(ctx, &cfg.Cluster, pool, log); err != nil {
+			return err
+		}
+		members, err = cluster.New(&cfg.Cluster, cfg.Node.Name, cfg.HTTP.Addr, log, cluster.NewMetrics(metrics.Registerer))
+		if err != nil {
+			return err
+		}
+		// A shard's reply is at most the row cap of records, each bounded by
+		// the message limit plus some fields; gRPC's 4 MiB default is a few
+		// thousand records.
+		peers, peersErr := cluster.NewPeers(&cfg.Cluster, cfg.HTTP.QueryMaxRows*(model.MaxMessageLen+4096))
+		if peersErr != nil {
+			return peersErr
+		}
+		defer func() { _ = peers.Close() }()
+		runner = cluster.NewCoordinator(pool, members, peers, log)
+	}
+
 	// /readyz reports ready only once every registered dependency answers.
-	apiSrv := httpapi.New(&cfg.HTTP, health, pool, log)
+	apiSrv := httpapi.New(&cfg.HTTP, health, httpapi.Deps{DB: pool, Runner: runner, Node: cfg.Node.Name, Cluster: clusterView(members)}, log)
 	adminSrv := observability.NewAdminServer(cfg.Admin, metrics, log)
 
 	// Binds its port here, so a conflict fails startup rather than surfacing as a
@@ -230,6 +272,21 @@ func run(dsnOverride string) error {
 
 	g, gctx := errgroup.WithContext(ctx)
 
+	// Joining happens alongside the listeners, not before them: memberlist
+	// dials every resolved seed with its own timeouts, so a partitioned seed
+	// list could otherwise hold the health endpoints hostage for longer than
+	// the container healthcheck allows. Readiness is advertised once the join
+	// has settled, by which point every port below has long been bound.
+	if members != nil {
+		g.Go(func() error {
+			if joinErr := members.Join(gctx); joinErr != nil {
+				return joinErr
+			}
+			members.SetReady(true)
+			return nil
+		})
+	}
+
 	g.Go(func() error {
 		if serveErr := apiSrv.ListenAndServe(); serveErr != nil {
 			return fmt.Errorf("http server: %w", serveErr)
@@ -248,6 +305,14 @@ func run(dsnOverride string) error {
 		}
 		return nil
 	})
+	if peerSrv != nil {
+		g.Go(func() error {
+			if serveErr := peerSrv.Serve(); serveErr != nil {
+				return fmt.Errorf("peer server: %w", serveErr)
+			}
+			return nil
+		})
+	}
 
 	// Shutdown is driven by whichever comes first: a signal, or a listener
 	// failing. gctx covers both, so a port already in use does not leave the
@@ -288,6 +353,22 @@ func run(dsnOverride string) error {
 		var errs []error
 		health.Deregister("database")
 		health.Deregister("queue")
+		// Peers stop routing to this node before it stops answering, for the
+		// same reason readiness goes first: unready-then-drain is quiet,
+		// drain-then-unready is a burst of failed fan-outs.
+		if members != nil {
+			// Leave is what tells peers to stop routing here; it gets a slice
+			// of the budget, not all of it, so the drain below still has time.
+			deadline, _ := shutdownCtx.Deadline()
+			if leaveErr := members.Leave(min(time.Until(deadline)/4, 5*time.Second)); leaveErr != nil {
+				errs = append(errs, fmt.Errorf("cluster leave: %w", leaveErr))
+			}
+		}
+		if peerSrv != nil {
+			if peerErr := peerSrv.Shutdown(shutdownCtx); peerErr != nil {
+				errs = append(errs, fmt.Errorf("peer shutdown: %w", peerErr))
+			}
+		}
 		if ingestErr := ingestSrv.Shutdown(shutdownCtx); ingestErr != nil {
 			errs = append(errs, fmt.Errorf("ingest shutdown: %w", ingestErr))
 		}

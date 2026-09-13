@@ -172,6 +172,10 @@ dev-agent: ## Start the dev stack plus the agent and its log-writing sidecar
 e2e-agent: ## Phase 3 exit criteria on the real stack: restart + rotation, assert no gaps
 	bash deploy/e2e-agent.sh
 
+.PHONY: chaos
+chaos: ## Phase 5 exit criteria on the real stack: kill 2 of N collectors mid-ingest, assert no loss (N=5)
+	N=$(or $(N),5) bash deploy/chaos.sh
+
 .PHONY: demo-restart-collector
 demo-restart-collector: ## Exit-criteria demo: restart the collector under the running agent
 	$(COMPOSE) restart collector
@@ -197,11 +201,12 @@ dev-ps: ## Show dev stack container status
 	$(COMPOSE) ps
 
 .PHONY: dev-scale
-dev-scale: ## Scale collectors: make dev-scale N=5 (host ports become a range)
-	$(COMPOSE_SCALE) up -d --build --wait --wait-timeout 240 --scale collector=$(or $(N),3)
+dev-scale: ## Scale collectors behind the proxy: make dev-scale N=5
+	$(COMPOSE_SCALE) up -d --build --wait --wait-timeout 240 --scale collector=$(or $(N),3) timescaledb nats collector proxy
 	@echo
-	@echo "Compose assigns ports from a range in arbitrary order:"
-	@$(COMPOSE_SCALE) ps --format '  {{.Name}}\t{{.Ports}}'
+	@echo "  api      http://127.0.0.1:8080/v1/cluster   (proxy, any collector)"
+	@echo "  ingest   127.0.0.1:9095                     (proxy, any collector)"
+	@echo "  metrics  per replica on 127.0.0.1:9190-9199; see make dev-ps"
 
 .PHONY: psql
 psql: ## Open a psql shell against the dev database

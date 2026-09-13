@@ -1,16 +1,50 @@
 # Overlay for running more than one collector. Applied by `make dev-scale N=5`.
 #
-# Fixed host ports cannot be shared by replicas, so this replaces them with
-# ranges. Compose assigns from a range in nondeterministic order — replica 1 may
-# land on 8083 — so run `make dev-ps` to see the actual mapping. Phase 5 adds a
-# reverse proxy on a stable port in front of the cluster, which removes the
-# guesswork.
+# Fixed host ports cannot be shared by replicas, so the collectors stop
+# publishing the API and ingest ports and a reverse proxy publishes them once,
+# on the same loopback addresses the single-collector stack uses. The host
+# always talks to 127.0.0.1:8080 and :9095, whatever N is; the proxy resolves
+# `collector` through Compose's DNS and spreads connections over the replicas.
+# Only the admin port keeps a range (9190-9199, clear of the proxied 9095), so each replica's metrics and pprof stay
+# reachable individually (`make dev-ps` shows which is which).
 services:
   collector:
     # !override replaces the base list instead of appending to it; without it,
     # compose would keep the fixed 8080 mapping and the second replica would fail
     # to start with a port collision.
     ports: !override
-      - "127.0.0.1:8080-8089:8080"
-      - "127.0.0.1:9090-9099:9090"
-      - "127.0.0.1:9095-9104:9095"
+      - "127.0.0.1:9190-9199:9090"
+
+  proxy:
+    # nginx:1.27-alpine
+    image: nginx@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:9095:9095"
+    depends_on:
+      collector:
+        condition: service_healthy
+    healthcheck:
+      # Any HTTP answer from a collector through the proxy proves both hops.
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /run
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped

@@ -1,9 +1,6 @@
 package query
 
-import (
-	"regexp"
-	"testing"
-)
+import "testing"
 
 // FuzzCompile drives arbitrary text through the whole compiler and checks the
 // SQL-injection invariants on whatever comes out: every bare word in the
@@ -15,7 +12,6 @@ func FuzzCompile(f *testing.F) {
 	for _, tc := range goldenCases {
 		f.Add(tc.src)
 	}
-	words := regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]*`)
 	f.Fuzz(func(t *testing.T, src string) {
 		q, err := Parse(src)
 		if err != nil {
@@ -29,10 +25,8 @@ func FuzzCompile(f *testing.F) {
 			return
 		}
 		for _, s := range []Stmt{p.Streams, p.Logs} {
-			for _, w := range words.FindAllString(s.SQL, -1) {
-				if !allowedWords[w] {
-					t.Fatalf("Compile(%q): word %q is not on the allow-list in %q", src, w, s.SQL)
-				}
+			if err := CheckSQL(s.SQL); err != nil {
+				t.Fatalf("Compile(%q): %v in %q", src, err, s.SQL)
 			}
 			checkPlaceholders(t, s)
 		}

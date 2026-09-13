@@ -222,6 +222,42 @@ func snap(t time.Time, d time.Duration) time.Time {
 	return bucketOrigin.Add(t.Sub(bucketOrigin).Truncate(d))
 }
 
+// allowedWords is every bare word a generated statement may contain: SQL
+// keywords, the functions the planner calls, and the fixed table and column
+// names. It is the second half of the injection defense: arg keeps user bytes
+// out of the text, and this list is what a test, a fuzzer, or a peer executing
+// a shipped plan can check the text against.
+var allowedWords = map[string]bool{
+	"SELECT": true, "FROM": true, "WHERE": true, "AND": true, "ORDER": true, "BY": true,
+	"DESC": true, "ASC": true, "LIMIT": true, "ANY": true, "coalesce": true, "jsonb": true,
+	"ILIKE": true, "NOT": true, "CASE": true, "WHEN": true, "THEN": true, "END": true,
+	"pg_input_is_valid": true, "numeric": true, "btrim": true, "substring": true, "regexp_match": true,
+	"time_bucket": true, "interval": true, "AS": true, "bucket": true, "GROUP": true, "JOIN": true,
+	"USING": true, "count": true, "sum": true, "n": true, "float8": true, "octet_length": true,
+	"logs_rate_1m": true, "logs_rate_1h": true, "COLLATE": true, "C": true,
+	"streams": true, "logs": true,
+	"stream_id": true, "service": true, "host": true, "env": true, "labels": true, "time": true,
+	"seq": true, "level": true, "message": true, "trace_id": true, "span_id": true, "fields": true,
+}
+
+var (
+	sqlWords       = regexp.MustCompile(`[A-Za-z_$][A-Za-z0-9_]*`)
+	sqlPlaceholder = regexp.MustCompile(`^\$[0-9]+$`)
+)
+
+// CheckSQL reports the first bare word in sql that the planner could not have
+// written. A statement that passes came from Compile or is indistinguishable
+// from one; a peer executing a plan shipped over the network runs this before
+// touching the database, so the network is never a way to run arbitrary SQL.
+func CheckSQL(sql string) error {
+	for _, w := range sqlWords.FindAllString(sql, -1) {
+		if !allowedWords[w] && !sqlPlaceholder.MatchString(w) {
+			return fmt.Errorf("query: %q is not a word the planner writes", w)
+		}
+	}
+	return nil
+}
+
 // stmt accumulates SQL text and its arguments together, so a placeholder can
 // only be minted by handing over the value it stands for.
 type stmt struct {
@@ -465,6 +501,13 @@ func (s *stmt) aggregate(a *Aggregation, extract extractor, source, timeCol, ord
 		col, err := s.column(l, extract)
 		if err != nil {
 			return "", "", err
+		}
+		// Text groups sort in the "C" collation, plain byte order, so the
+		// order a single node returns and the order a coordinator merges
+		// shards into are the same order whatever the database's default
+		// collation is. level is a smallint and sorts numerically.
+		if l != "level" {
+			col = "(" + col + `) COLLATE "C"`
 		}
 		head += ", " + col
 		group += ", " + strconv.Itoa(i+3)

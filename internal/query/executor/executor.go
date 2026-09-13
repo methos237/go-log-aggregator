@@ -45,6 +45,9 @@ type Result struct {
 	// caller sees a prefix: the newest records, or the newest buckets of a
 	// series, and must not read the result as complete.
 	Truncated bool
+	// Warnings are shards that could not be answered, when the query fanned
+	// out across a cluster. Empty for a single-node query.
+	Warnings []string
 	// Elapsed covers both statements, from the first Query to the last row.
 	Elapsed time.Duration
 }
@@ -55,20 +58,73 @@ type Querier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-// Run compiles q for r and executes it. Deadlines and cancellation come from
-// ctx; the row cap is r.Limit, which query.Compile requires.
+// Shape says how to read a logs statement's rows: log records, or points
+// grouped by the named labels.
+type Shape struct {
+	Aggregate bool
+	By        []string
+}
+
+// ShapeOf is the shape of q's result.
+func ShapeOf(q *query.Query) Shape {
+	if q.Agg == nil {
+		return Shape{}
+	}
+	return Shape{Aggregate: true, By: q.Agg.By}
+}
+
+// Runner answers a parsed query. *Single and the cluster coordinator both do.
+type Runner interface {
+	Run(ctx context.Context, q *query.Query, r query.Request) (*Result, error)
+}
+
+// Single runs every query against one database, the whole plan on this node.
+type Single struct{ DB Querier }
+
+// Run compiles q for r and executes it here. Deadlines and cancellation come
+// from ctx; the row cap is r.Limit, which query.Compile requires.
+func (s Single) Run(ctx context.Context, q *query.Query, r query.Request) (*Result, error) {
+	return Run(ctx, s.DB, q, r)
+}
+
+// Run compiles q for r and executes it against db.
 func Run(ctx context.Context, db Querier, q *query.Query, r query.Request) (*Result, error) {
-	// One row past the cap is fetched so truncation is a fact, not a guess
-	// from len == limit.
+	plan, limit, err := Plan(q, r)
+	if err != nil {
+		return nil, err
+	}
+	started := time.Now()
+	ids, err := ResolveStreams(ctx, db, plan)
+	if err != nil {
+		return nil, err
+	}
+	res := &Result{Source: plan.Source, Start: plan.Start, End: plan.End, Streams: len(ids)}
+	if len(ids) > 0 {
+		plan.Logs.Args[0] = ids
+		if res.Records, res.Points, err = ExecLogs(ctx, db, plan.Logs, ShapeOf(q)); err != nil {
+			return nil, err
+		}
+	}
+	res.Truncate(limit)
+	res.Elapsed = time.Since(started)
+	return res, nil
+}
+
+// Plan compiles q for r with one row more than r.Limit, so truncation is a
+// fact rather than a guess from len == limit, and returns the caller's limit
+// to truncate to.
+func Plan(q *query.Query, r query.Request) (*query.Plan, int, error) {
 	limit := r.Limit
 	if limit > 0 {
 		r.Limit++
 	}
 	plan, err := query.Compile(q, r)
-	if err != nil {
-		return nil, err
-	}
-	started := time.Now()
+	return plan, limit, err
+}
+
+// ResolveStreams runs the plan's streams statement and returns the matching
+// ids, the value that goes into Logs.Args[0].
+func ResolveStreams(ctx context.Context, db Querier, plan *query.Plan) ([]int64, error) {
 	rows, err := db.Query(ctx, plan.Streams.SQL, plan.Streams.Args...)
 	if err != nil {
 		return nil, fmt.Errorf("executor: resolve streams: %w", err)
@@ -77,35 +133,40 @@ func Run(ctx context.Context, db Querier, q *query.Query, r query.Request) (*Res
 	if err != nil {
 		return nil, fmt.Errorf("executor: resolve streams: %w", err)
 	}
-	res := &Result{Source: plan.Source, Start: plan.Start, End: plan.End, Streams: len(ids)}
-	if len(ids) == 0 {
-		res.Elapsed = time.Since(started)
-		return res, nil
-	}
+	return ids, nil
+}
 
-	plan.Logs.Args[0] = ids
-	rows, err = db.Query(ctx, plan.Logs.SQL, plan.Logs.Args...)
+// ExecLogs runs a logs statement whose id slot is already bound and scans its
+// rows by shape. It is the unit of work a peer performs for a coordinator.
+func ExecLogs(ctx context.Context, db Querier, logs query.Stmt, shape Shape) ([]model.LogRecord, []Point, error) {
+	rows, err := db.Query(ctx, logs.SQL, logs.Args...)
 	if err != nil {
-		return nil, fmt.Errorf("executor: query %s: %w", plan.Source, err)
+		return nil, nil, fmt.Errorf("executor: query: %w", err)
 	}
-	if q.Agg == nil {
-		res.Records, err = pgx.CollectRows(rows, scanRecord)
-	} else {
-		res.Points, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (Point, error) {
-			return scanPoint(row, q.Agg.By)
-		})
+	if !shape.Aggregate {
+		records, scanErr := pgx.CollectRows(rows, scanRecord)
+		if scanErr != nil {
+			return nil, nil, fmt.Errorf("executor: scan: %w", scanErr)
+		}
+		return records, nil, nil
 	}
+	points, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Point, error) {
+		return scanPoint(row, shape.By)
+	})
 	if err != nil {
-		return nil, fmt.Errorf("executor: scan %s: %w", plan.Source, err)
+		return nil, nil, fmt.Errorf("executor: scan: %w", err)
 	}
-	if len(res.Records) > limit {
-		res.Records, res.Truncated = res.Records[:limit], true
+	return nil, points, nil
+}
+
+// Truncate cuts the result to limit rows and records that it did.
+func (r *Result) Truncate(limit int) {
+	if len(r.Records) > limit {
+		r.Records, r.Truncated = r.Records[:limit], true
 	}
-	if len(res.Points) > limit {
-		res.Points, res.Truncated = res.Points[:limit], true
+	if len(r.Points) > limit {
+		r.Points, r.Truncated = r.Points[:limit], true
 	}
-	res.Elapsed = time.Since(started)
-	return res, nil
 }
 
 // scanRecord reads the eight logs columns in table order, the shape

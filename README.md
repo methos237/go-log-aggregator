@@ -47,10 +47,11 @@ pipeline to see what it can take.
 
 ## Status
 
-Phases 1 through 4 of 9 are complete: the schema and write path, the ingest service,
-the agent, and the query language with its HTTP API and `logctl query`. Phase 5 adds
-the cluster layer (gossip, hash ring, query fan-out), phase 6 live tail, phase 7
-Grafana dashboards, phase 8 benchmarks, phase 9 polish. Each phase is one GitHub issue
+Phases 1 through 5 of 9 are complete: the schema and write path, the ingest service,
+the agent, the query language with its HTTP API and `logctl query`, and the cluster
+layer (gossip membership, hash ring, query fan-out, a proxy for the scaled stack, and
+a chaos test that kills two of five collectors mid-ingest). Phase 6 adds live tail,
+phase 7 Grafana dashboards, phase 8 benchmarks, phase 9 polish. Each phase is one GitHub issue
 and one pull request, and every design decision that shaped the code is written up in
 [`docs/decisions/`](docs/decisions/).
 
@@ -61,7 +62,7 @@ Requires Docker. Go is only needed to run tests and linters locally.
 ```bash
 make dev          # build and start the stack, wait until healthy
 make dev-logs     # follow logs
-make dev-scale N=3  # run 3 collectors (host ports move to a range; see make dev-ps)
+make dev-scale N=3  # run 3 collectors behind a proxy on the same host ports
 make dev-down     # stop, keeping data
 make dev-nuke     # stop and delete volumes
 ```
@@ -130,15 +131,17 @@ configured they refuse every request.
 
 | Method | Path | Body / result |
 |---|---|---|
-| `POST` | `/v1/query` | `{query, start, end, limit, direction}` returns `records` or `points`, plus `source`, `start`, `end`, `streams`, `truncated`, `elapsed_ms` |
+| `POST` | `/v1/query` | `{query, start, end, limit, direction}` returns `records` or `points`, plus `source`, `start`, `end`, `streams`, `truncated`, `warnings`, `elapsed_ms` |
 | `GET` | `/v1/labels` | label names for autocomplete |
 | `GET` | `/v1/labels/{name}/values` | distinct values of one label |
+| `GET` | `/v1/cluster` | members, ring shares and ownership; `?arcs=1` for every range |
 
 `start` and `end` are RFC 3339 and default to the last hour. For an aggregation the
 server widens them to whole buckets and echoes the result back. `limit` defaults to
 1000 and is capped by `LOGAGG_HTTP_QUERY_MAX_ROWS`; `truncated` is true when more rows
 matched. `direction` is `backward` (default) or `forward`. `LOGAGG_HTTP_QUERY_TIMEOUT`
-bounds each request.
+bounds each request. In a cluster, `warnings` lists any member whose share of the
+streams could not be searched.
 
 ## Architecture
 
@@ -153,11 +156,11 @@ Ports, all bound to loopback in development:
 
 | Port | Listener | Notes |
 |---|---|---|
-| 8080 | Public HTTP API | health, `/v1/query`, `/v1/labels`; live tail in phase 6 |
+| 8080 | Public HTTP API | health, `/v1/query`, `/v1/labels`, `/v1/cluster`; live tail in phase 6 |
 | 9090 | Admin | Prometheus metrics and pprof. Keep this off any public network. |
 | 9095 | gRPC ingest | mTLS when configured; plaintext by default |
-| 9096 | gRPC peer | query fan-out, phase 5 |
-| 7946 | memberlist gossip | phase 5 |
+| 9096 | gRPC peer | query fan-out between collectors; mTLS or loopback unless opted out |
+| 7946 | memberlist gossip | UDP and TCP; never published to the host |
 | 5432 | TimescaleDB | development credentials only |
 | 4222 | NATS | 8222 serves its monitoring endpoint |
 
@@ -165,10 +168,34 @@ The admin listener is separate from the public one, and configuration validation
 refuses to start if they share an address, because pprof is unauthenticated and
 exposes heap contents.
 
-`make dev` publishes fixed host ports, so a single collector is always on 8080.
-`make dev-scale` swaps in a port range, since replicas cannot share fixed ports.
-Compose assigns from that range in arbitrary order; `make dev-ps` shows which replica
-landed where. Phase 5 puts a reverse proxy on a stable port in front of the cluster.
+## Cluster
+
+Collectors find each other with `hashicorp/memberlist` gossip and build a consistent
+hash ring over their names, 128 virtual nodes each. Every collector writes through
+JetStream, so the ring divides reads, not data: whichever collector takes a query
+resolves the matching streams, splits the ids by owner, ships each owner the query
+text and its share of the ids to compile and scan itself, and merges the rows. A peer that cannot be reached becomes a
+`warnings` entry in the response instead of a failed query.
+
+```bash
+make dev-scale N=5                       # five collectors behind the proxy
+curl -s -H "Authorization: Bearer dev-token" http://127.0.0.1:8080/v1/cluster | jq
+make chaos                               # kill two mid-ingest, assert zero gaps
+```
+
+`GET /v1/cluster` shows the members, what each advertised, and its share of the key
+space; `?arcs=1` adds every owned range. The chaos test runs the agent through the
+proxy, kills two collectors outright while lines are in flight, then asserts every
+numbered line landed with no gaps, that the ring settled on the survivors, and that a
+fanned-out count agrees with the database. It waits out the queue's `ack_wait`,
+since a killed collector's unacknowledged deliveries are redelivered only after it
+expires. The reasoning is in [`ADR-0005`](docs/decisions/ADR-0005-cluster-layer.md).
+
+`make dev` publishes fixed host ports for its single collector. `make dev-scale N=5`
+puts an nginx proxy on the same 8080 and 9095 in front of N collectors, resolving
+them through Compose's DNS on every connection, so the host addresses never change
+and a killed replica drops out of rotation within seconds. Only the admin port stays
+per replica, on 9190-9199; `make dev-ps` shows which is which.
 
 ## Configuration
 

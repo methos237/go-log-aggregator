@@ -251,7 +251,7 @@ func TestHTTPQuery(t *testing.T) {
 
 	newServer := func(timeout time.Duration) http.Handler {
 		cfg := config.HTTP{Addr: ":0", AuthToken: "t", QueryTimeout: timeout, QueryMaxRows: 100}
-		return httpapi.New(&cfg, observability.NewHealth(time.Second), pool, slog.New(slog.NewJSONHandler(io.Discard, nil))).Handler()
+		return httpapi.New(&cfg, observability.NewHealth(time.Second), httpapi.Deps{DB: pool, Node: "test"}, slog.New(slog.NewJSONHandler(io.Discard, nil))).Handler()
 	}
 	call := func(h http.Handler, method, path, body string) (int, map[string]any) {
 		req := httptest.NewRequest(method, path, bytes.NewReader([]byte(body)))

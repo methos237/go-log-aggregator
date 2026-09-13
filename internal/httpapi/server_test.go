@@ -28,7 +28,7 @@ func newTestServer(t *testing.T, health *observability.Health, w io.Writer) *Ser
 		ReadTimeout:  time.Second,
 		WriteTimeout: time.Second,
 		IdleTimeout:  time.Second,
-	}, health, nil, log)
+	}, health, Deps{}, log)
 }
 
 func TestHealthz(t *testing.T) {

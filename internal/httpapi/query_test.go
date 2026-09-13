@@ -22,7 +22,7 @@ func newQueryServer(t *testing.T, token string) *Server {
 	t.Helper()
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	return New(&config.HTTP{Addr: ":0", AuthToken: token, QueryTimeout: time.Second, QueryMaxRows: 50},
-		observability.NewHealth(time.Second), nil, log)
+		observability.NewHealth(time.Second), Deps{Node: "solo"}, log)
 }
 
 func do(t *testing.T, srv *Server, method, path, token, body string) (int, string) {

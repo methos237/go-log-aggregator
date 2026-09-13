@@ -1,0 +1,60 @@
+// Wire format for collector <-> collector query fan-out.
+//
+// A coordinator parses and plans a query, resolves the matching streams, and
+// asks each owning peer to answer for that peer's share of the stream ids. The
+// request carries the query text and the request parameters, not SQL: the
+// peer runs the same compiler over the same inputs, so the only statements a
+// peer ever executes are ones its own planner wrote, with the time bound and
+// row cap the planner always injects. A peer port is therefore never a way to
+// run arbitrary SQL, whatever reaches it.
+syntax = "proto3";
+
+package logagg.v1;
+
+import "logagg/v1/ingest.proto";
+
+option go_package = "github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1;logaggv1";
+
+// ExecuteRequest asks a peer to answer one shard of a query.
+message ExecuteRequest {
+  // query is the DSL text the coordinator already parsed.
+  string query = 1;
+  // The request half of the plan: the range, the row cap the coordinator
+  // wants back from this shard, and the order.
+  int64 start_unix_nano = 2;
+  int64 end_unix_nano = 3;
+  int32 limit = 4;
+  bool forward = 5;
+  // stream_ids is this peer's share of the resolved selector.
+  repeated int64 stream_ids = 6;
+}
+
+// Record is one log row, with its stream id since a peer's rows span streams.
+message Record {
+  int64 stream_id = 1;
+  int64 time_unix_nano = 2;
+  int64 seq = 3;
+  Level level = 4;
+  string message = 5;
+  bytes trace_id = 6;
+  bytes span_id = 7;
+  map<string, string> fields = 8;
+}
+
+// Point is one bucket of one group in an aggregation.
+message Point {
+  int64 bucket_unix_nano = 1;
+  double value = 2;
+  map<string, string> labels = 3;
+}
+
+// ExecuteResponse carries either records or points, matching the query.
+message ExecuteResponse {
+  repeated Record records = 1;
+  repeated Point points = 2;
+}
+
+// PeerService is the internal collector-to-collector API.
+service PeerService {
+  rpc Execute(ExecuteRequest) returns (ExecuteResponse);
+}

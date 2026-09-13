@@ -54,3 +54,6 @@ certs/
 # Editor/IDE
 .idea/
 # .vscode/
+
+# rapid writes a reproducer here when a property test fails; it is scratch, not a fixture.
+**/testdata/rapid/

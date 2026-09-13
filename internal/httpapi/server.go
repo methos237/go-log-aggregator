@@ -22,18 +22,32 @@ type Server struct {
 	log *slog.Logger
 }
 
-// New builds the public server. db answers /v1 queries; the tail endpoint
-// arrives in phase 6.
-func New(cfg *config.HTTP, health *observability.Health, db executor.Querier, log *slog.Logger) *Server {
+// Deps are the collaborators the /v1 handlers call. Cluster may be nil when
+// clustering is off; Runner defaults to running every query on DB alone.
+type Deps struct {
+	DB      executor.Querier
+	Runner  executor.Runner
+	Cluster ClusterView
+	// Node is this process's name, shown by /v1/cluster.
+	Node string
+}
+
+// New builds the public server. The tail endpoint arrives in phase 6.
+func New(cfg *config.HTTP, health *observability.Health, deps Deps, log *slog.Logger) *Server {
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health.LiveHandler())
 	mux.Handle("GET /readyz", health.ReadyHandler())
 
-	api := &queryAPI{db: db, timeout: cfg.QueryTimeout, maxRows: cfg.QueryMaxRows, log: log}
+	runner := deps.Runner
+	if runner == nil {
+		runner = executor.Single{DB: deps.DB}
+	}
+	api := &queryAPI{db: deps.DB, run: runner, timeout: cfg.QueryTimeout, maxRows: cfg.QueryMaxRows, log: log, node: deps.Node, cluster: deps.Cluster}
 	auth := bearerAuth(cfg.AuthToken)
 	mux.Handle("POST /v1/query", auth(http.HandlerFunc(api.query)))
 	mux.Handle("GET /v1/labels", auth(http.HandlerFunc(api.labels)))
 	mux.Handle("GET /v1/labels/{name}/values", auth(http.HandlerFunc(api.labelValues)))
+	mux.Handle("GET /v1/cluster", auth(http.HandlerFunc(api.clusterState)))
 	mux.HandleFunc("/", notFound)
 
 	handler := recoverPanic(log)(requestLog(log)(mux))

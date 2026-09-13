@@ -229,6 +229,38 @@ func TestValidate(t *testing.T) {
 			want:   "shorter than the write timeout",
 		},
 		{
+			name:   "cluster bind addr without port",
+			mutate: func(c *Config) { c.Cluster.Enabled, c.Cluster.BindAddr = true, "10.0.0.1" },
+			want:   "cluster bind addr",
+		},
+		{
+			name:   "cluster advertise addr without host",
+			mutate: func(c *Config) { c.Cluster.Enabled, c.Cluster.AdvertiseAddr = true, ":7946" },
+			want:   "needs a host",
+		},
+		{
+			name: "cluster loopback peer port behind routable gossip",
+			mutate: func(c *Config) {
+				c.Cluster.Enabled, c.Cluster.BindAddr, c.Cluster.PeerAllowPlaintext = true, ":7946", true
+			},
+			want: "unreachable port",
+		},
+		{
+			name:   "cluster peer plaintext on routable addr",
+			mutate: func(c *Config) { c.Cluster.Enabled, c.Cluster.PeerAddr = true, ":9096" },
+			want:   "CLUSTER_PEER_ALLOW_PLAINTEXT",
+		},
+		{
+			name:   "cluster peer tls partial",
+			mutate: func(c *Config) { c.Cluster.Enabled, c.Cluster.PeerTLSCertFile = true, "x.pem" },
+			want:   "all of cert, key and CA",
+		},
+		{
+			name:   "cluster vnodes zero",
+			mutate: func(c *Config) { c.Cluster.Enabled, c.Cluster.VNodes = true, 0 },
+			want:   "cluster vnodes",
+		},
+		{
 			name:   "zero query row cap",
 			mutate: func(c *Config) { c.HTTP.QueryMaxRows = 0 },
 			want:   "query max rows must be positive",
