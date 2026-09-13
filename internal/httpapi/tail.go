@@ -62,23 +62,13 @@ func (a *tailAPI) tail(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	// Subscribed before the upgrade so an unsupported stage is a plain 400 the
-	// client can read, not a close frame it has to decode.
-	sub, err := a.reg.Subscribe(q)
-	if err != nil {
-		var qe *query.Error
-		switch {
-		case errors.As(err, &qe):
-			writeError(w, http.StatusBadRequest, err.Error())
-		case errors.Is(err, tail.ErrClosed):
-			writeError(w, http.StatusServiceUnavailable, "shutting down")
-		default:
-			a.log.Error("tail subscribe failed", slog.String("query", src), slog.Any("error", err))
-			writeError(w, http.StatusInternalServerError, "subscribe failed")
-		}
+	// Checked before the upgrade so an unsupported stage is a plain 400 the
+	// client can read, not a close frame it has to decode. Cheap to run twice;
+	// the registry compiles it again when it subscribes.
+	if _, err = query.NewEvaluator(q); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	defer sub.Close()
 
 	// Accept writes its own 4xx on a malformed handshake. Origin is left at the
 	// default, same-origin only: the CLI sends none, and a browser page served
@@ -90,6 +80,21 @@ func (a *tailAPI) tail(w http.ResponseWriter, r *http.Request) {
 	// CloseNow rather than Close on every exit path: by the time the handler
 	// returns, either the peer is gone or a close frame has already been sent.
 	defer c.CloseNow() //nolint:errcheck // idempotent teardown
+
+	// Subscribed after the upgrade, so an authenticated plain GET never costs
+	// the broker a subscription it will drop a moment later.
+	sub, err := a.reg.Subscribe(q)
+	if err != nil {
+		code, reason := websocket.StatusInternalError, "subscribe failed"
+		if errors.Is(err, tail.ErrClosed) {
+			code, reason = websocket.StatusGoingAway, "server shutting down"
+		} else {
+			a.log.Error("tail subscribe failed", slog.String("query", src), slog.Any("error", err))
+		}
+		a.close(c, code, reason)
+		return
+	}
+	defer sub.Close()
 
 	ctx := c.CloseRead(r.Context())
 	// Writes and pings are cut short by the subscription ending, so a client
@@ -108,6 +113,11 @@ func (a *tailAPI) tail(w http.ResponseWriter, r *http.Request) {
 
 	heartbeat := time.NewTicker(a.ping)
 	defer heartbeat.Stop()
+	// Pings run off the loop. Waiting for the pong in the loop would stop
+	// draining the client's buffer for one round trip on every tick, and a
+	// client on a slow link would see drops it did nothing to earn.
+	pongs := make(chan error, 1)
+	pinging := false
 
 	var reported int64
 	for {
@@ -119,16 +129,38 @@ func (a *tailAPI) tail(w http.ResponseWriter, r *http.Request) {
 			a.close(c, websocket.StatusGoingAway, "server shutting down")
 			return
 		case <-heartbeat.C:
-			if err := a.bounded(wctx, c.Ping); err != nil {
+			if pinging {
+				// The previous ping's own deadline decides; a second in flight
+				// would only race it.
+				continue
+			}
+			pinging = true
+			go func() { pongs <- a.bounded(wctx, c.Ping) }()
+		case err := <-pongs:
+			pinging = false
+			if err != nil {
+				a.goodbye(c, sub)
 				return
 			}
 		case rec := <-sub.Records():
 			dropped := sub.Dropped()
 			if err := a.send(wctx, c, &rec, dropped-reported); err != nil {
+				a.goodbye(c, sub)
 				return
 			}
 			reported = dropped
 		}
+	}
+}
+
+// goodbye handles a failed write or ping: when the subscription ended under
+// it, the failure was ours and the client still deserves the shutdown close
+// frame; otherwise the peer is gone and there is nobody to tell.
+func (a *tailAPI) goodbye(c *websocket.Conn, sub *tail.Subscription) {
+	select {
+	case <-sub.Done():
+		a.close(c, websocket.StatusGoingAway, "server shutting down")
+	default:
 	}
 }
 

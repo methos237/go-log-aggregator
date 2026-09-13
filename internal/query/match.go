@@ -125,7 +125,7 @@ func textPred(op Op, value string) func(string) bool {
 	case OpNeq:
 		return func(s string) bool { return s != value }
 	case OpRe, OpNre:
-		re := regexp.MustCompile(anchor(value))
+		re := regexp.MustCompile(dotall(anchor(value)))
 		if op == OpRe {
 			return re.MatchString
 		}
@@ -140,6 +140,12 @@ func textPred(op Op, value string) func(string) bool {
 		return func(s string) bool { return s < value }
 	}
 }
+
+// dotall makes . match a newline, as Postgres's ARE dialect does by default
+// and Go's RE2 does not, so a multi-line message matches the same way in both.
+// The parser only allows flags at the very start of a pattern, and a flag
+// group in front of one is still a legal Go pattern.
+func dotall(re string) string { return "(?s)" + re }
 
 // levelPred mirrors stmt.level: an integer comparison on the record column.
 // The parser rejected the regex operators for level.
@@ -165,10 +171,13 @@ func levelPred(op Op, want model.Level) func(*model.LogRecord) bool {
 // match.
 func linePred(f LineFilter) func(*model.LogRecord) bool {
 	if f.Op.IsRegex() {
-		re := regexp.MustCompile(f.Text)
+		re := regexp.MustCompile(dotall(f.Text))
 		want := f.Op == LineMatches
 		return func(r *model.LogRecord) bool { return re.MatchString(r.Message) == want }
 	}
+	// ToLower folds the whole of Unicode; ILIKE folds through the database's
+	// LC_CTYPE, so a non-ASCII substring can match here and not there on a
+	// C-locale database. ASCII, which is what log searches are, agrees.
 	needle := strings.ToLower(f.Text)
 	want := f.Op == LineContains
 	return func(r *model.LogRecord) bool {

@@ -291,6 +291,16 @@ func TestValidate(t *testing.T) {
 			want:   "shutdown timeout must be positive",
 		},
 		{
+			name:   "zero http write timeout",
+			mutate: func(c *Config) { c.HTTP.WriteTimeout = 0 },
+			want:   "write timeout must be positive",
+		},
+		{
+			name:   "durable subject prefix under the tail prefix",
+			mutate: func(c *Config) { c.Queue.TailSubjectPrefix, c.Queue.SubjectPrefix = "logagg", "logagg.logs" },
+			want:   "inside the tail prefix",
+		},
+		{
 			name:   "zero tail buffer",
 			mutate: func(c *Config) { c.HTTP.TailBuffer = 0 },
 			want:   "tail buffer must be positive",

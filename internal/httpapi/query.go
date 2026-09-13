@@ -77,6 +77,15 @@ type record struct {
 	Fields   map[string]string `json:"fields,omitempty"`
 }
 
+// newRecord is the one place a LogRecord becomes its wire form, shared by the
+// query and tail endpoints so the two cannot drift apart.
+func newRecord(rec *model.LogRecord) record {
+	return record{
+		Time: rec.Time, StreamID: rec.StreamID, Seq: rec.Seq, Level: rec.Level, Message: rec.Message,
+		TraceID: hex.EncodeToString(rec.TraceID), SpanID: hex.EncodeToString(rec.SpanID), Fields: rec.Fields,
+	}
+}
+
 func (a *queryAPI) query(w http.ResponseWriter, r *http.Request) {
 	var req queryRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(&req); err != nil {
@@ -118,11 +127,8 @@ func (a *queryAPI) query(w http.ResponseWriter, r *http.Request) {
 	}
 	if q.Agg == nil {
 		resp.Records = make([]record, len(res.Records))
-		for i, rec := range res.Records {
-			resp.Records[i] = record{
-				Time: rec.Time, StreamID: rec.StreamID, Seq: rec.Seq, Level: rec.Level, Message: rec.Message,
-				TraceID: hex.EncodeToString(rec.TraceID), SpanID: hex.EncodeToString(rec.SpanID), Fields: rec.Fields,
-			}
+		for i := range res.Records {
+			resp.Records[i] = newRecord(&res.Records[i])
 		}
 	}
 	writeJSON(w, resp)

@@ -72,7 +72,7 @@ executor and are refused with a positioned error before the upgrade, so the
 client reads a 400 rather than decoding a close frame.
 
 The guarantee is a test, not a comment: `TestEvaluatorAgreesWithSQL` runs the
-evaluator and `executor.Run` over the same seeded data for 29 queries and
+evaluator and `executor.Run` over the same seeded data for 32 queries and
 requires identical answers. A change to either that the other does not follow
 fails there.
 

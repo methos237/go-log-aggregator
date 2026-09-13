@@ -564,6 +564,12 @@ func (c *Config) Validate() error {
 			bad("cluster join timeout must be positive, got %s", c.Cluster.JoinTimeout)
 		}
 	}
+	// Positive rather than net/http's "0 means none": the write timeout also
+	// bounds each live-tail write, and a tail with no write bound would keep a
+	// stalled client's goroutine forever.
+	if c.HTTP.WriteTimeout <= 0 {
+		bad("http write timeout must be positive, got %s", c.HTTP.WriteTimeout)
+	}
 	if c.HTTP.WriteTimeout > 0 && c.HTTP.QueryTimeout >= c.HTTP.WriteTimeout {
 		bad("http query timeout %s must be shorter than the write timeout %s, or a timed-out query cannot be answered", c.HTTP.QueryTimeout, c.HTTP.WriteTimeout)
 	}
@@ -674,6 +680,10 @@ func (c *Config) Validate() error {
 		bad("queue tail subject prefix must not be empty")
 	} else if tail == durable || strings.HasPrefix(tail, durable+".") {
 		bad("queue tail subject prefix %q is inside the durable stream's %q.>", tail, durable)
+	} else if strings.HasPrefix(durable, tail+".") {
+		// The other nesting: a fan-out copy whose env token spells the rest of
+		// the durable prefix would land inside the stream just the same.
+		bad("queue subject prefix %q is inside the tail prefix's %q.>", durable, tail)
 	}
 	if c.Log.Format != "json" && c.Log.Format != "text" {
 		bad("log format must be json or text, got %q", c.Log.Format)

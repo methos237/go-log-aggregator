@@ -39,6 +39,7 @@ func TestEvaluatorAgreesWithSQL(t *testing.T) {
 		{model.LevelWarn, "Timeout after 30s"},
 		{model.LevelError, "upstream 503: timeout"},
 		{model.LevelDebug, "50% done, path=/a_b"},
+		{model.LevelError, "Exception thrown\n  at foo()\n  at bar()"},
 	}
 
 	type key struct {
@@ -88,6 +89,9 @@ func TestEvaluatorAgreesWithSQL(t *testing.T) {
 		`{env="prod"} |~ "^Timeout"`,
 		`{env="prod"} !~ "^Timeout"`,
 		`{env="prod"} |~ "(?i)timeout"`,
+		`{env="prod"} |~ "Exception.*at bar"`,
+		`{env="prod"} |~ "^  at"`,
+		`{env="prod"} !~ "thrown.at"`,
 		`{env="prod"} |= "TIMEOUT" |~ "30"`,
 		`{env="prod", level>="warn"} |= "timeout" != "upstream"`,
 	}

@@ -92,14 +92,19 @@ func (r *Registry) Subscribe(q *query.Query) (*Subscription, error) {
 		done: make(chan struct{}),
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.closed {
-		return nil, ErrClosed
-	}
+	// Subscribed outside the lock: a NATS subscribe can flush the socket the
+	// ingest publishes share, and a stalled broker must not pin the registry
+	// against every other client and against Close.
 	env, service := pinned(q.Selector)
 	if s.src, err = r.src.Subscribe(queue.Filter(r.prefix, env, service), s.deliver); err != nil {
 		return nil, err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		s.src.Stop()
+		return nil, ErrClosed
 	}
 	r.subs[s] = struct{}{}
 	r.metrics.Subscriptions.Inc()

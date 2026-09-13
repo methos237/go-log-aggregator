@@ -68,10 +68,23 @@ func tailCmd(args []string) error {
 // the server going away is reported, since the operator will want to
 // reconnect.
 func (o *tailOptions) run(ctx context.Context, query string, out, errOut io.Writer) error {
-	addr := "ws" + strings.TrimPrefix(strings.TrimSuffix(o.addr, "/"), "http") + "/v1/tail?query=" + url.QueryEscape(query)
+	u, err := url.Parse(o.addr)
+	if err != nil {
+		return fmt.Errorf("-addr: %w", err)
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "ws":
+		u.Scheme = "ws"
+	case "https", "wss":
+		u.Scheme = "wss"
+	default:
+		return fmt.Errorf("-addr %q: scheme must be http or https", o.addr)
+	}
+	u.Path = strings.TrimSuffix(u.Path, "/") + "/v1/tail"
+	u.RawQuery = "query=" + url.QueryEscape(query)
 	hdr := http.Header{}
 	hdr.Set("Authorization", "Bearer "+o.token)
-	c, resp, err := websocket.Dial(ctx, addr, &websocket.DialOptions{HTTPHeader: hdr})
+	c, resp, err := websocket.Dial(ctx, u.String(), &websocket.DialOptions{HTTPHeader: hdr})
 	if resp != nil && resp.Body != nil {
 		defer func() { _ = resp.Body.Close() }()
 	}

@@ -29,7 +29,8 @@ func TestTailPrintsRecordsAndDropWarnings(t *testing.T) {
 	defer ts.Close()
 
 	var out, errOut bytes.Buffer
-	opt := tailOptions{addr: ts.URL, token: "secret"}
+	// Upper-case scheme and trailing slash, both of which query accepts too.
+	opt := tailOptions{addr: strings.Replace(ts.URL, "http://", "HTTP://", 1) + "/", token: "secret"}
 	err := opt.run(context.Background(), `{service="api"}`, &out, &errOut)
 	if err == nil || !strings.Contains(err.Error(), "shutting down") {
 		t.Fatalf("err = %v, want the server's goodbye reported", err)
