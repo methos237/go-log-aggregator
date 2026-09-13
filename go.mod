@@ -17,6 +17,7 @@ require (
 	golang.org/x/sync v0.22.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
+	pgregory.net/rapid v1.3.0
 )
 
 require (
