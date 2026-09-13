@@ -4,6 +4,7 @@ go 1.27.1
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0
+	github.com/coder/websocket v1.8.15
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/hashicorp/memberlist v0.6.0
 	github.com/jackc/pgx/v5 v5.10.0

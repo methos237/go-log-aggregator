@@ -1,5 +1,5 @@
-// Package httpapi serves the public HTTP surface: health probes, the query API
-// under /v1 behind a bearer token, and live tail in a later phase.
+// Package httpapi serves the public HTTP surface: health probes, and the query
+// and live-tail APIs under /v1 behind a bearer token.
 //
 // Metrics and pprof deliberately live on the separate admin listener in
 // internal/observability.
@@ -14,12 +14,14 @@ import (
 	"github.com/jamespolk/go-log-aggregator/internal/config"
 	"github.com/jamespolk/go-log-aggregator/internal/observability"
 	"github.com/jamespolk/go-log-aggregator/internal/query/executor"
+	"github.com/jamespolk/go-log-aggregator/internal/tail"
 )
 
 // Server is the public API listener.
 type Server struct {
-	srv *http.Server
-	log *slog.Logger
+	srv   *http.Server
+	tails *tail.Registry
+	log   *slog.Logger
 }
 
 // Deps are the collaborators the /v1 handlers call. Cluster may be nil when
@@ -30,9 +32,11 @@ type Deps struct {
 	Cluster ClusterView
 	// Node is this process's name, shown by /v1/cluster.
 	Node string
+	// Tails serves /v1/tail. Nil leaves the route unregistered.
+	Tails *tail.Registry
 }
 
-// New builds the public server. The tail endpoint arrives in phase 6.
+// New builds the public server.
 func New(cfg *config.HTTP, health *observability.Health, deps Deps, log *slog.Logger) *Server {
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health.LiveHandler())
@@ -48,6 +52,10 @@ func New(cfg *config.HTTP, health *observability.Health, deps Deps, log *slog.Lo
 	mux.Handle("GET /v1/labels", auth(http.HandlerFunc(api.labels)))
 	mux.Handle("GET /v1/labels/{name}/values", auth(http.HandlerFunc(api.labelValues)))
 	mux.Handle("GET /v1/cluster", auth(http.HandlerFunc(api.clusterState)))
+	if deps.Tails != nil {
+		t := &tailAPI{reg: deps.Tails, ping: cfg.TailPingInterval, write: cfg.WriteTimeout, log: log}
+		mux.Handle("GET /v1/tail", auth(http.HandlerFunc(t.tail)))
+	}
 	mux.HandleFunc("/", notFound)
 
 	handler := recoverPanic(log)(requestLog(log)(mux))
@@ -61,7 +69,8 @@ func New(cfg *config.HTTP, health *observability.Health, deps Deps, log *slog.Lo
 			WriteTimeout:      cfg.WriteTimeout,
 			IdleTimeout:       cfg.IdleTimeout,
 		},
-		log: log,
+		tails: deps.Tails,
+		log:   log,
 	}
 }
 
@@ -79,6 +88,13 @@ func (s *Server) ListenAndServe() error {
 }
 
 // Shutdown stops accepting connections and waits for in-flight requests.
+//
+// Tail connections are hijacked, so net/http neither tracks nor closes them;
+// ending their subscriptions first is what makes each handler send its close
+// frame and return.
 func (s *Server) Shutdown(ctx context.Context) error {
+	if s.tails != nil {
+		s.tails.Close()
+	}
 	return s.srv.Shutdown(ctx)
 }
