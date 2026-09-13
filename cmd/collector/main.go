@@ -33,6 +33,7 @@ import (
 	"github.com/jamespolk/go-log-aggregator/internal/query/executor"
 	"github.com/jamespolk/go-log-aggregator/internal/queue"
 	"github.com/jamespolk/go-log-aggregator/internal/storage"
+	"github.com/jamespolk/go-log-aggregator/internal/tail"
 	"github.com/jamespolk/go-log-aggregator/internal/version"
 )
 
@@ -247,8 +248,14 @@ func run(dsnOverride string) error {
 		runner = cluster.NewCoordinator(pool, members, peers, log)
 	}
 
+	// Live tail reads the fan-out copies off the same connection the durable
+	// publishes use; the registry is closed by apiSrv.Shutdown.
+	tails := tail.New(q, cfg.Queue.TailSubjectPrefix, cfg.HTTP.TailBuffer, tail.NewMetrics(metrics.Registerer), log)
+
 	// /readyz reports ready only once every registered dependency answers.
-	apiSrv := httpapi.New(&cfg.HTTP, health, httpapi.Deps{DB: pool, Runner: runner, Node: cfg.Node.Name, Cluster: clusterView(members)}, log)
+	apiSrv := httpapi.New(&cfg.HTTP, health, httpapi.Deps{
+		DB: pool, Runner: runner, Node: cfg.Node.Name, Cluster: clusterView(members), Tails: tails,
+	}, log)
 	adminSrv := observability.NewAdminServer(cfg.Admin, metrics, log)
 
 	// Binds its port here, so a conflict fails startup rather than surfacing as a

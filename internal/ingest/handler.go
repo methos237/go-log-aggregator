@@ -132,6 +132,16 @@ func (s *service) handle(ctx context.Context, batch *logaggv1.LogBatch) *logaggv
 	}
 
 	s.metrics.RecordsAccepted.Add(float64(len(valid)))
+
+	// After the durable ack, before the agent's. The tail copy is fire-and-forget,
+	// so a failure costs a tail reader one batch and the agent nothing; it is
+	// logged at debug because the queue's fanout metric is where a sustained
+	// failure is meant to be noticed. Same bytes as the durable publish: the
+	// invalid records are already filtered out.
+	tail := s.pipeline.queue.TailSubject(labels.Env, labels.Service)
+	if err = s.pipeline.queue.Fanout(tail, payload); err != nil {
+		s.log.Debug("tail fan-out failed", slog.String("subject", tail), slog.Any("error", err))
+	}
 	return s.ack(&logaggv1.Ack{
 		BatchId:  id,
 		Code:     logaggv1.AckCode_ACK_CODE_ACCEPTED,

@@ -39,6 +39,7 @@ usage: logctl <command> [flags]
 commands:
   send       ship log lines to a collector
   query      run a query against a collector and print the rows
+  tail       stream matching records from a collector as they arrive
   version    print version and exit
 
 run "logctl <command> -h" for a command's flags.
@@ -56,6 +57,8 @@ func run(args []string) error {
 		return sendCmd(args[1:])
 	case "query":
 		return queryCmd(args[1:])
+	case "tail":
+		return tailCmd(args[1:])
 	case "version", "-version", "--version":
 		fmt.Println(version.String("logctl"))
 		return nil

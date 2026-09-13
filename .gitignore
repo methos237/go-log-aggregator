@@ -57,3 +57,6 @@ certs/
 
 # rapid writes a reproducer here when a property test fails; it is scratch, not a fixture.
 **/testdata/rapid/
+
+# graphify knowledge-graph output; regenerate with /graphify
+graphify-out/

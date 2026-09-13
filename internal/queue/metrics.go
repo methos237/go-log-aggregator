@@ -33,6 +33,10 @@ type Metrics struct {
 	// Consumed is the cost of at-least-once delivery, and a climbing ratio means
 	// batches are timing out before the writer finishes them.
 	Redeliveries prometheus.Counter
+	// Fanout counts batches copied to the live-tail subject. A failure here is a
+	// tail reader missing a batch, never an agent losing one, which is why it is
+	// a counter and not a drop reason.
+	Fanout *prometheus.CounterVec
 }
 
 // NewMetrics registers the queue metrics and returns them.
@@ -70,12 +74,20 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Name:      "redeliveries_total",
 			Help:      "Messages delivered more than once.",
 		}),
+
+		Fanout: f.NewCounterVec(prometheus.CounterOpts{
+			Namespace: observability.Namespace,
+			Subsystem: queueSubsystem,
+			Name:      "fanout_total",
+			Help:      "Batches copied to the live-tail subject, by outcome.",
+		}, []string{"outcome"}),
 	}
 
 	// Pre-created so a dashboard shows 0 rather than a gap before the first
 	// failure; an alert on a series that does not exist yet does not fire.
 	for _, outcome := range []string{outcomeSuccess, outcomeFailure} {
 		m.PublishDuration.WithLabelValues(outcome)
+		m.Fanout.WithLabelValues(outcome)
 	}
 	return m
 }

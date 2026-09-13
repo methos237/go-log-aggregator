@@ -66,6 +66,29 @@ func TestSubject(t *testing.T) {
 	}
 }
 
+func TestFilter(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		env, service string
+		want         string
+	}{
+		{"prod", "api", "tail.prod.api"},
+		{"", "api", "tail.*.api"},
+		{"prod", "", "tail.prod.*"},
+		{"", "", "tail.*.*"},
+		// Sanitized like Subject, so the filter lands on the same token the
+		// publisher chose; a literal wildcard in a label must not widen it.
+		{"prod", "a.b", "tail.prod.a_b"},
+		{">", "*", "tail._._"},
+	}
+	for _, tt := range tests {
+		if got := Filter("tail", tt.env, tt.service); got != tt.want {
+			t.Errorf("Filter(tail, %q, %q) = %q, want %q", tt.env, tt.service, got, tt.want)
+		}
+	}
+}
+
 func TestSubjectTruncatesLongTokens(t *testing.T) {
 	t.Parallel()
 

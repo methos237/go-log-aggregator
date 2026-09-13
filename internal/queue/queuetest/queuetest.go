@@ -9,6 +9,8 @@ package queuetest
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"sync"
 
 	"github.com/jamespolk/go-log-aggregator/internal/queue"
@@ -20,6 +22,8 @@ import (
 type Publisher struct {
 	mu        sync.Mutex
 	published []Message
+	fanned    []Message
+	subs      []*subscription
 
 	// err, when set, is returned by every Publish instead of accepting the message.
 	err error
@@ -34,7 +38,10 @@ type Message struct {
 	Payload []byte
 }
 
-var _ queue.Publisher = (*Publisher)(nil)
+var (
+	_ queue.Publisher  = (*Publisher)(nil)
+	_ queue.Subscriber = (*Publisher)(nil)
+)
 
 // Publish records the message.
 func (p *Publisher) Publish(ctx context.Context, subject string, payload []byte) error {
@@ -66,6 +73,76 @@ func (p *Publisher) Publish(ctx context.Context, subject string, payload []byte)
 // test that asserts on subjects is asserting on production behavior.
 func (p *Publisher) Subject(env, service string) string {
 	return queue.Subject("logs", env, service)
+}
+
+// Fanout records the copy and hands it to every matching subscription, on the
+// caller's goroutine. It never fails: the ingest path must treat a fan-out
+// failure as invisible to the agent, and a double that cannot fail is the
+// cheapest proof that nothing in the ack depends on it.
+func (p *Publisher) Fanout(subject string, payload []byte) error {
+	payload = append([]byte(nil), payload...)
+	p.mu.Lock()
+	p.fanned = append(p.fanned, Message{Subject: subject, Payload: payload})
+	subs := append([]*subscription(nil), p.subs...)
+	p.mu.Unlock()
+
+	// Outside the lock: a handler is allowed to Subscribe or Stop in response.
+	for _, s := range subs {
+		if matchSubject(s.subject, subject) {
+			s.h(payload)
+		}
+	}
+	return nil
+}
+
+// Subscribe implements queue.Subscriber. Delivery is synchronous inside Fanout,
+// so a test observes a record the moment the publish returns.
+func (p *Publisher) Subscribe(subject string, h func(payload []byte)) (queue.Subscription, error) {
+	s := &subscription{pub: p, subject: subject, h: h}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.subs = append(p.subs, s)
+	return s, nil
+}
+
+type subscription struct {
+	pub     *Publisher
+	subject string
+	h       func([]byte)
+}
+
+func (s *subscription) Stop() {
+	s.pub.mu.Lock()
+	defer s.pub.mu.Unlock()
+	s.pub.subs = slices.DeleteFunc(s.pub.subs, func(o *subscription) bool { return o == s })
+}
+
+// matchSubject applies NATS wildcard rules: * matches one token, > the rest.
+func matchSubject(filter, subject string) bool {
+	f, s := strings.Split(filter, "."), strings.Split(subject, ".")
+	for i, tok := range f {
+		switch {
+		case tok == ">":
+			return len(s) > i
+		case i >= len(s):
+			return false
+		case tok != "*" && tok != s[i]:
+			return false
+		}
+	}
+	return len(f) == len(s)
+}
+
+// TailSubject renders the fan-out subject with the "tail" prefix the tests expect.
+func (p *Publisher) TailSubject(env, service string) string {
+	return queue.Subject("tail", env, service)
+}
+
+// Fanned returns every fan-out copy so far.
+func (p *Publisher) Fanned() []Message {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]Message(nil), p.fanned...)
 }
 
 // FailWith makes every subsequent Publish return err. A nil err restores normal

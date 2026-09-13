@@ -290,6 +290,42 @@ func TestValidate(t *testing.T) {
 			mutate: func(c *Config) { c.Node.ShutdownTimeout = 0 },
 			want:   "shutdown timeout must be positive",
 		},
+		{
+			name:   "zero http write timeout",
+			mutate: func(c *Config) { c.HTTP.WriteTimeout = 0 },
+			want:   "write timeout must be positive",
+		},
+		{
+			name:   "durable subject prefix under the tail prefix",
+			mutate: func(c *Config) { c.Queue.TailSubjectPrefix, c.Queue.SubjectPrefix = "logagg", "logagg.logs" },
+			want:   "inside the tail prefix",
+		},
+		{
+			name:   "zero tail buffer",
+			mutate: func(c *Config) { c.HTTP.TailBuffer = 0 },
+			want:   "tail buffer must be positive",
+		},
+		{
+			name:   "zero tail ping interval",
+			mutate: func(c *Config) { c.HTTP.TailPingInterval = 0 },
+			want:   "tail ping interval must be positive",
+		},
+		{
+			name:   "empty tail subject prefix",
+			mutate: func(c *Config) { c.Queue.TailSubjectPrefix = "" },
+			want:   "tail subject prefix must not be empty",
+		},
+		{
+			// The durable stream would capture the copy and store every record twice.
+			name:   "tail subject prefix under the durable stream",
+			mutate: func(c *Config) { c.Queue.TailSubjectPrefix = c.Queue.SubjectPrefix + ".tail" },
+			want:   "inside the durable stream",
+		},
+		{
+			name:   "tail subject prefix equal to the durable prefix",
+			mutate: func(c *Config) { c.Queue.TailSubjectPrefix = c.Queue.SubjectPrefix },
+			want:   "inside the durable stream",
+		},
 	}
 
 	for _, tt := range tests {

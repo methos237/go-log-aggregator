@@ -152,6 +152,7 @@ func Connect(ctx context.Context, cfg config.Queue, metrics *Metrics, log *slog.
 		slog.String("url", cfg.URL),
 		slog.String("stream", cfg.StreamName),
 		slog.String("subjects", cfg.SubjectPrefix+".>"),
+		slog.String("tail_subjects", cfg.TailSubjectPrefix+".>"),
 		slog.Int64("max_bytes", cfg.StreamMaxBytes),
 		slog.Duration("max_age", cfg.StreamMaxAge),
 	)
@@ -257,6 +258,63 @@ func (c *Conn) Publish(ctx context.Context, subject string, payload []byte) erro
 	}
 	c.observePublish(outcomeSuccess, elapsed, len(payload))
 	return nil
+}
+
+// Fanout publishes payload on a core NATS subject, bypassing JetStream.
+//
+// Core rather than JetStream is the design decision of the tail path. A JetStream
+// publish waits for the broker to write the message and acknowledge it, which is
+// the price the durable path pays for the ack it gives the agent. The tail copy
+// needs neither: a record nobody is tailing is not worth storing, and one that
+// arrives late is not worth waiting for. Publish appends to the connection's
+// outbound buffer and returns; the durable publishes share that buffer, so this
+// adds no failure mode the ingest path does not already have. A subscriber that
+// cannot keep up is the broker's problem, not this node's — it drops for that
+// subscription alone.
+func (c *Conn) Fanout(subject string, payload []byte) error {
+	err := c.nc.Publish(subject, payload)
+	outcome := outcomeSuccess
+	if err != nil {
+		outcome = outcomeFailure
+	}
+	c.metrics.Fanout.WithLabelValues(outcome).Inc()
+	return err
+}
+
+// Subscribe implements Subscriber with a core NATS subscription.
+//
+// Core subscriptions are the natural pair to Fanout: no consumer to declare, no
+// ack to send, and the client library's own pending limit is what a stalled
+// handler runs into. Its drops surface through the async error handler as
+// "slow consumer" warnings, which is the right severity — a tail handler that
+// blocks is a bug in this process, not a broker problem.
+//
+// The flush is what makes "subscribed" mean something: nats.go queues the SUB
+// in its outbound buffer and returns, so without the round trip a message
+// published a moment later by another connection could reach the broker first
+// and be missed. One PING/PONG per tail client is a price worth paying for a
+// handshake that promises nothing accepted after it goes unseen.
+func (c *Conn) Subscribe(subject string, h func(payload []byte)) (Subscription, error) {
+	sub, err := c.nc.Subscribe(subject, func(m *nats.Msg) { h(m.Data) })
+	if err != nil {
+		return nil, fmt.Errorf("subscribe to %s: %w", subject, err)
+	}
+	if err = c.nc.FlushTimeout(c.cfg.PublishTimeout); err != nil {
+		_ = sub.Unsubscribe()
+		return nil, fmt.Errorf("subscribe to %s: %w", subject, err)
+	}
+	return natsSubscription{sub}, nil
+}
+
+// natsSubscription adapts *nats.Subscription to Subscription. Unsubscribe fails
+// only on a closed connection, where there is nothing left to release.
+type natsSubscription struct{ sub *nats.Subscription }
+
+func (s natsSubscription) Stop() { _ = s.sub.Unsubscribe() }
+
+// TailSubject renders the fan-out subject for a label set.
+func (c *Conn) TailSubject(env, service string) string {
+	return Subject(c.cfg.TailSubjectPrefix, env, service)
 }
 
 // MaxPayload is the largest message this broker will accept, as it reported during

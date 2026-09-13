@@ -22,6 +22,11 @@ type statusRecorder struct {
 	bytes  int
 }
 
+// Unwrap exposes the underlying writer, the http.ResponseController convention,
+// so the WebSocket upgrade can reach the Hijacker this wrapper would otherwise
+// hide. The access log still sees the 101.
+func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
+
 func (r *statusRecorder) WriteHeader(code int) {
 	if r.status == 0 {
 		r.status = code
