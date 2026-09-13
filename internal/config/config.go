@@ -188,6 +188,10 @@ type Queue struct {
 	// safety valve for a writer that has been down long enough that catching up is
 	// hopeless, not a retention policy: TimescaleDB is the archive.
 	StreamMaxAge time.Duration
+	// TailSubjectPrefix is the core NATS subject prefix accepted batches are
+	// copied to for live tail. It must not sit under SubjectPrefix, or the
+	// durable stream would capture the copy and store every record twice.
+	TailSubjectPrefix string
 }
 
 // Cluster is gossip membership and the consistent hash ring over the
@@ -409,6 +413,8 @@ func Load() (*Config, error) {
 			PublishTimeout: e.dur("QUEUE_PUBLISH_TIMEOUT", 5*time.Second),
 			StreamMaxBytes: e.bytes64("QUEUE_STREAM_MAX_BYTES", 8<<30),
 			StreamMaxAge:   e.dur("QUEUE_STREAM_MAX_AGE", 24*time.Hour),
+			// Outside the durable stream's logs.> filter on purpose; see the field.
+			TailSubjectPrefix: e.str("QUEUE_TAIL_SUBJECT_PREFIX", "tail"),
 		},
 		Cluster: Cluster{
 			Enabled:            e.bool("CLUSTER_ENABLED", false),
@@ -642,6 +648,14 @@ func (c *Config) Validate() error {
 	}
 	if c.Queue.StreamMaxAge <= 0 {
 		bad("queue stream max age must be positive, got %s", c.Queue.StreamMaxAge)
+	}
+	// The stream captures SubjectPrefix.>, so a tail prefix inside it would make
+	// every fan-out copy durable: double the disk, and the writer storing each
+	// record twice.
+	if tail, durable := c.Queue.TailSubjectPrefix, c.Queue.SubjectPrefix; tail == "" {
+		bad("queue tail subject prefix must not be empty")
+	} else if tail == durable || strings.HasPrefix(tail, durable+".") {
+		bad("queue tail subject prefix %q is inside the durable stream's %q.>", tail, durable)
 	}
 	if c.Log.Format != "json" && c.Log.Format != "text" {
 		bad("log format must be json or text, got %q", c.Log.Format)

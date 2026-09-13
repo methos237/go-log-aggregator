@@ -20,6 +20,7 @@ import (
 type Publisher struct {
 	mu        sync.Mutex
 	published []Message
+	fanned    []Message
 
 	// err, when set, is returned by every Publish instead of accepting the message.
 	err error
@@ -66,6 +67,28 @@ func (p *Publisher) Publish(ctx context.Context, subject string, payload []byte)
 // test that asserts on subjects is asserting on production behavior.
 func (p *Publisher) Subject(env, service string) string {
 	return queue.Subject("logs", env, service)
+}
+
+// Fanout records the copy. It never fails: the ingest path must treat a fan-out
+// failure as invisible to the agent, and a double that cannot fail is the
+// cheapest proof that nothing in the ack depends on it.
+func (p *Publisher) Fanout(subject string, payload []byte) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.fanned = append(p.fanned, Message{Subject: subject, Payload: append([]byte(nil), payload...)})
+	return nil
+}
+
+// TailSubject renders the fan-out subject with the "tail" prefix the tests expect.
+func (p *Publisher) TailSubject(env, service string) string {
+	return queue.Subject("tail", env, service)
+}
+
+// Fanned returns every fan-out copy so far.
+func (p *Publisher) Fanned() []Message {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]Message(nil), p.fanned...)
 }
 
 // FailWith makes every subsequent Publish return err. A nil err restores normal

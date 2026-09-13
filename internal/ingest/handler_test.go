@@ -1,6 +1,7 @@
 package ingest
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -95,6 +96,37 @@ func TestStreamAcceptsAValidBatch(t *testing.T) {
 	}
 	if decoded.GetLabels().GetService() != "checkout" {
 		t.Error("published batch lost its labels; the consumer needs them to fingerprint")
+	}
+}
+
+// The tail copy carries exactly the bytes made durable, and only those: a batch
+// the queue refused was never accepted, so nobody tailing should see it.
+func TestStreamFansOutOnlyAcceptedBatches(t *testing.T) {
+	t.Parallel()
+
+	pub := &queuetest.Publisher{}
+	_, client := startWith(t, pub, NewMetrics(nil))
+
+	if ack := exchange(t, client, validBatch("b1", 3)); ack.GetCode() != logaggv1.AckCode_ACK_CODE_ACCEPTED {
+		t.Fatalf("code = %s (%s), want ACCEPTED", ack.GetCode(), ack.GetDetail())
+	}
+	fanned := pub.Fanned()
+	if len(fanned) != 1 {
+		t.Fatalf("fanned out %d batches, want 1", len(fanned))
+	}
+	if want := queue.Subject("tail", "dev", "checkout"); fanned[0].Subject != want {
+		t.Errorf("tail subject = %q, want %q", fanned[0].Subject, want)
+	}
+	if published := pub.Published(); !bytes.Equal(fanned[0].Payload, published[0].Payload) {
+		t.Error("tail copy differs from the durable payload; the two must never disagree on which records were accepted")
+	}
+
+	pub.FailWith(queue.ErrUnavailable)
+	if ack := exchange(t, client, validBatch("b2", 3)); ack.GetCode() == logaggv1.AckCode_ACK_CODE_ACCEPTED {
+		t.Fatal("refused publish was acked as ACCEPTED")
+	}
+	if n := len(pub.Fanned()); n != 1 {
+		t.Errorf("fanned out %d batches after a refused publish, want still 1", n)
 	}
 }
 

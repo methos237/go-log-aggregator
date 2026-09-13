@@ -290,6 +290,22 @@ func TestValidate(t *testing.T) {
 			mutate: func(c *Config) { c.Node.ShutdownTimeout = 0 },
 			want:   "shutdown timeout must be positive",
 		},
+		{
+			name:   "empty tail subject prefix",
+			mutate: func(c *Config) { c.Queue.TailSubjectPrefix = "" },
+			want:   "tail subject prefix must not be empty",
+		},
+		{
+			// The durable stream would capture the copy and store every record twice.
+			name:   "tail subject prefix under the durable stream",
+			mutate: func(c *Config) { c.Queue.TailSubjectPrefix = c.Queue.SubjectPrefix + ".tail" },
+			want:   "inside the durable stream",
+		},
+		{
+			name:   "tail subject prefix equal to the durable prefix",
+			mutate: func(c *Config) { c.Queue.TailSubjectPrefix = c.Queue.SubjectPrefix },
+			want:   "inside the durable stream",
+		},
 	}
 
 	for _, tt := range tests {

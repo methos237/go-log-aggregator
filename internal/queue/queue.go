@@ -27,6 +27,13 @@ type Publisher interface {
 	// Subject renders the subject a label set publishes to. On the Publisher
 	// because the prefix is connection configuration, not caller knowledge.
 	Subject(env, service string) string
+	// Fanout copies an accepted batch to live-tail subscribers. Fire-and-forget
+	// on purpose: no JetStream ack, no disk, so a tail reader can never slow
+	// the durable path down. An error means the copy was lost, not the batch,
+	// which is already durable by the time this is called.
+	Fanout(subject string, payload []byte) error
+	// TailSubject renders the fan-out subject for a label set.
+	TailSubject(env, service string) string
 }
 
 // Subject-token limits.

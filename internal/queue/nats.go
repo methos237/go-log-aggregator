@@ -152,6 +152,7 @@ func Connect(ctx context.Context, cfg config.Queue, metrics *Metrics, log *slog.
 		slog.String("url", cfg.URL),
 		slog.String("stream", cfg.StreamName),
 		slog.String("subjects", cfg.SubjectPrefix+".>"),
+		slog.String("tail_subjects", cfg.TailSubjectPrefix+".>"),
 		slog.Int64("max_bytes", cfg.StreamMaxBytes),
 		slog.Duration("max_age", cfg.StreamMaxAge),
 	)
@@ -257,6 +258,32 @@ func (c *Conn) Publish(ctx context.Context, subject string, payload []byte) erro
 	}
 	c.observePublish(outcomeSuccess, elapsed, len(payload))
 	return nil
+}
+
+// Fanout publishes payload on a core NATS subject, bypassing JetStream.
+//
+// Core rather than JetStream is the design decision of the tail path. A JetStream
+// publish waits for the broker to write the message and acknowledge it, which is
+// the price the durable path pays for the ack it gives the agent. The tail copy
+// needs neither: a record nobody is tailing is not worth storing, and one that
+// arrives late is not worth waiting for. Publish appends to the connection's
+// outbound buffer and returns; the durable publishes share that buffer, so this
+// adds no failure mode the ingest path does not already have. A subscriber that
+// cannot keep up is the broker's problem, not this node's — it drops for that
+// subscription alone.
+func (c *Conn) Fanout(subject string, payload []byte) error {
+	err := c.nc.Publish(subject, payload)
+	outcome := outcomeSuccess
+	if err != nil {
+		outcome = outcomeFailure
+	}
+	c.metrics.Fanout.WithLabelValues(outcome).Inc()
+	return err
+}
+
+// TailSubject renders the fan-out subject for a label set.
+func (c *Conn) TailSubject(env, service string) string {
+	return Subject(c.cfg.TailSubjectPrefix, env, service)
 }
 
 // MaxPayload is the largest message this broker will accept, as it reported during
