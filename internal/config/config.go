@@ -209,6 +209,16 @@ type Cluster struct {
 	// PeerAddr is the internal gRPC listener other collectors call for query
 	// fan-out. Its port is gossiped in the node metadata.
 	PeerAddr string
+	// Peer TLS. One key pair serves both ways: it is this node's server
+	// certificate for incoming fan-out and its client certificate when calling
+	// peers, and the CA is what signs every collector. All three or none, with
+	// the same plaintext rule as ingest: without them the peer port may bind
+	// only loopback unless PeerAllowPlaintext says otherwise, since a peer
+	// executes planned statements for anyone who can reach it.
+	PeerTLSCertFile    string
+	PeerTLSKeyFile     string
+	PeerTLSCAFile      string
+	PeerAllowPlaintext bool
 	// VNodes is the virtual-node count per member on the ring. Every member
 	// must agree, since each computes the ring from names alone.
 	VNodes int
@@ -401,13 +411,17 @@ func Load() (*Config, error) {
 			StreamMaxAge:   e.dur("QUEUE_STREAM_MAX_AGE", 24*time.Hour),
 		},
 		Cluster: Cluster{
-			Enabled:       e.bool("CLUSTER_ENABLED", false),
-			BindAddr:      e.str("CLUSTER_BIND_ADDR", "127.0.0.1:7946"),
-			AdvertiseAddr: e.str("CLUSTER_ADVERTISE_ADDR", ""),
-			Peers:         e.list("CLUSTER_PEERS", nil),
-			PeerAddr:      e.str("CLUSTER_PEER_ADDR", "127.0.0.1:9096"),
-			VNodes:        e.int("CLUSTER_VNODES", 128),
-			JoinTimeout:   e.dur("CLUSTER_JOIN_TIMEOUT", 30*time.Second),
+			Enabled:            e.bool("CLUSTER_ENABLED", false),
+			BindAddr:           e.str("CLUSTER_BIND_ADDR", "127.0.0.1:7946"),
+			AdvertiseAddr:      e.str("CLUSTER_ADVERTISE_ADDR", ""),
+			Peers:              e.list("CLUSTER_PEERS", nil),
+			PeerAddr:           e.str("CLUSTER_PEER_ADDR", "127.0.0.1:9096"),
+			PeerTLSCertFile:    e.str("CLUSTER_PEER_TLS_CERT_FILE", ""),
+			PeerTLSKeyFile:     e.str("CLUSTER_PEER_TLS_KEY_FILE", ""),
+			PeerTLSCAFile:      e.str("CLUSTER_PEER_TLS_CA_FILE", ""),
+			PeerAllowPlaintext: e.bool("CLUSTER_PEER_ALLOW_PLAINTEXT", false),
+			VNodes:             e.int("CLUSTER_VNODES", 128),
+			JoinTimeout:        e.dur("CLUSTER_JOIN_TIMEOUT", 30*time.Second),
 		},
 		Log: Log{
 			Level:     e.level("LOG_LEVEL", slog.LevelInfo),
@@ -502,6 +516,19 @@ func (c *Config) Validate() error {
 		}
 		if c.Cluster.VNodes < 1 {
 			bad("cluster vnodes must be positive, got %d", c.Cluster.VNodes)
+		}
+		set := 0
+		for _, f := range []string{c.Cluster.PeerTLSCertFile, c.Cluster.PeerTLSKeyFile, c.Cluster.PeerTLSCAFile} {
+			if f != "" {
+				set++
+			}
+		}
+		switch {
+		case set != 0 && set != 3:
+			bad("cluster peer TLS needs all of cert, key and CA, or none")
+		case set == 0 && !c.Cluster.PeerAllowPlaintext && !loopbackAddr(c.Cluster.PeerAddr):
+			bad("cluster peer listens on %s without TLS: set the %sCLUSTER_PEER_TLS_* files, bind loopback, or set %sCLUSTER_PEER_ALLOW_PLAINTEXT=true to let anyone who reaches the port run planned queries",
+				c.Cluster.PeerAddr, EnvPrefix, EnvPrefix)
 		}
 		if c.Cluster.JoinTimeout <= 0 {
 			bad("cluster join timeout must be positive, got %s", c.Cluster.JoinTimeout)

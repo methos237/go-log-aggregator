@@ -343,34 +343,27 @@ func containsArg(args []any, want string) bool {
 	return false
 }
 
-// allowedWords is every bare word a generated statement may contain. The test
-// below tokenizes the golden SQL on non-identifier characters, so anything a
-// user could smuggle in would show up as an unlisted word.
-var allowedWords = map[string]bool{
-	"SELECT": true, "FROM": true, "WHERE": true, "AND": true, "ORDER": true, "BY": true,
-	"DESC": true, "ASC": true, "LIMIT": true, "ANY": true, "coalesce": true, "jsonb": true,
-	"ILIKE": true, "NOT": true, "CASE": true, "WHEN": true, "THEN": true, "END": true,
-	"pg_input_is_valid": true, "numeric": true, "btrim": true, "substring": true, "regexp_match": true,
-	"time_bucket": true, "interval": true, "AS": true, "bucket": true, "GROUP": true, "JOIN": true,
-	"USING": true, "count": true, "sum": true, "n": true, "float8": true, "octet_length": true,
-	"logs_rate_1m": true, "logs_rate_1h": true,
-	"streams": true, "logs": true,
-	"stream_id": true, "service": true, "host": true, "env": true, "labels": true, "time": true,
-	"seq": true, "level": true, "message": true, "trace_id": true, "span_id": true, "fields": true,
-}
-
-var words = regexp.MustCompile(`[A-Za-z_$][A-Za-z0-9_]*`)
-
 func TestCompileAllowlistedIdentifiersOnly(t *testing.T) {
 	for _, tc := range goldenCases {
 		p := compile(t, tc.src, goldenRequest)
 		for _, s := range []Stmt{p.Streams, p.Logs} {
-			for _, w := range words.FindAllString(s.SQL, -1) {
-				if !allowedWords[w] && !placeholder.MatchString(w) {
-					t.Errorf("%s: word %q is not on the allow-list in %q", tc.name, w, s.SQL)
-				}
+			if err := CheckSQL(s.SQL); err != nil {
+				t.Errorf("%s: %v in %q", tc.name, err, s.SQL)
 			}
 			checkPlaceholders(t, s)
+		}
+	}
+}
+
+func TestCheckSQLRejectsForeignWords(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT time FROM logs; DROP TABLE logs",
+		"SELECT time FROM logs WHERE stream_id = ANY($1) AND pg_sleep(10) IS NULL",
+		"SELECT time FROM users",
+		"SELECT time FROM logs WHERE x = $1",
+	} {
+		if err := CheckSQL(sql); err == nil {
+			t.Errorf("CheckSQL(%q) accepted it", sql)
 		}
 	}
 }

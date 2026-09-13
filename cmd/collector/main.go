@@ -219,8 +219,16 @@ func run(dsnOverride string) error {
 	// node in it when the first query arrives, and after the queue so a node
 	// that cannot write never advertises itself. Off by default: a single node
 	// is the cluster of one and needs no gossip.
-	var members *cluster.Cluster
+	var (
+		members *cluster.Cluster
+		peerSrv *cluster.PeerServer
+	)
 	if cfg.Cluster.Enabled {
+		// The peer port is bound before gossip advertises it, so a member
+		// that appears in the ring can already be called.
+		if peerSrv, err = cluster.NewPeerServer(ctx, &cfg.Cluster, pool, log); err != nil {
+			return err
+		}
 		members, err = cluster.New(&cfg.Cluster, cfg.Node.Name, cfg.HTTP.Addr, log, cluster.NewMetrics(metrics.Registerer))
 		if err != nil {
 			return err
@@ -278,6 +286,14 @@ func run(dsnOverride string) error {
 		}
 		return nil
 	})
+	if peerSrv != nil {
+		g.Go(func() error {
+			if serveErr := peerSrv.Serve(); serveErr != nil {
+				return fmt.Errorf("peer server: %w", serveErr)
+			}
+			return nil
+		})
+	}
 
 	// Shutdown is driven by whichever comes first: a signal, or a listener
 	// failing. gctx covers both, so a port already in use does not leave the
@@ -325,6 +341,11 @@ func run(dsnOverride string) error {
 			members.SetReady(false)
 			if leaveErr := members.Leave(cfg.Node.ShutdownTimeout); leaveErr != nil {
 				errs = append(errs, fmt.Errorf("cluster leave: %w", leaveErr))
+			}
+		}
+		if peerSrv != nil {
+			if peerErr := peerSrv.Shutdown(shutdownCtx); peerErr != nil {
+				errs = append(errs, fmt.Errorf("peer shutdown: %w", peerErr))
 			}
 		}
 		if ingestErr := ingestSrv.Shutdown(shutdownCtx); ingestErr != nil {

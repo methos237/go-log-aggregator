@@ -1,0 +1,84 @@
+// Wire format for collector <-> collector query fan-out.
+//
+// A coordinator parses and plans a query once, then ships each owning peer the
+// planned logs statement with that peer's stream ids already bound. The peer
+// never sees DSL text and never plans: it checks the statement against the
+// planner's identifier allow-list, runs it, and streams the rows back. Shipping
+// the plan rather than the text means a parse error surfaces exactly once, on
+// the coordinator, and every peer executes the same SQL.
+syntax = "proto3";
+
+package logagg.v1;
+
+import "logagg/v1/ingest.proto";
+
+option go_package = "github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1;logaggv1";
+
+// Arg is one bound parameter of a planned statement. The cases mirror the Go
+// types the planner mints; anything else is a planner change and a wire change.
+message Arg {
+  oneof value {
+    string text = 1;
+    int64 integer = 2;
+    // level is the smallint column; kept apart from integer so the peer binds
+    // the type Postgres expects without a cast.
+    int32 level = 3;
+    double number = 4;
+    int64 time_unix_nano = 5;
+    int64 duration_nanos = 6;
+    // stream_ids is the id slot: the coordinator has resolved the selector and
+    // partitioned the ids by owner, so each peer receives only its own.
+    StreamIDs stream_ids = 7;
+  }
+}
+
+message StreamIDs {
+  repeated int64 ids = 1;
+}
+
+// Statement is a parameterized SQL statement with its arguments.
+message Statement {
+  string sql = 1;
+  repeated Arg args = 2;
+}
+
+// ExecuteRequest asks a peer to run a planned logs statement.
+message ExecuteRequest {
+  Statement logs = 1;
+  // aggregate says whether rows are (bucket, value, by...) points or log
+  // records, and by names the grouping columns in order.
+  bool aggregate = 2;
+  repeated string by = 3;
+}
+
+// Record is one log row, with its stream id since a peer's rows span streams.
+message Record {
+  int64 stream_id = 1;
+  int64 time_unix_nano = 2;
+  int64 seq = 3;
+  Level level = 4;
+  string message = 5;
+  bytes trace_id = 6;
+  bytes span_id = 7;
+  map<string, string> fields = 8;
+}
+
+// Point is one bucket of one group in an aggregation.
+message Point {
+  int64 bucket_unix_nano = 1;
+  double value = 2;
+  map<string, string> labels = 3;
+}
+
+// ExecuteResponse carries either records or points, matching the request.
+message ExecuteResponse {
+  repeated Record records = 1;
+  repeated Point points = 2;
+  // source is the relation the statement read, echoed for the response.
+  string source = 3;
+}
+
+// PeerService is the internal collector-to-collector API.
+service PeerService {
+  rpc Execute(ExecuteRequest) returns (ExecuteResponse);
+}

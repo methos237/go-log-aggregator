@@ -234,6 +234,16 @@ func TestValidate(t *testing.T) {
 			want:   "cluster bind addr",
 		},
 		{
+			name:   "cluster peer plaintext on routable addr",
+			mutate: func(c *Config) { c.Cluster.Enabled, c.Cluster.PeerAddr = true, ":9096" },
+			want:   "CLUSTER_PEER_ALLOW_PLAINTEXT",
+		},
+		{
+			name:   "cluster peer tls partial",
+			mutate: func(c *Config) { c.Cluster.Enabled, c.Cluster.PeerTLSCertFile = true, "x.pem" },
+			want:   "all of cert, key and CA",
+		},
+		{
 			name:   "cluster vnodes zero",
 			mutate: func(c *Config) { c.Cluster.Enabled, c.Cluster.VNodes = true, 0 },
 			want:   "cluster vnodes",

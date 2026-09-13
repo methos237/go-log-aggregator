@@ -2,7 +2,6 @@ package ingest
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	logaggv1 "github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1"
+	"github.com/jamespolk/go-log-aggregator/internal/tlsx"
 )
 
 // The client lives in this package, next to the server, because both speak the same
@@ -198,27 +198,8 @@ func clientCredentials(cfg ClientConfig) (credentials.TransportCredentials, erro
 	if cfg.CertFile == "" && cfg.KeyFile == "" && cfg.CAFile == "" {
 		return insecure.NewCredentials(), nil
 	}
-	if cfg.CertFile == "" || cfg.KeyFile == "" || cfg.CAFile == "" {
-		return nil, fmt.Errorf("%w: got cert=%q key=%q ca=%q",
-			ErrPartialClientTLS, cfg.CertFile, cfg.KeyFile, cfg.CAFile)
-	}
-
-	pair, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
-	if err != nil {
-		return nil, fmt.Errorf("load client key pair: %w", err)
-	}
-
-	pool, err := clientCAs(cfg.CAFile)
-	if err != nil {
-		return nil, err
-	}
-
-	return credentials.NewTLS(&tls.Config{
-		Certificates: []tls.Certificate{pair},
-		RootCAs:      pool,
-		MinVersion:   tls.VersionTLS13,
-	}), nil
+	return tlsx.Client(cfg.CertFile, cfg.KeyFile, cfg.CAFile)
 }
 
 // ErrPartialClientTLS is returned when only some of the client TLS files are set.
-var ErrPartialClientTLS = errors.New("client TLS needs a certificate, a key and a CA")
+var ErrPartialClientTLS = tlsx.ErrPartial
