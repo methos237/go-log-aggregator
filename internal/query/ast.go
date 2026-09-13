@@ -27,6 +27,15 @@
 // than a stream label, so `{service="api", level>="warn"}` filters records,
 // not streams. Its value must be a level name model.ParseLevel accepts, and it
 // supports every operator except the regex pair.
+//
+// Pipeline stages filter records, never streams. A line filter tests the raw
+// message; `|=` and `!=` are case-insensitive substring searches. A label
+// filter reads its value from the nearest preceding parser stage: `json`
+// parses the message as a JSON object, `logfmt` takes the first key=value pair,
+// and `regexp` exposes its named capture groups. Before any parser stage, label
+// filters read the structured fields the agent extracted at ingest. A missing
+// label compares as "" for text operators; for numeric operators (a bare
+// number on the right) a missing or non-numeric value never matches.
 package query
 
 import "time"

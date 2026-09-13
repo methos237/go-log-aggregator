@@ -72,6 +72,40 @@ func TestQueryPlansExecute(t *testing.T) {
 			require.Equal(t, int64(2-i), r["seq"], "rows should come back newest first")
 			require.Equal(t, start.Add(time.Duration(2-i)*time.Second), r["time"].(time.Time).UTC())
 		}
+
+		// Pipeline stages against the same stream: two structured rows (one
+		// JSON, one logfmt) plus a malformed line that must be skipped, not
+		// abort the query. seq 10 has fields the agent extracted at ingest.
+		_, err = pool.Exec(ctx, `
+			INSERT INTO logs (time, stream_id, seq, level, message, fields) VALUES
+			($1, 1, 10, 4, '{"status": 503, "user": "root"}', '{"status": "503"}'),
+			($1, 1, 11, 3, 'method=GET route="/v1/query" status=200', NULL),
+			($1, 1, 12, 3, '{not json', NULL)`, start.Add(10*time.Second))
+		require.NoError(t, err)
+		for src, want := range map[string][]int64{
+			`{service="api"} |= "ROW 1"`:                                     {1},
+			`{service="api"} != "row"`:                                       {12, 11, 10},
+			`{service="api"} |~ "^row [12]$"`:                                {2, 1},
+			`{service="api"} | status >= 500`:                                {10},
+			`{service="api"} | json | status >= 500`:                         {10},
+			`{service="api"} | json | user = "root"`:                         {10},
+			`{service="api"} | json | user != "root"`:                        {12, 11, 2, 1, 0},
+			`{service="api"} | logfmt | route = "/v1/query"`:                 {11},
+			`{service="api"} | logfmt | status < 300`:                        {11},
+			`{service="api"} | regexp "^(?P<m>\\w+) (?P<n>\\d+)$" | n = "2"`: {2},
+			`{service="api"} | level >= "warn"`:                              {10},
+		} {
+			plan := compilePlan(t, src, req)
+			plan.Logs.Args[0] = ids
+			rows, err := pool.Query(ctx, plan.Logs.SQL, plan.Logs.Args...)
+			require.NoError(t, err, "%s: %s", src, plan.Logs.SQL)
+			seqs, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (int64, error) {
+				var seq int64
+				return seq, row.Scan(nil, nil, &seq, nil, nil, nil, nil, nil)
+			})
+			require.NoError(t, err, src)
+			require.Equal(t, want, seqs, src)
+		}
 	})
 }
 

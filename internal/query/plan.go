@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -63,9 +64,8 @@ type Request struct {
 	Direction  Direction
 }
 
-// ErrUnsupported is returned for pipeline stages and aggregations until
-// subtasks 7 and 8.
-var ErrUnsupported = errors.New("query: pipeline stages and aggregations are not supported yet")
+// ErrUnsupported is returned for aggregations until subtask 8.
+var ErrUnsupported = errors.New("query: aggregations are not supported yet")
 
 // sqlOps maps an Op to its Postgres spelling. Indexed by Op, so it must stay in
 // the grammar's order.
@@ -89,7 +89,7 @@ func Compile(q *Query, r Request) (*Plan, error) {
 	case r.Limit <= 0:
 		return nil, errors.New("query: limit must be positive")
 	}
-	if len(q.Stages) > 0 || q.Agg != nil {
+	if q.Agg != nil {
 		return nil, ErrUnsupported
 	}
 
@@ -105,11 +105,9 @@ func Compile(q *Query, r Request) (*Plan, error) {
 		if m.Label == "level" {
 			// level is a column on the record, not a stream label, so it is the
 			// one matcher that filters logs rather than streams.
-			lvl, err := model.ParseLevel(m.Value)
-			if err != nil {
-				return nil, fmt.Errorf("query: %w", err)
+			if err := logs.level(m.Op, m.Value); err != nil {
+				return nil, err
 			}
-			logs.WriteString(" AND level " + sqlOps[m.Op] + " " + logs.arg(int16(lvl)))
 			continue
 		}
 		if first {
@@ -119,6 +117,22 @@ func Compile(q *Query, r Request) (*Plan, error) {
 			streams.WriteString(" AND ")
 		}
 		streams.matcher(m)
+	}
+
+	// Every stage filters records, so they all land on the logs statement. A
+	// parser stage changes where later label filters read their value from.
+	extract := fromFields
+	for _, st := range q.Stages {
+		switch st := st.(type) {
+		case LineFilter:
+			logs.lineFilter(st)
+		case ParserStage:
+			extract = st.extractor()
+		case LabelFilter:
+			if err := logs.labelFilter(st, extract); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	order := "DESC"
@@ -145,6 +159,17 @@ func (s *stmt) arg(v any) string {
 }
 
 func (s *stmt) stmt() Stmt { return Stmt{SQL: s.String(), Args: s.args} }
+
+// level writes a predicate on the record's level column, shared by selector
+// matchers and label filters. The parser already rejected regex operators.
+func (s *stmt) level(op Op, value string) error {
+	lvl, err := model.ParseLevel(value)
+	if err != nil {
+		return fmt.Errorf("query: %w", err)
+	}
+	s.WriteString(" AND level " + sqlOps[op] + " " + s.arg(int16(lvl)))
+	return nil
+}
 
 // matcher writes one selector predicate.
 func (s *stmt) matcher(m Matcher) {
@@ -175,3 +200,145 @@ func (s *stmt) matcher(m Matcher) {
 // an ARE. The two agree on everything a label selector realistically uses, but
 // exotic syntax may diverge. Accepted for now.
 func anchor(re string) string { return "^(?:" + re + ")$" }
+
+// lineSQL maps a LineOp to its Postgres spelling, indexed like sqlOps.
+var lineSQL = [...]string{LineContains: "ILIKE", LineNotContains: "NOT ILIKE", LineMatches: "~", LineNotMatches: "!~"}
+
+// likeMeta escapes the characters LIKE treats specially, so a filter text is
+// matched literally. Postgres's default escape character is the backslash.
+var likeMeta = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// lineFilter writes a predicate on the raw message. Substring search is the
+// ILIKE baseline from roadmap §2.4; phase 8 benchmarks it against pg_trgm and
+// tsvector and lands the winner here. Unlike selector regexes, line regexes are
+// deliberately unanchored: `|~ "timeout"` is a search, not a whole-line match.
+func (s *stmt) lineFilter(f LineFilter) {
+	v := f.Text
+	if !f.Op.IsRegex() {
+		v = "%" + likeMeta.Replace(v) + "%"
+	}
+	s.WriteString(" AND message " + lineSQL[f.Op] + " " + s.arg(v))
+}
+
+// An extractor writes the SQL expression that yields a label's value for the
+// current record: text, or NULL when the record does not have it.
+type extractor func(s *stmt, name string) (string, error)
+
+// fromFields reads the structured fields the agent extracted at ingest. It is
+// the extractor in force before any parser stage.
+func fromFields(s *stmt, name string) (string, error) {
+	return "fields ->> " + s.arg(name), nil
+}
+
+// fromJSON parses the message as a JSON object at query time. The validity
+// guard is what keeps one malformed line from aborting the whole query; a
+// message that is valid JSON but not an object yields NULL from ->>.
+func fromJSON(s *stmt, name string) (string, error) {
+	return "CASE WHEN pg_input_is_valid(message, 'jsonb') THEN message::jsonb ->> " + s.arg(name) + " END", nil
+}
+
+// fromLogfmt takes the first key=value or key="quoted value" pair in the
+// message, quotes stripped. The key is a user-chosen label name, so it is
+// regex-escaped and travels inside the argument, never in the SQL text.
+func fromLogfmt(s *stmt, name string) (string, error) {
+	pat := `(?:^|\s)` + regexp.QuoteMeta(name) + `=("[^"]*"|\S*)`
+	return `btrim(substring(message FROM ` + s.arg(pat) + `), '"')`, nil
+}
+
+// extractor returns the extractor a parser stage installs for the label
+// filters after it.
+func (p ParserStage) extractor() extractor {
+	switch p.Kind {
+	case ParserJSON:
+		return fromJSON
+	case ParserLogfmt:
+		return fromLogfmt
+	}
+	are, groups := namedGroups(p.Pattern)
+	return func(s *stmt, name string) (string, error) {
+		i, ok := groups[name]
+		if !ok {
+			return "", fmt.Errorf("query: label %q is not a capture group of the regexp stage", name)
+		}
+		return "(regexp_match(message, " + s.arg(are) + "))[" + s.arg(i) + "]", nil
+	}
+}
+
+// namedGroups rewrites a Go pattern for Postgres, whose regexes have no named
+// groups: every (?P<name>...) and (?<name>...) becomes a plain (...), and the
+// map gives each name's 1-based capture index. The parser already compiled the
+// pattern, so it is well-formed; the scan only has to skip escapes and
+// bracket classes so that a "(" inside them is not counted as a group.
+func namedGroups(pat string) (string, map[string]int) {
+	groups := make(map[string]int)
+	var out strings.Builder
+	n, class := 0, false
+	for i := 0; i < len(pat); i++ {
+		c := pat[i]
+		switch {
+		case c == '\\' && i+1 < len(pat):
+			out.WriteString(pat[i : i+2])
+			i++
+			continue
+		case class:
+			class = c != ']'
+		case c == '[':
+			// A "]" right after "[" or "[^" is a literal, not the close.
+			class = true
+			j := i + 1
+			if j < len(pat) && pat[j] == '^' {
+				j++
+			}
+			if j < len(pat) && pat[j] == ']' {
+				j++
+			}
+			out.WriteString(pat[i:j])
+			i = j - 1
+			continue
+		case c == '(':
+			rest := pat[i+1:]
+			if !strings.HasPrefix(rest, "?") {
+				n++
+				break
+			}
+			rest = strings.TrimPrefix(strings.TrimPrefix(rest, "?"), "P")
+			if end := strings.IndexByte(rest, '>'); strings.HasPrefix(rest, "<") && end > 0 {
+				n++
+				groups[rest[1:end]] = n
+				out.WriteByte('(')
+				// Skip past the name: the bytes consumed from pat[i+1:] plus ">".
+				i += len(pat[i+1:]) - len(rest) + end + 1
+				continue
+			}
+		}
+		out.WriteByte(c)
+	}
+	return out.String(), groups
+}
+
+// labelFilter writes a predicate on an extracted label. Text comparisons
+// coalesce a missing label to "" for the same Prometheus semantics as matcher;
+// numeric ones compare as numeric and drop records whose value is missing or
+// not a number, since neither is meaningfully >= 500.
+func (s *stmt) labelFilter(f LabelFilter, extract extractor) error {
+	if f.Label == "level" {
+		return s.level(f.Op, f.Value)
+	}
+	v, err := extract(s, f.Label)
+	if err != nil {
+		return err
+	}
+	if f.Numeric {
+		// The literal stays a string and is cast by Postgres, so "4.5" and
+		// "500" keep their exact numeric value instead of a float64's.
+		s.WriteString(" AND CASE WHEN pg_input_is_valid(" + v + ", 'numeric') THEN (" + v + ")::numeric END " +
+			sqlOps[f.Op] + " " + s.arg(f.Value) + "::numeric")
+		return nil
+	}
+	val := f.Value
+	if f.Op.IsRegex() {
+		val = anchor(val)
+	}
+	s.WriteString(" AND coalesce(" + v + ", '') " + sqlOps[f.Op] + " " + s.arg(val))
+	return nil
+}

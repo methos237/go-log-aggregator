@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -46,6 +47,19 @@ var goldenCases = []struct {
 	{name: "level_eq_and_neq", src: `{level="info", level!="debug"}`},
 	{name: "forward", src: `{service="api"}`, forward: true},
 	{name: "mixed_everything", src: `{service=~"api-.*", level>="warn", env!="dev", region="eu", shard!~"1.*", host="web-1"}`},
+	{name: "line_contains", src: `{service="api"} |= "time%out_"`},
+	{name: "line_not_contains", src: `{service="api"} != "healthcheck"`},
+	{name: "line_regex", src: `{service="api"} |~ "timeout|deadline"`},
+	{name: "line_not_regex", src: `{service="api"} !~ "^GET /healthz"`},
+	{name: "fields_text", src: `{service="api"} | status = "500"`},
+	{name: "fields_numeric", src: `{service="api"} | status >= 500`},
+	{name: "fields_regex", src: `{service="api"} | path =~ "/v1/.*"`},
+	{name: "level_stage", src: `{service="api"} | level >= "warn"`},
+	{name: "json_text", src: `{service="api"} | json | user != "root"`},
+	{name: "json_numeric", src: `{service="api"} | json | latency_ms > 250.5`},
+	{name: "logfmt_text", src: `{service="api"} | logfmt | method = "GET"`},
+	{name: "regexp_numeric", src: `{service="api"} | regexp "^(?P<method>\\w+) \\S+ (?P<status>\\d{3})$" | status >= 500`},
+	{name: "pipeline_everything", src: `{service="api", level>="info"} |= "GET" !~ "healthz" | logfmt | route = "/v1/query" | json | status >= 400 | level != "warn"`},
 }
 
 func render(src string, p *Plan) string {
@@ -105,13 +119,47 @@ func TestCompileGolden(t *testing.T) {
 }
 
 func TestCompileRejectsUnsupported(t *testing.T) {
-	for _, src := range []string{`{service="api"} |= "x"`, `{service="api"} | rate(5m)`} {
-		q, err := Parse(src)
-		if err != nil {
-			t.Fatalf("Parse(%s): %v", src, err)
-		}
-		if _, err := Compile(q, goldenRequest); !errors.Is(err, ErrUnsupported) {
-			t.Errorf("Compile(%s) error = %v, want ErrUnsupported", src, err)
+	src := `{service="api"} | rate(5m)`
+	q, err := Parse(src)
+	if err != nil {
+		t.Fatalf("Parse(%s): %v", src, err)
+	}
+	if _, err := Compile(q, goldenRequest); !errors.Is(err, ErrUnsupported) {
+		t.Errorf("Compile(%s) error = %v, want ErrUnsupported", src, err)
+	}
+}
+
+func TestCompileRejectsUncapturedLabel(t *testing.T) {
+	src := `{service="api"} | regexp "(?P<method>\\w+)" | status >= 500`
+	q, err := Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = Compile(q, goldenRequest)
+	if err == nil || !strings.Contains(err.Error(), `"status"`) {
+		t.Errorf("Compile(%s) error = %v, want one naming the label", src, err)
+	}
+}
+
+func TestNamedGroups(t *testing.T) {
+	cases := []struct {
+		pat, want string
+		groups    map[string]int
+	}{
+		{`(?P<a>x)`, `(x)`, map[string]int{"a": 1}},
+		{`(?<a>x)`, `(x)`, map[string]int{"a": 1}},
+		{`(x)(?P<a>y)(?:z)(?P<b>w)`, `(x)(y)(?:z)(w)`, map[string]int{"a": 2, "b": 3}},
+		{`\((?P<a>x)`, `\((x)`, map[string]int{"a": 1}},
+		{`[(](?P<a>x)`, `[(](x)`, map[string]int{"a": 1}},
+		{`[](](?P<a>x)`, `[](](x)`, map[string]int{"a": 1}},
+		{`[^]](?P<a>x)`, `[^]](x)`, map[string]int{"a": 1}},
+		{`(?i)(?P<a>x)`, `(?i)(x)`, map[string]int{"a": 1}},
+		{`a\(?P<b>`, `a\(?P<b>`, map[string]int{}},
+	}
+	for _, tc := range cases {
+		are, groups := namedGroups(tc.pat)
+		if are != tc.want || !reflect.DeepEqual(groups, tc.groups) {
+			t.Errorf("namedGroups(%q) = %q, %v; want %q, %v", tc.pat, are, groups, tc.want, tc.groups)
 		}
 	}
 }
@@ -165,7 +213,18 @@ func TestCompileNoUserBytesInSQL(t *testing.T) {
 		// hand to prove the planner does not rely on it.
 		{Label: hostile[4], Op: OpEq, Value: "x"},
 		{Label: hostile[4], Op: OpGt, Value: hostile[1]},
-	}}}
+	}}, Stages: []Stage{
+		LineFilter{Op: LineContains, Text: hostile[0]},
+		LineFilter{Op: LineMatches, Text: hostile[1]},
+		LabelFilter{Label: hostile[4], Op: OpEq, Value: hostile[2]},
+		LabelFilter{Label: hostile[4], Op: OpGte, Value: "1; DROP TABLE logs; --", Numeric: true},
+		ParserStage{Kind: ParserJSON},
+		LabelFilter{Label: hostile[4], Op: OpNeq, Value: hostile[3]},
+		ParserStage{Kind: ParserLogfmt},
+		LabelFilter{Label: hostile[4], Op: OpRe, Value: hostile[0]},
+		ParserStage{Kind: ParserRegexp, Pattern: "(?P<x>" + hostile[0] + ")"},
+		LabelFilter{Label: "x", Op: OpEq, Value: hostile[1]},
+	}}
 	p, err := Compile(q, goldenRequest)
 	if err != nil {
 		t.Fatal(err)
@@ -184,6 +243,19 @@ func TestCompileNoUserBytesInSQL(t *testing.T) {
 	if !containsArg(p.Streams.Args, "$1") {
 		t.Errorf("value %q missing from streams args %v", "$1", p.Streams.Args)
 	}
+	// The numeric literal is the one value the lexer guarantees is digits; the
+	// hand-built AST above lies about that, and it must still be an argument.
+	if !containsArg(p.Logs.Args, "1; DROP TABLE logs; --") {
+		t.Errorf("numeric literal missing from logs args %v", p.Logs.Args)
+	}
+}
+
+func TestLineFilterEscapesLikeMeta(t *testing.T) {
+	var s stmt
+	s.lineFilter(LineFilter{Op: LineContains, Text: `50%_\`})
+	if got, want := s.args[0], `%50\%\_\\%`; got != want {
+		t.Errorf("like arg = %q, want %q", got, want)
+	}
 }
 
 func containsArg(args []any, want string) bool {
@@ -201,6 +273,8 @@ func containsArg(args []any, want string) bool {
 var allowedWords = map[string]bool{
 	"SELECT": true, "FROM": true, "WHERE": true, "AND": true, "ORDER": true, "BY": true,
 	"DESC": true, "ASC": true, "LIMIT": true, "ANY": true, "coalesce": true, "jsonb": true,
+	"ILIKE": true, "NOT": true, "CASE": true, "WHEN": true, "THEN": true, "END": true,
+	"pg_input_is_valid": true, "numeric": true, "btrim": true, "substring": true, "regexp_match": true,
 	"streams": true, "logs": true,
 	"stream_id": true, "service": true, "host": true, "env": true, "labels": true, "time": true,
 	"seq": true, "level": true, "message": true, "trace_id": true, "span_id": true, "fields": true,
