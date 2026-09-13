@@ -308,9 +308,9 @@ func Load() (*Config, error) {
 			ReadTimeout:  e.dur("HTTP_READ_TIMEOUT", 15*time.Second),
 			WriteTimeout: e.dur("HTTP_WRITE_TIMEOUT", 30*time.Second),
 			IdleTimeout:  e.dur("HTTP_IDLE_TIMEOUT", 120*time.Second),
-			AuthToken:       e.str("HTTP_AUTH_TOKEN", ""),
-			QueryTimeout:    e.dur("HTTP_QUERY_TIMEOUT", 20*time.Second),
-			QueryMaxRows:    e.int("HTTP_QUERY_MAX_ROWS", 5000),
+			AuthToken:    e.str("HTTP_AUTH_TOKEN", ""),
+			QueryTimeout: e.dur("HTTP_QUERY_TIMEOUT", 20*time.Second),
+			QueryMaxRows: e.int("HTTP_QUERY_MAX_ROWS", 5000),
 		},
 		Admin: Admin{
 			Addr:        e.str("ADMIN_ADDR", ":9090"),
