@@ -47,11 +47,12 @@ pipeline to see what it can take.
 
 ## Status
 
-Phases 1 through 5 of 9 are complete: the schema and write path, the ingest service,
-the agent, the query language with its HTTP API and `logctl query`, and the cluster
+Phases 1 through 6 of 9 are complete: the schema and write path, the ingest service,
+the agent, the query language with its HTTP API and `logctl query`, the cluster
 layer (gossip membership, hash ring, query fan-out, a proxy for the scaled stack, and
-a chaos test that kills two of five collectors mid-ingest). Phase 6 adds live tail,
-phase 7 Grafana dashboards, phase 8 benchmarks, phase 9 polish. Each phase is one GitHub issue
+a chaos test that kills two of five collectors mid-ingest), and live tail over
+WebSocket with `logctl tail`. Phase 7 adds Grafana dashboards, phase 8 benchmarks,
+phase 9 polish. Each phase is one GitHub issue
 and one pull request, and every design decision that shaped the code is written up in
 [`docs/decisions/`](docs/decisions/).
 
@@ -98,6 +99,16 @@ export LOGAGG_HTTP_AUTH_TOKEN=dev-token           # what deploy/docker-compose.y
 ./bin/logctl query '{service="demo"} | count_over_time(1m) by (level)'
 ```
 
+Or watch them arrive:
+
+```bash
+./bin/logctl tail '{service="demo", level>="warn"} |= "hello"'
+```
+
+`tail` takes a selector and line filters; parser stages and aggregations need `query`.
+A client that falls behind loses records rather than slowing ingest, and is told how
+many it missed.
+
 ## Query language
 
 A LogQL-shaped language compiled to parameterized SQL. A query is a stream selector,
@@ -135,6 +146,7 @@ configured they refuse every request.
 | `GET` | `/v1/labels` | label names for autocomplete |
 | `GET` | `/v1/labels/{name}/values` | distinct values of one label |
 | `GET` | `/v1/cluster` | members, ring shares and ownership; `?arcs=1` for every range |
+| `GET` | `/v1/tail?query=` | WebSocket; one JSON record per message with the stream's `labels` and, when the client fell behind, a `dropped` count |
 
 `start` and `end` are RFC 3339 and default to the last hour. For an aggregation the
 server widens them to whole buckets and echoes the result back. `limit` defaults to
@@ -147,16 +159,17 @@ streams could not be searched.
 
 ```
 agents ──gRPC stream──> collectors ──> NATS JetStream ──> writer pool ──> TimescaleDB
-                            │                                                 ▲
-                            ├── memberlist gossip + consistent hash ring       │
-                            └── query: DSL ──> parameterized SQL ──────────────┘
+                            │                                                   ▲
+                            ├── memberlist gossip + consistent hash ring         │
+                            ├── tail: NATS core `tail.>` ──> WebSocket /v1/tail  │
+                            └── query: DSL ──> parameterized SQL ────────────────┘
 ```
 
 Ports, all bound to loopback in development:
 
 | Port | Listener | Notes |
 |---|---|---|
-| 8080 | Public HTTP API | health, `/v1/query`, `/v1/labels`, `/v1/cluster`; live tail in phase 6 |
+| 8080 | Public HTTP API | health, `/v1/query`, `/v1/labels`, `/v1/cluster`, `/v1/tail` |
 | 9090 | Admin | Prometheus metrics and pprof. Keep this off any public network. |
 | 9095 | gRPC ingest | mTLS when configured; plaintext by default |
 | 9096 | gRPC peer | query fan-out between collectors; mTLS or loopback unless opted out |
