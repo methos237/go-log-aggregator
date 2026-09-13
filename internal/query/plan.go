@@ -62,6 +62,9 @@ const (
 )
 
 // Request is the per-call half of a query: range, cap, order. All required.
+// For an aggregation the range is widened outward to whole buckets, as a
+// dashboard does, so the first and last points are as complete as the data
+// allows rather than fractions of a bucket.
 type Request struct {
 	Start, End time.Time
 	Limit      int
@@ -90,6 +93,13 @@ func Compile(q *Query, r Request) (*Plan, error) {
 	case r.Limit <= 0:
 		return nil, errors.New("query: limit must be positive")
 	}
+	if q.Agg != nil {
+		r.Start = snap(r.Start, q.Agg.Range)
+		if end := snap(r.End, q.Agg.Range); !end.Equal(r.End) {
+			r.End = end.Add(q.Agg.Range)
+		}
+	}
+
 	var streams, logs stmt
 	streams.WriteString("SELECT stream_id FROM streams")
 
@@ -187,11 +197,22 @@ func chooseSource(q *Query, r Request) string {
 	}
 	source := "logs"
 	for _, g := range grains {
-		if a.Range%g.width == 0 && r.Start.Truncate(g.width).Equal(r.Start) && r.End.Truncate(g.width).Equal(r.End) {
+		if a.Range%g.width == 0 && snap(r.Start, g.width).Equal(r.Start) && snap(r.End, g.width).Equal(r.End) {
 			source = g.source
 		}
 	}
 	return source
+}
+
+// bucketOrigin is where time_bucket starts counting for widths under a month:
+// Monday 2000-01-03, so weekly buckets begin on Mondays. Snapping from the same
+// origin is what makes the planner's idea of a bucket boundary agree with
+// Postgres's for every width, not only those that divide a day.
+var bucketOrigin = time.Date(2000, 1, 3, 0, 0, 0, 0, time.UTC)
+
+// snap rounds t down to a bucket boundary of width d.
+func snap(t time.Time, d time.Duration) time.Time {
+	return bucketOrigin.Add(t.Sub(bucketOrigin).Truncate(d))
 }
 
 // stmt accumulates SQL text and its arguments together, so a placeholder can

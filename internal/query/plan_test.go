@@ -137,10 +137,12 @@ func TestChooseSource(t *testing.T) {
 		{`{service="api"} | rate(1h)`, aligned, "logs_rate_1h"},
 		{`{service="api"} | rate(2h) by (level, service)`, aligned, "logs_rate_1h"},
 		{`{service="api"} | count_over_time(1d)`, aligned, "logs_rate_1h"},
-		{`{service="api"} | rate(1h)`, offHour, "logs_rate_1m"},
+		// Unaligned edges are snapped outward to whole buckets first, so they
+		// still qualify; a 5m aggregate over a 1s-offset window reads 1m rows.
+		{`{service="api"} | rate(1h)`, offHour, "logs_rate_1h"},
 		{`{service="api"} | rate(5m)`, aligned, "logs_rate_1m"},
 		{`{service="api"} | rate(90s)`, aligned, "logs"},
-		{`{service="api"} | rate(5m)`, offMinute, "logs"},
+		{`{service="api"} | rate(5m)`, offMinute, "logs_rate_1m"},
 		{`{service="api"} | bytes_over_time(5m)`, aligned, "logs"},
 		{`{service="api"} |= "x" | rate(5m)`, aligned, "logs"},
 		{`{service="api"} | rate(5m) by (status)`, aligned, "logs"},
@@ -161,6 +163,28 @@ func TestCompileRejectsUncapturedLabel(t *testing.T) {
 	_, err = Compile(q, goldenRequest)
 	if err == nil || !strings.Contains(err.Error(), `"status"`) {
 		t.Errorf("Compile(%s) error = %v, want one naming the label", src, err)
+	}
+}
+
+func TestAggregationRangeSnapsToBuckets(t *testing.T) {
+	// 5h buckets do not divide a day, so this only passes if the planner
+	// snaps from time_bucket's origin rather than from midnight.
+	r := Request{Start: goldenStart.Add(17 * time.Minute), End: goldenStart.Add(9 * time.Hour), Limit: 1}
+	p := compile(t, `{service="api"} | count_over_time(5h)`, r)
+	start, end := p.Logs.Args[1].(time.Time), p.Logs.Args[2].(time.Time)
+	if want := time.Date(2026, 8, 31, 22, 0, 0, 0, time.UTC); !start.Equal(want) {
+		t.Errorf("start = %v, want %v", start, want)
+	}
+	if want := time.Date(2026, 9, 1, 13, 0, 0, 0, time.UTC); !end.Equal(want) {
+		t.Errorf("end = %v, want %v", end, want)
+	}
+	if p.Source != "logs_rate_1h" {
+		t.Errorf("source = %q, want logs_rate_1h", p.Source)
+	}
+	// A non-aggregate request is left exactly as given.
+	p = compile(t, `{service="api"}`, r)
+	if !p.Logs.Args[1].(time.Time).Equal(r.Start) || !p.Logs.Args[2].(time.Time).Equal(r.End) {
+		t.Errorf("record query range changed: %v..%v", p.Logs.Args[1], p.Logs.Args[2])
 	}
 }
 
