@@ -47,12 +47,13 @@ pipeline to see what it can take.
 
 ## Status
 
-Phases 1 through 6 of 9 are complete: the schema and write path, the ingest service,
+Phases 1 through 7 of 9 are complete: the schema and write path, the ingest service,
 the agent, the query language with its HTTP API and `logctl query`, the cluster
 layer (gossip membership, hash ring, query fan-out, a proxy for the scaled stack, and
-a chaos test that kills two of five collectors mid-ingest), and live tail over
-WebSocket with `logctl tail`. Phase 7 adds Grafana dashboards, phase 8 benchmarks,
-phase 9 polish. Each phase is one GitHub issue
+a chaos test that kills two of five collectors mid-ingest), live tail over
+WebSocket with `logctl tail`, and observability: the full metric set, one trace from
+the agent's send to the Postgres commit, and Grafana dashboards provisioned from git.
+Phase 8 adds benchmarks, phase 9 polish. Each phase is one GitHub issue
 and one pull request, and every design decision that shaped the code is written up in
 [`docs/decisions/`](docs/decisions/).
 
@@ -74,6 +75,8 @@ Then:
 curl -s http://127.0.0.1:8080/healthz          # liveness
 curl -s http://127.0.0.1:8080/readyz           # readiness, per-dependency detail
 curl -s http://127.0.0.1:9090/metrics | head   # Prometheus metrics
+open http://127.0.0.1:3000/dashboards           # Grafana, provisioned, no login
+open http://127.0.0.1:16686                     # Jaeger
 ```
 
 `make help` lists every target.
@@ -176,10 +179,43 @@ Ports, all bound to loopback in development:
 | 7946 | memberlist gossip | UDP and TCP; never published to the host |
 | 5432 | TimescaleDB | development credentials only |
 | 4222 | NATS | 8222 serves its monitoring endpoint |
+| 3000 | Grafana | anonymous admin, dashboards provisioned from `deploy/grafana/` |
+| 9091 | Prometheus | scrapes every collector and agent through Compose DNS |
+| 16686 | Jaeger | traces; collectors and the agent export OTLP to it on 4317 |
 
 The admin listener is separate from the public one, and configuration validation
 refuses to start if they share an address, because pprof is unauthenticated and
 exposes heap contents.
+
+## Observability
+
+Every collector and agent exposes Prometheus metrics on its admin port, all labeled
+by `node`: ingest records by service and level, bytes, drops by component and reason,
+queue depth and wait, JetStream backlog and redeliveries, batch size, write latency,
+query latency by source relation, compression ratio, cluster membership and ring
+changes, live tail subscriptions and drops. `make dev` starts Prometheus, Grafana and
+Jaeger alongside the stack, and Grafana comes up with this dashboard provisioned:
+
+![Grafana overview dashboard](docs/images/grafana-overview.png)
+
+Tracing is OpenTelemetry, exported over OTLP to Jaeger in the dev stack, and one trace
+covers a batch from the agent's send to the Postgres commit:
+
+```
+agent.ship ──> collector.ingest ──> jetstream.publish ──> writer.batch ──> pg.copy
+  (agent)         (collector)          (collector)        (any collector)
+```
+
+![One trace from agent to Postgres in Jaeger](docs/images/jaeger-trace.png)
+
+The agent's span context travels inside the batch, since a long-lived gRPC stream
+has no per-message metadata, and then in the NATS message headers, so the write span
+joins the trace on whichever collector drains the message. A writer batch merges
+many publishes into one transaction, so its span is a child of the first shipment's
+trace and linked to the rest. Tracing is off unless `LOGAGG_TRACING_ENABLED=true`;
+`LOGAGG_TRACING_ENDPOINT` and `LOGAGG_TRACING_SAMPLE_RATIO` do what they say. The dev
+agent also follows the collector's own container, so `logagg` ingests its own logs.
+[ADR-0007](docs/decisions/ADR-0007-observability.md) has the reasoning.
 
 ## Cluster
 
