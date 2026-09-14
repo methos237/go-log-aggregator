@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/jamespolk/go-log-aggregator/internal/config"
 	"github.com/jamespolk/go-log-aggregator/internal/model"
@@ -383,5 +384,38 @@ func TestCloseWithoutStartIsANoOp(t *testing.T) {
 	}
 	if err := w.Close(context.Background()); err != nil {
 		t.Fatalf("Close on an unstarted writer: %v", err)
+	}
+}
+
+func TestWriteBatchParentsOnFirstTraceAndLinksTheRest(t *testing.T) {
+	t.Parallel()
+
+	cache := newStreamCache(16, time.Hour, nil)
+	batch := newWriteBatch(8)
+	now := time.Now()
+	stream := model.NewStream(model.LabelSet{Service: "api", Host: "h", Env: "prod"}, now)
+
+	spanCtx := func(b byte) trace.SpanContext {
+		return trace.NewSpanContext(trace.SpanContextConfig{
+			TraceID: trace.TraceID{b}, SpanID: trace.SpanID{b}, TraceFlags: trace.FlagsSampled,
+		})
+	}
+	untraced := Shipment{Stream: stream, Records: []model.LogRecord{{Time: now}}}
+	batch.add(&untraced, cache, now)
+	for i := byte(1); i <= 3; i++ {
+		sh := Shipment{Stream: stream, Records: []model.LogRecord{{Time: now, Seq: int64(i)}},
+			Context: trace.ContextWithSpanContext(context.Background(), spanCtx(i))}
+		batch.add(&sh, cache, now)
+	}
+
+	if !batch.parent.Equal(spanCtx(1)) {
+		t.Errorf("parent = %v, want the first traced shipment", batch.parent)
+	}
+	if len(batch.links) != 2 {
+		t.Fatalf("links = %d, want 2 (every traced shipment after the first)", len(batch.links))
+	}
+	batch.reset()
+	if batch.parent.IsValid() || len(batch.links) != 0 {
+		t.Error("reset kept trace state")
 	}
 }

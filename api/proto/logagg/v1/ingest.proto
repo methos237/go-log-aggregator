@@ -66,6 +66,10 @@ message LogBatch {
   string batch_id = 1;
   LabelSet labels = 2;
   repeated LogRecord records = 3;
+  // W3C trace context (traceparent, tracestate) of the agent's ship span. It
+  // travels in the message because a bidirectional stream has no per-message
+  // metadata; the collector's ingest span becomes this span's child.
+  map<string, string> trace_context = 4;
 }
 
 // AckCode reports what the collector did with a batch.

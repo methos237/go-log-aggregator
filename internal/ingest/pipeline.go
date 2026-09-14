@@ -8,6 +8,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/jamespolk/go-log-aggregator/internal/config"
 	"github.com/jamespolk/go-log-aggregator/internal/observability"
 	"github.com/jamespolk/go-log-aggregator/internal/queue"
@@ -37,6 +41,9 @@ type job struct {
 	// reports: records are what consume memory, batches are not comparable units.
 	records  int
 	enqueued time.Time
+	// ctx carries the ingest span; only its span context is used, never its
+	// cancellation, since the publish outlives a client that hangs up.
+	ctx context.Context
 	// reply is buffered so a publisher never blocks on a handler that has given up.
 	reply chan error
 }
@@ -119,6 +126,7 @@ func (p *pipeline) submit(ctx context.Context, j *job) error {
 
 	j.enqueued = time.Now()
 	j.reply = make(chan error, 1)
+	j.ctx = ctx
 
 	p.addDepth(j.records)
 	select {
@@ -167,7 +175,21 @@ func (p *pipeline) run(j *job) {
 	// pubCtx, not the handler's context: the publish is bounded by the queue's own
 	// publish timeout, and a canceled client must not abort a batch that is already
 	// halfway to being durable.
-	j.reply <- p.queue.Publish(p.pubCtx, j.subject, j.payload)
+	// Built from the job's span and the pipeline's lifetime context on
+	// purpose: the publish must outlive a client that hangs up mid-batch.
+	ctx, span := tracer.Start(trace.ContextWithSpanContext(p.pubCtx, trace.SpanContextFromContext(j.ctx)), //nolint:contextcheck // see above
+		"jetstream.publish", trace.WithSpanKind(trace.SpanKindProducer),
+		trace.WithAttributes(
+			attribute.String("messaging.destination.name", j.subject),
+			attribute.Int("messaging.message.body.size", len(j.payload)),
+		))
+	err := p.queue.Publish(ctx, j.subject, j.payload)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+	}
+	span.End()
+	j.reply <- err
 }
 
 func (p *pipeline) drain(log *slog.Logger) {

@@ -337,9 +337,13 @@ type LogBatch struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Agent-assigned identifier, unique per connection, echoed back in the Ack so
 	// the agent knows which batch it may drop from its spool.
-	BatchId       string       `protobuf:"bytes,1,opt,name=batch_id,json=batchId,proto3" json:"batch_id,omitempty"`
-	Labels        *LabelSet    `protobuf:"bytes,2,opt,name=labels,proto3" json:"labels,omitempty"`
-	Records       []*LogRecord `protobuf:"bytes,3,rep,name=records,proto3" json:"records,omitempty"`
+	BatchId string       `protobuf:"bytes,1,opt,name=batch_id,json=batchId,proto3" json:"batch_id,omitempty"`
+	Labels  *LabelSet    `protobuf:"bytes,2,opt,name=labels,proto3" json:"labels,omitempty"`
+	Records []*LogRecord `protobuf:"bytes,3,rep,name=records,proto3" json:"records,omitempty"`
+	// W3C trace context (traceparent, tracestate) of the agent's ship span. It
+	// travels in the message because a bidirectional stream has no per-message
+	// metadata; the collector's ingest span becomes this span's child.
+	TraceContext  map[string]string `protobuf:"bytes,4,rep,name=trace_context,json=traceContext,proto3" json:"trace_context,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -391,6 +395,13 @@ func (x *LogBatch) GetLabels() *LabelSet {
 func (x *LogBatch) GetRecords() []*LogRecord {
 	if x != nil {
 		return x.Records
+	}
+	return nil
+}
+
+func (x *LogBatch) GetTraceContext() map[string]string {
+	if x != nil {
+		return x.TraceContext
 	}
 	return nil
 }
@@ -501,11 +512,15 @@ const file_logagg_v1_ingest_proto_rawDesc = "" +
 	"\x06fields\x18\a \x03(\v2 .logagg.v1.LogRecord.FieldsEntryR\x06fields\x1a9\n" +
 	"\vFieldsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x82\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8f\x02\n" +
 	"\bLogBatch\x12\x19\n" +
 	"\bbatch_id\x18\x01 \x01(\tR\abatchId\x12+\n" +
 	"\x06labels\x18\x02 \x01(\v2\x13.logagg.v1.LabelSetR\x06labels\x12.\n" +
-	"\arecords\x18\x03 \x03(\v2\x14.logagg.v1.LogRecordR\arecords\"\x98\x01\n" +
+	"\arecords\x18\x03 \x03(\v2\x14.logagg.v1.LogRecordR\arecords\x12J\n" +
+	"\rtrace_context\x18\x04 \x03(\v2%.logagg.v1.LogBatch.TraceContextEntryR\ftraceContext\x1a?\n" +
+	"\x11TraceContextEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x98\x01\n" +
 	"\x03Ack\x12\x19\n" +
 	"\bbatch_id\x18\x01 \x01(\tR\abatchId\x12&\n" +
 	"\x04code\x18\x02 \x01(\x0e2\x12.logagg.v1.AckCodeR\x04code\x12\x1a\n" +
@@ -545,7 +560,7 @@ func file_logagg_v1_ingest_proto_rawDescGZIP() []byte {
 }
 
 var file_logagg_v1_ingest_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_logagg_v1_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_logagg_v1_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_logagg_v1_ingest_proto_goTypes = []any{
 	(Level)(0),        // 0: logagg.v1.Level
 	(AckCode)(0),      // 1: logagg.v1.AckCode
@@ -555,6 +570,7 @@ var file_logagg_v1_ingest_proto_goTypes = []any{
 	(*Ack)(nil),       // 5: logagg.v1.Ack
 	nil,               // 6: logagg.v1.LabelSet.ExtraEntry
 	nil,               // 7: logagg.v1.LogRecord.FieldsEntry
+	nil,               // 8: logagg.v1.LogBatch.TraceContextEntry
 }
 var file_logagg_v1_ingest_proto_depIdxs = []int32{
 	6, // 0: logagg.v1.LabelSet.extra:type_name -> logagg.v1.LabelSet.ExtraEntry
@@ -562,14 +578,15 @@ var file_logagg_v1_ingest_proto_depIdxs = []int32{
 	7, // 2: logagg.v1.LogRecord.fields:type_name -> logagg.v1.LogRecord.FieldsEntry
 	2, // 3: logagg.v1.LogBatch.labels:type_name -> logagg.v1.LabelSet
 	3, // 4: logagg.v1.LogBatch.records:type_name -> logagg.v1.LogRecord
-	1, // 5: logagg.v1.Ack.code:type_name -> logagg.v1.AckCode
-	4, // 6: logagg.v1.LogService.Stream:input_type -> logagg.v1.LogBatch
-	5, // 7: logagg.v1.LogService.Stream:output_type -> logagg.v1.Ack
-	7, // [7:8] is the sub-list for method output_type
-	6, // [6:7] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	8, // 5: logagg.v1.LogBatch.trace_context:type_name -> logagg.v1.LogBatch.TraceContextEntry
+	1, // 6: logagg.v1.Ack.code:type_name -> logagg.v1.AckCode
+	4, // 7: logagg.v1.LogService.Stream:input_type -> logagg.v1.LogBatch
+	5, // 8: logagg.v1.LogService.Stream:output_type -> logagg.v1.Ack
+	8, // [8:9] is the sub-list for method output_type
+	7, // [7:8] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_logagg_v1_ingest_proto_init() }
@@ -583,7 +600,7 @@ func file_logagg_v1_ingest_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_logagg_v1_ingest_proto_rawDesc), len(file_logagg_v1_ingest_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

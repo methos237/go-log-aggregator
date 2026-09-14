@@ -14,6 +14,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/jamespolk/go-log-aggregator/internal/backoff"
 	"github.com/jamespolk/go-log-aggregator/internal/config"
@@ -69,6 +73,8 @@ FROM logs_staging
 ORDER BY stream_id, seq, time
 ON CONFLICT DO NOTHING`
 
+var tracer = otel.Tracer("github.com/jamespolk/go-log-aggregator/internal/storage")
+
 // Shipment is the unit the writer accepts: one stream's labels plus records for it.
 //
 // Records are grouped by stream because that is how they arrive — a gRPC batch and
@@ -92,6 +98,11 @@ type Shipment struct {
 	// lands leads to redelivery rather than to loss. Ack is invoked only when
 	// Submit reported at least one accepted record.
 	Ack func(error)
+
+	// Context carries the span context of whatever produced this shipment.
+	// Only the span context is read, never the cancellation: the write must
+	// finish once the records are accepted. Nil is fine and means untraced.
+	Context context.Context
 
 	// enqueued is stamped by Submit so the queue-wait histogram measures real
 	// waiting rather than the caller's own latency.
@@ -424,10 +435,23 @@ func (w *Writer) flush(dbCtx context.Context, log *slog.Logger, batch *writeBatc
 		w.metrics.BatchSize.Observe(float64(len(batch.records)))
 	}
 
+	// One span per flush, parented on the first shipment's trace and linked to
+	// the rest: a batch merges many publishes, and a trace can only have one
+	// parent. The first one therefore shows the whole agent-to-Postgres path
+	// as a tree; the others reach the write through a link.
+	ctx, span := tracer.Start(trace.ContextWithSpanContext(dbCtx, batch.parent), "writer.batch",
+		trace.WithLinks(batch.links...),
+		trace.WithAttributes(
+			attribute.Int("batch.records", len(batch.records)),
+			attribute.Int("batch.shipments", len(batch.acks)),
+			attribute.Int("batch.streams", len(batch.streams)),
+		))
+	defer span.End()
+
 	var err error
 	for attempt := 1; attempt <= w.cfg.MaxAttempts; attempt++ {
 		var inserted int64
-		inserted, err = w.writeOnce(dbCtx, batch)
+		inserted, err = w.writeOnce(ctx, batch)
 		if err == nil {
 			w.recordSuccess(batch, inserted, w.now().Sub(started))
 			batch.ackAll(nil)
@@ -468,6 +492,8 @@ func (w *Writer) flush(dbCtx context.Context, log *slog.Logger, batch *writeBatc
 	if w.metrics != nil {
 		w.metrics.WriteDuration.WithLabelValues(outcomeFailure).Observe(w.now().Sub(started).Seconds())
 	}
+	span.RecordError(err)
+	span.SetStatus(codes.Error, "batch write failed")
 	w.drop(reasonWriteFailed, len(batch.records))
 	batch.ackAll(fmt.Errorf("write batch of %d records: %w", len(batch.records), err))
 }
@@ -560,7 +586,17 @@ func (w *Writer) commitStreams(ctx context.Context, batch *writeBatch) error {
 }
 
 // commitRecords stages the batch with COPY and moves it into the hypertable.
-func (w *Writer) commitRecords(ctx context.Context, batch *writeBatch) (int64, error) {
+func (w *Writer) commitRecords(ctx context.Context, batch *writeBatch) (n int64, err error) {
+	ctx, span := tracer.Start(ctx, "pg.copy", trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(attribute.Int("db.rows", len(batch.records))))
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "copy failed")
+		}
+		span.End()
+	}()
+
 	tx, err := w.pool.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("begin: %w", err)
@@ -659,6 +695,10 @@ type writeBatch struct {
 	// never sees a duplicate key, which ON CONFLICT DO UPDATE would reject.
 	streams map[model.StreamID]model.Stream
 	acks    []func(error)
+	// parent is the first traced shipment's span context and links the rest;
+	// see flush for why a batch cannot be a child of all of them.
+	parent trace.SpanContext
+	links  []trace.Link
 }
 
 func newWriteBatch(capacity int) *writeBatch {
@@ -672,6 +712,15 @@ func (b *writeBatch) add(sh *Shipment, cache *streamCache, now time.Time) {
 	b.records = append(b.records, sh.Records...)
 	if sh.Ack != nil {
 		b.acks = append(b.acks, sh.Ack)
+	}
+	if sh.Context != nil {
+		if sc := trace.SpanContextFromContext(sh.Context); sc.IsValid() {
+			if !b.parent.IsValid() {
+				b.parent = sc
+			} else {
+				b.links = append(b.links, trace.Link{SpanContext: sc})
+			}
+		}
 	}
 
 	id := sh.Stream.ID
@@ -728,6 +777,8 @@ func (b *writeBatch) ackAll(err error) {
 func (b *writeBatch) reset() {
 	b.records = b.records[:0]
 	b.acks = b.acks[:0]
+	b.parent = trace.SpanContext{}
+	b.links = b.links[:0]
 	clear(b.streams)
 }
 

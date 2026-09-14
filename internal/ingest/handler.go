@@ -9,6 +9,11 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 
@@ -26,6 +31,16 @@ const MaxAckDetailLen = 512
 
 // ackCodeNames are the metric label values for the codes this service returns.
 var ackCodeNames = []string{"accepted", "overloaded", "invalid", "internal"}
+
+var tracer = otel.Tracer("github.com/jamespolk/go-log-aggregator/internal/ingest")
+
+// ackLabel is the metric and span label for an ack code.
+func ackLabel(code logaggv1.AckCode) string {
+	if i := int(code) - 1; i >= 0 && i < len(ackCodeNames) {
+		return ackCodeNames[i]
+	}
+	return "unspecified"
+}
 
 // Stream is the bidirectional ingest RPC.
 //
@@ -72,6 +87,26 @@ func (s *service) handle(ctx context.Context, batch *logaggv1.LogBatch) *logaggv
 	started := time.Now()
 	defer func() { s.metrics.BatchDuration.Observe(time.Since(started).Seconds()) }()
 
+	// The agent's ship span is the parent, carried in the batch because a
+	// bidirectional stream has no per-message metadata to put it in.
+	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.MapCarrier(batch.GetTraceContext()))
+	ctx, span := tracer.Start(ctx, "collector.ingest", trace.WithSpanKind(trace.SpanKindConsumer),
+		trace.WithAttributes(
+			attribute.String("batch.id", batch.GetBatchId()),
+			attribute.Int("batch.records", len(batch.GetRecords())),
+		))
+	defer span.End()
+
+	ack := s.process(ctx, batch)
+	if ack.GetCode() != logaggv1.AckCode_ACK_CODE_ACCEPTED {
+		span.SetStatus(codes.Error, ack.GetDetail())
+	}
+	span.SetAttributes(attribute.String("ack.code", ackLabel(ack.GetCode())))
+	return ack
+}
+
+// process validates and publishes one batch and builds its ack.
+func (s *service) process(ctx context.Context, batch *logaggv1.LogBatch) *logaggv1.Ack {
 	id := batch.GetBatchId()
 	records := batch.GetRecords()
 	received := len(records)
@@ -92,6 +127,10 @@ func (s *service) handle(ctx context.Context, batch *logaggv1.LogBatch) *logaggv
 	// rather than trusting a wire field, so a stream ID can never disagree with the
 	// labels it is supposed to identify.
 	streamID := labels.ID()
+	trace.SpanFromContext(ctx).SetAttributes(
+		attribute.Int64("stream.id", int64(streamID)),
+		attribute.String("stream.service", labels.Service),
+	)
 
 	valid, firstErr := s.acceptable(streamID, records)
 	rejected := received - len(valid)
