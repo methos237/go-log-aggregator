@@ -174,7 +174,7 @@ func run(dsnOverride string) error {
 		return fmt.Errorf("open database: %w", err)
 	}
 	defer pool.Close()
-	metrics.Registerer.MustRegister(storage.NewPoolCollector(pool))
+	metrics.Registerer.MustRegister(storage.NewPoolCollector(pool), storage.NewCompressionCollector(pool, log))
 
 	// A dead database makes this node unready rather than dead: restarting would not
 	// bring Postgres back, and phase 2's JetStream buffer is what absorbs the outage.

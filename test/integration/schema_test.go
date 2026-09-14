@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/jamespolk/go-log-aggregator/internal/storage"
@@ -228,4 +229,25 @@ func testContext(t *testing.T) context.Context {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	t.Cleanup(cancel)
 	return ctx
+}
+
+// The compression collector reads the columnstore catalog on every scrape; it
+// must gather cleanly on a freshly migrated database where no chunk has been
+// compressed yet, and report a zero ratio rather than a gap.
+func TestCompressionCollectorGathersOnFreshDatabase(t *testing.T) {
+	t.Parallel()
+	pool, _ := migratedDB(t)
+
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(storage.NewCompressionCollector(pool, testLogger(t)))
+	families, err := reg.Gather()
+	require.NoError(t, err)
+
+	got := map[string]float64{}
+	for _, f := range families {
+		got[f.GetName()] = f.GetMetric()[0].GetGauge().GetValue()
+	}
+	require.Contains(t, got, "logagg_storage_compression_ratio")
+	require.Contains(t, got, "logagg_storage_compressed_bytes")
+	require.Equal(t, 0.0, got["logagg_storage_compression_ratio"], "no compressed chunk yet, so the ratio must read 0")
 }
