@@ -1,0 +1,21 @@
+# Scrape config for the dev stack. DNS service discovery rather than static
+# targets, because `make dev-scale` runs several collectors behind one service
+# name and Compose's DNS answers with every replica's address.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: collector
+    dns_sd_configs:
+      - names: [collector]
+        type: A
+        port: 9090
+  - job_name: agent
+    dns_sd_configs:
+      - names: [agent]
+        type: A
+        port: 9090
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
