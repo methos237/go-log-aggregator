@@ -75,6 +75,20 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	stopTracing, err := observability.NewTracer(ctx, cfg.Tracing, "logagg-agent", cfg.Node.Name)
+	if err != nil {
+		return fmt.Errorf("set up tracing: %w", err)
+	}
+	// Deferred rather than sequenced: the pipeline's own shutdown lives in
+	// runPipeline, and the spans it buffers last are the shipper's.
+	defer func() {
+		flushCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cfg.Node.ShutdownTimeout)
+		defer cancel()
+		if flushErr := stopTracing(flushCtx); flushErr != nil {
+			log.Error("tracing shutdown failed", slog.Any("error", flushErr))
+		}
+	}()
+
 	log.Info("agent starting",
 		slog.String("env", cfg.Agent.Env),
 		slog.String("host", cfg.Agent.Host),

@@ -146,6 +146,11 @@ func run(dsnOverride string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	stopTracing, err := observability.NewTracer(ctx, cfg.Tracing, "logagg-collector", cfg.Node.Name)
+	if err != nil {
+		return fmt.Errorf("set up tracing: %w", err)
+	}
+
 	log.Info("collector starting",
 		slog.String("env", cfg.Node.Env),
 		slog.String("commit", version.Commit),
@@ -393,6 +398,10 @@ func run(dsnOverride string) error {
 		}
 		if adminErr := adminSrv.Shutdown(shutdownCtx); adminErr != nil {
 			errs = append(errs, fmt.Errorf("admin shutdown: %w", adminErr))
+		}
+		// After the writer: its last batch's spans are the ones still buffered.
+		if traceErr := stopTracing(shutdownCtx); traceErr != nil {
+			errs = append(errs, fmt.Errorf("tracing shutdown: %w", traceErr))
 		}
 		return errors.Join(errs...)
 	})

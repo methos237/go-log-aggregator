@@ -93,6 +93,8 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv(EnvPrefix+"INGEST_MAX_RECV_BYTES", "8MB")
 	t.Setenv(EnvPrefix+"SHUTDOWN_TIMEOUT", "45s")
 	t.Setenv(EnvPrefix+"LOG_LEVEL", "debug")
+	t.Setenv(EnvPrefix+"TRACING_ENABLED", "true")
+	t.Setenv(EnvPrefix+"TRACING_SAMPLE_RATIO", "0.25")
 	t.Setenv(EnvPrefix+"AGENT_FILES", "/var/log/app.log, /var/log/other.log ,")
 	t.Setenv(EnvPrefix+"AGENT_CONTAINERS", "web, worker")
 	t.Setenv(EnvPrefix+"AGENT_STDIN", "true")
@@ -126,6 +128,9 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if got, want := cfg.Log.Level, slog.LevelDebug; got != want {
 		t.Errorf("Log.Level = %v, want %v", got, want)
+	}
+	if !cfg.Tracing.Enabled || cfg.Tracing.SampleRatio != 0.25 {
+		t.Errorf("Tracing = %+v, want enabled with ratio 0.25", cfg.Tracing)
 	}
 	if got, want := cfg.Agent.Files, []string{"/var/log/app.log", "/var/log/other.log"}; !slices.Equal(got, want) {
 		t.Errorf("Agent.Files = %v, want %v (blanks trimmed)", got, want)
@@ -284,6 +289,16 @@ func TestValidate(t *testing.T) {
 			name:   "unknown log format",
 			mutate: func(c *Config) { c.Log.Format = "xml" },
 			want:   "log format must be json or text",
+		},
+		{
+			name:   "tracing sample ratio above one",
+			mutate: func(c *Config) { c.Tracing.SampleRatio = 1.5 },
+			want:   "tracing sample ratio must be between 0 and 1",
+		},
+		{
+			name:   "tracing enabled without endpoint",
+			mutate: func(c *Config) { c.Tracing.Enabled, c.Tracing.Endpoint = true, "" },
+			want:   "tracing endpoint must not be empty",
 		},
 		{
 			name:   "zero shutdown timeout",
