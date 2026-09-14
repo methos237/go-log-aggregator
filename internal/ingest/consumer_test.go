@@ -27,12 +27,13 @@ type fakeMessage struct {
 	err   error
 }
 
-func (m *fakeMessage) Data() []byte         { return m.data }
-func (m *fakeMessage) Subject() string      { return m.subject }
-func (m *fakeMessage) Redeliveries() uint64 { return 1 }
-func (m *fakeMessage) Ack() error           { return m.record(ack) }
-func (m *fakeMessage) Nak() error           { return m.record(nak) }
-func (m *fakeMessage) Term() error          { return m.record(term) }
+func (m *fakeMessage) Data() []byte                { return m.data }
+func (m *fakeMessage) Subject() string             { return m.subject }
+func (m *fakeMessage) Header() map[string][]string { return nil }
+func (m *fakeMessage) Redeliveries() uint64        { return 1 }
+func (m *fakeMessage) Ack() error                  { return m.record(ack) }
+func (m *fakeMessage) Nak() error                  { return m.record(nak) }
+func (m *fakeMessage) Term() error                 { return m.record(term) }
 
 func (m *fakeMessage) record(op terminal) error {
 	m.mu.Lock()

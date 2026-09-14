@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel"
 	"google.golang.org/protobuf/proto"
 
 	logaggv1 "github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1"
@@ -229,13 +230,14 @@ func (c *Consumer) handle(ctx context.Context, msg queue.Message) {
 		records = append(records, model.LogRecordFromProto(stream.ID, pb))
 	}
 
+	// The publisher's span context, from the message headers, is what the
+	// writer's batch span attaches to; the shipment carries it across the
+	// batching boundary because the write happens on another goroutine.
 	accepted, err := c.writer.Submit(ctx, storage.Shipment{
 		Stream:  stream,
 		Records: records,
-		// Called by the writer once the rows are durable, or with an error when it
-		// gave up. Naking on failure returns the batch to the stream instead of
-		// losing it.
-		Ack: func(writeErr error) { c.finish(msg, batch.GetBatchId(), writeErr) },
+		Context: otel.GetTextMapPropagator().Extract(ctx, queue.HeaderCarrier(msg.Header())),
+		Ack:     func(writeErr error) { c.finish(msg, batch.GetBatchId(), writeErr) },
 	})
 	if err != nil {
 		c.log.Warn("writer refused batch",

@@ -11,6 +11,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel"
 
 	"github.com/jamespolk/go-log-aggregator/internal/config"
 	"github.com/jamespolk/go-log-aggregator/internal/observability"
@@ -246,8 +247,14 @@ func (c *Conn) Publish(ctx context.Context, subject string, payload []byte) erro
 	ctx, cancel := context.WithTimeout(ctx, c.cfg.PublishTimeout)
 	defer cancel()
 
+	// Trace context rides in the message headers so the writer's span on
+	// whichever node consumes this joins the publisher's trace.
+	msg := nats.NewMsg(subject)
+	msg.Data = payload
+	otel.GetTextMapPropagator().Inject(ctx, HeaderCarrier(msg.Header))
+
 	started := time.Now()
-	_, err := c.js.Publish(ctx, subject, payload)
+	_, err := c.js.PublishMsg(ctx, msg)
 	elapsed := time.Since(started)
 
 	if err != nil {

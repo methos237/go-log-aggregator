@@ -24,6 +24,9 @@ import (
 type Message interface {
 	Data() []byte
 	Subject() string
+	// Header is the message's headers, where the publisher put the trace
+	// context. Nil when the message carried none.
+	Header() map[string][]string
 	// Redeliveries is how many times this message has been delivered, counting the
 	// current delivery. One means a first attempt.
 	Redeliveries() uint64
@@ -111,11 +114,12 @@ type message struct {
 	msg jetstream.Msg
 }
 
-func (m *message) Data() []byte    { return m.msg.Data() }
-func (m *message) Subject() string { return m.msg.Subject() }
-func (m *message) Ack() error      { return m.msg.Ack() }
-func (m *message) Nak() error      { return m.msg.Nak() }
-func (m *message) Term() error     { return m.msg.Term() }
+func (m *message) Data() []byte                { return m.msg.Data() }
+func (m *message) Subject() string             { return m.msg.Subject() }
+func (m *message) Header() map[string][]string { return m.msg.Headers() }
+func (m *message) Ack() error                  { return m.msg.Ack() }
+func (m *message) Nak() error                  { return m.msg.Nak() }
+func (m *message) Term() error                 { return m.msg.Term() }
 
 // Redeliveries reports the delivery count, or 1 when the metadata is unavailable.
 //
