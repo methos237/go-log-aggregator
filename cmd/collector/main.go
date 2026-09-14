@@ -254,7 +254,7 @@ func run(dsnOverride string) error {
 
 	// /readyz reports ready only once every registered dependency answers.
 	apiSrv := httpapi.New(&cfg.HTTP, health, httpapi.Deps{
-		DB: pool, Runner: runner, Node: cfg.Node.Name, Cluster: clusterView(members), Tails: tails,
+		DB: pool, Runner: executor.Instrumented{Runner: runner, Metrics: executor.NewMetrics(metrics.Registerer)}, Node: cfg.Node.Name, Cluster: clusterView(members), Tails: tails,
 	}, log)
 	adminSrv := observability.NewAdminServer(cfg.Admin, metrics, log)
 

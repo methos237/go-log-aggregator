@@ -377,7 +377,10 @@ func TestStreamCountsRecordsAndAcks(t *testing.T) {
 	if got := counter(t, reg, "logagg_ingest_records_received_total", nil); got != 3 {
 		t.Errorf("records_received_total = %v, want 3 (counted before validation)", got)
 	}
-	if got := counter(t, reg, "logagg_ingest_records_accepted_total", nil); got != 2 {
+	if got := counter(t, reg, "logagg_ingest_bytes_total", nil); got <= 0 {
+		t.Errorf("ingest_bytes_total = %v, want > 0", got)
+	}
+	if got := counter(t, reg, "logagg_ingest_records_accepted_total", map[string]string{"service": "checkout", "level": "info"}); got != 2 {
 		t.Errorf("records_accepted_total = %v, want 2", got)
 	}
 	if got := counter(t, reg, "logagg_records_dropped_total", map[string]string{

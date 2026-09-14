@@ -77,6 +77,7 @@ func (s *service) handle(ctx context.Context, batch *logaggv1.LogBatch) *logaggv
 	received := len(records)
 	if received > 0 {
 		s.metrics.RecordsReceived.Add(float64(received))
+		s.metrics.BytesReceived.Add(float64(proto.Size(batch)))
 	}
 
 	labels := model.LabelSetFromProto(batch.GetLabels())
@@ -131,7 +132,7 @@ func (s *service) handle(ctx context.Context, batch *logaggv1.LogBatch) *logaggv
 		return s.publishFailed(id, subject, streamID, received, len(valid), err)
 	}
 
-	s.metrics.RecordsAccepted.Add(float64(len(valid)))
+	s.countAccepted(labels.Service, valid)
 
 	// After the durable ack, before the agent's. The tail copy is fire-and-forget,
 	// so a failure costs a tail reader one batch and the agent nothing; it is
@@ -148,6 +149,20 @@ func (s *service) handle(ctx context.Context, batch *logaggv1.LogBatch) *logaggv
 		Accepted: uint32(len(valid)), //nolint:gosec // bounded by MaxRecvMsgSize
 		Rejected: uint32(rejected),   //nolint:gosec // bounded by MaxRecvMsgSize
 	})
+}
+
+// countAccepted increments the accepted counter once per (service, level)
+// present in the batch rather than once per record, since a batch is one
+// service and rarely more than a couple of levels.
+func (s *service) countAccepted(service string, records []*logaggv1.LogRecord) {
+	// Records are already validated, so every level here is a known one.
+	byLevel := make(map[model.Level]int, 2)
+	for _, pb := range records {
+		byLevel[model.Level(pb.GetLevel())]++
+	}
+	for lvl, n := range byLevel {
+		s.metrics.RecordsAccepted.WithLabelValues(service, lvl.String()).Add(float64(n))
+	}
 }
 
 // acceptable filters the records that pass validation, returning them and the

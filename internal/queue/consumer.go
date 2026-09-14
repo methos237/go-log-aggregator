@@ -61,8 +61,11 @@ func (c *Conn) Consume(ctx context.Context, h Handler) (Subscription, error) {
 
 	sub, err := cons.Consume(func(msg jetstream.Msg) {
 		m := &message{msg: msg}
-		if m.Redeliveries() > 1 {
-			c.metrics.Redeliveries.Inc()
+		if meta, metaErr := msg.Metadata(); metaErr == nil {
+			if meta.NumDelivered > 1 {
+				c.metrics.Redeliveries.Inc()
+			}
+			c.metrics.Pending.Set(float64(meta.NumPending))
 		}
 		c.metrics.Consumed.Inc()
 		h(m)
