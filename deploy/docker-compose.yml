@@ -176,6 +176,12 @@ services:
       # leaving LOGAGG_AGENT_CERT_FILE/_KEY_FILE/_CA_FILE unset -- all three or
       # none, and "none" is what the server side actually is.
       LOGAGG_AGENT_FILES: /var/log/app/app.log
+      # Dogfooding: the agent also follows the collector's own container, so
+      # logagg ingests its own logs. Compose names the container from the
+      # project and service, and it is one line per JSON record, which is
+      # what the extractor turns into fields.
+      LOGAGG_AGENT_CONTAINERS: logagg-collector-1
+      LOGAGG_AGENT_EXTRACT_JSON: "true"
       # The chaos test points this at the proxy instead, so the agent's next
       # connection after a kill lands on a survivor.
       LOGAGG_AGENT_INGEST_ADDR: ${LOGAGG_AGENT_INGEST_ADDR:-collector:9095}
@@ -189,6 +195,13 @@ services:
       # layer, restarting the agent container would also wipe its progress,
       # and "survives a restart" would be untestable.
       - agent-state:/var/lib/logagg
+      # Read-only Docker socket for the container source above. Read-only
+      # stops nothing on the API itself, so this is dev-stack-only.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # The socket's group inside the container. Root on Docker Desktop; on a
+    # Linux host set DOCKER_GID to the docker group's id.
+    group_add:
+      - "${DOCKER_GID:-0}"
     depends_on:
       collector:
         condition: service_healthy

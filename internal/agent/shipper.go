@@ -551,6 +551,18 @@ func (s *Shipper) demoteRemaining(o outstanding) {
 // line is taken by pointer purely to keep gocritic's hugeParam check happy —
 // Line itself (see source.go) stays a plain value everywhere else,
 // including on the channel Run reads from.
+// levelOf reads the record's level from an extracted "level" field, accepting
+// every spelling model.ParseLevel does. No field, or one it does not
+// recognize, is LevelUnspecified: the model package's own answer for "no
+// level known", not a guess. Inference from the message text is deliberately
+// not attempted.
+func levelOf(fields map[string]string) model.Level {
+	if lvl, err := model.ParseLevel(fields["level"]); err == nil {
+		return lvl
+	}
+	return model.LevelUnspecified
+}
+
 func (s *Shipper) addLine(line *Line) {
 	labels, ok := s.labels(line.Source)
 	if !ok {
@@ -566,17 +578,14 @@ func (s *Shipper) addLine(line *Line) {
 	}
 
 	rec := model.LogRecord{
-		Time: line.Time,
-		Seq:  line.Cursor.Start,
-		// Level inference is deliberately out of scope for this phase;
-		// LevelUnspecified is the model package's own answer for "no level
-		// known," not a guess.
-		Level:   model.LevelUnspecified,
+		Time:    line.Time,
+		Seq:     line.Cursor.Start,
 		Message: string(line.Bytes),
 	}
 	if s.extractor != nil {
 		rec.Fields = s.extractor.Fields(line.Bytes)
 	}
+	rec.Level = levelOf(rec.Fields)
 
 	var pb *logaggv1.LogRecord
 	var size int

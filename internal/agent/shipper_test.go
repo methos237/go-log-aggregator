@@ -1573,3 +1573,22 @@ func TestShipper_OversizedRecordDroppedWithNonEmptyAccumulator(t *testing.T) {
 		t.Fatalf("record_too_large drop count = %v, want 1", n)
 	}
 }
+
+func TestLevelOfReadsTheExtractedField(t *testing.T) {
+	t.Parallel()
+	cases := map[string]struct {
+		fields map[string]string
+		want   model.Level
+	}{
+		"slog json":     {map[string]string{"level": "INFO"}, model.LevelInfo},
+		"alias":         {map[string]string{"level": "warning"}, model.LevelWarn},
+		"unknown value": {map[string]string{"level": "loud"}, model.LevelUnspecified},
+		"no field":      {map[string]string{"msg": "x"}, model.LevelUnspecified},
+		"nil fields":    {nil, model.LevelUnspecified},
+	}
+	for name, tc := range cases {
+		if got := levelOf(tc.fields); got != tc.want {
+			t.Errorf("%s: levelOf = %v, want %v", name, got, tc.want)
+		}
+	}
+}
