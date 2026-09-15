@@ -1,0 +1,38 @@
+File: app
+Build ID: e24d3e03592a894826d4536a4e41832a5e903dbe
+Type: inuse_space
+Time: 2026-09-15 11:21:05 EDT
+Showing nodes accounting for 428.86MB, 98.80% of 434.06MB total
+Dropped 69 nodes (cum <= 2.17MB)
+Showing top 30 nodes out of 46
+      flat  flat%   sum%        cum   cum%
+  154.76MB 35.65% 35.65%   155.26MB 35.77%  github.com/nats-io/nats%2ego.(*Conn).parse
+  111.52MB 25.69% 61.35%   111.52MB 25.69%  google.golang.org/protobuf/internal/impl.consumeStringValidateUTF8
+   75.51MB 17.40% 78.74%    75.51MB 17.40%  reflect.unsafe_New
+   64.36MB 14.83% 93.57%    64.36MB 14.83%  github.com/jamespolk/go-log-aggregator/internal/storage.init.func1
+   11.65MB  2.68% 96.25%    11.65MB  2.68%  google.golang.org/grpc/internal/mem.(*sizedBufferPool).Get
+    6.03MB  1.39% 97.64%     6.03MB  1.39%  google.golang.org/protobuf/internal/impl.pointer.AppendPointerSlice (inline)
+    2.53MB  0.58% 98.22%     2.53MB  0.58%  github.com/jamespolk/go-log-aggregator/internal/storage.newWriteBatch (inline)
+    2.50MB  0.58% 98.80%     2.50MB  0.58%  runtime.mallocgc
+         0     0% 98.80%     3.57MB  0.82%  github.com/jackc/pgx/v5.(*copyFrom).buildCopyBuf
+         0     0% 98.80%     3.57MB  0.82%  github.com/jackc/pgx/v5.(*copyFrom).run.func1
+         0     0% 98.80%     3.57MB  0.82%  github.com/jackc/pgx/v5.encodeCopyValue
+         0     0% 98.80%     3.57MB  0.82%  github.com/jackc/pgx/v5/pgtype.(*Map).Encode
+         0     0% 98.80%     3.57MB  0.82%  github.com/jackc/pgx/v5/pgtype.(*derefPointerEncodePlan).Encode
+         0     0% 98.80%     8.10MB  1.87%  github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1._LogService_Stream_Handler
+         0     0% 98.80%   255.92MB 58.96%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*Consumer).Start.func1
+         0     0% 98.80%   255.92MB 58.96%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*Consumer).handle
+         0     0% 98.80%     8.10MB  1.87%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).Stream
+         0     0% 98.80%   255.92MB 58.96%  github.com/jamespolk/go-log-aggregator/internal/queue.(*Conn).Consume.func1
+         0     0% 98.80%     2.53MB  0.58%  github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).work
+         0     0% 98.80%    64.36MB 14.83%  github.com/jamespolk/go-log-aggregator/internal/storage.NewRecords
+         0     0% 98.80%   155.26MB 35.77%  github.com/nats-io/nats%2ego.(*Conn).readLoop
+         0     0% 98.80%   255.92MB 58.96%  github.com/nats-io/nats%2ego.(*Conn).waitForMsgs
+         0     0% 98.80%   255.92MB 58.96%  github.com/nats-io/nats.go/jetstream.(*pullConsumer).Consume.func1
+         0     0% 98.80%     8.10MB  1.87%  google.golang.org/grpc.(*GenericServerStream[go.shape.df332d41e0445eac035bb936a81b75f313b1ea6d5d891dfafdcd141893cca286,go.shape.7f4381d32bf8dc7c9368ff0cacb85265b27b3c540d7a7893709a7af11959fade]).Recv
+         0     0% 98.80%     4.07MB  0.94%  google.golang.org/grpc.(*Server).handleRawConn.func1
+         0     0% 98.80%     8.10MB  1.87%  google.golang.org/grpc.(*Server).handleStream
+         0     0% 98.80%     8.10MB  1.87%  google.golang.org/grpc.(*Server).processStreamingRPC
+         0     0% 98.80%     4.07MB  0.94%  google.golang.org/grpc.(*Server).serveStreams
+         0     0% 98.80%     8.10MB  1.87%  google.golang.org/grpc.(*Server).serveStreams.func2.1
+         0     0% 98.80%     8.10MB  1.87%  google.golang.org/grpc.(*serverStream).RecvMsg

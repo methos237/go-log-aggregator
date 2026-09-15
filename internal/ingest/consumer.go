@@ -225,7 +225,7 @@ func (c *Consumer) handle(ctx context.Context, msg queue.Message) {
 
 	now := time.Now()
 	stream := model.NewStream(labels, now)
-	records := make([]model.LogRecord, 0, len(batch.GetRecords()))
+	records := storage.NewRecords(len(batch.GetRecords()))
 	for _, pb := range batch.GetRecords() {
 		records = append(records, model.LogRecordFromProto(stream.ID, pb))
 	}

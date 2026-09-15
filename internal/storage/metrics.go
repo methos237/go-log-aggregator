@@ -41,11 +41,15 @@ type Metrics struct {
 	BatchSize     prometheus.Histogram
 	WriteDuration *prometheus.HistogramVec
 
-	RowsCopied     prometheus.Counter
-	RowsInserted   prometheus.Counter
-	RowsDeduped    prometheus.Counter
-	RecordsDropped *prometheus.CounterVec
-	WriteRetries   *prometheus.CounterVec
+	RowsCopied   prometheus.Counter
+	RowsInserted prometheus.Counter
+	RowsDeduped  prometheus.Counter
+	// DirectCopyFallbacks counts batches that hit the dedup index on the direct
+	// path and were redone through staging. Only moves when CopyMode is direct,
+	// and then it is the redelivery rate the fast path is paying for twice.
+	DirectCopyFallbacks prometheus.Counter
+	RecordsDropped      *prometheus.CounterVec
+	WriteRetries        *prometheus.CounterVec
 
 	StreamUpserts       prometheus.Counter
 	StreamCacheHits     prometheus.Counter
@@ -102,6 +106,13 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Subsystem: storageSubsystem,
 			Name:      "rows_deduplicated_total",
 			Help:      "Rows discarded by the dedup index on insert, i.e. redeliveries.",
+		}),
+
+		DirectCopyFallbacks: f.NewCounter(prometheus.CounterOpts{
+			Namespace: observability.Namespace,
+			Subsystem: storageSubsystem,
+			Name:      "direct_copy_fallbacks_total",
+			Help:      "Batches whose direct COPY hit the dedup index and were redone through staging.",
 		}),
 
 		// Shared with the ingest layer: one family, one panel, distinguished by the

@@ -1,0 +1,38 @@
+File: app
+Build ID: e24d3e03592a894826d4536a4e41832a5e903dbe
+Type: delay
+Time: 2026-09-15 11:21:05 EDT
+Showing nodes accounting for 1361.31s, 99.91% of 1362.57s total
+Dropped 147 nodes (cum <= 6.81s)
+Showing top 30 nodes out of 80
+      flat  flat%   sum%        cum   cum%
+  1144.99s 84.03% 84.03%   1144.99s 84.03%  runtime.selectgo
+   112.61s  8.26% 92.30%    112.61s  8.26%  sync.(*Cond).Wait
+    94.35s  6.92% 99.22%     94.35s  6.92%  runtime.chanrecv2
+     9.37s  0.69% 99.91%      9.37s  0.69%  sync.(*Mutex).Lock (inline)
+         0     0% 99.91%        60s  4.40%  github.com/hashicorp/memberlist.(*Memberlist).checkBroadcastQueueDepth
+         0     0% 99.91%        60s  4.40%  github.com/hashicorp/memberlist.(*Memberlist).pushPullTrigger
+         0     0% 99.91%     97.83s  7.18%  github.com/hashicorp/memberlist.(*Memberlist).schedule.gowrap2
+         0     0% 99.91%        60s  4.40%  github.com/hashicorp/memberlist.(*Memberlist).schedule.gowrap3
+         0     0% 99.91%     97.75s  7.17%  github.com/hashicorp/memberlist.(*Memberlist).schedule.gowrap4
+         0     0% 99.91%    195.58s 14.35%  github.com/hashicorp/memberlist.(*Memberlist).triggerFunc
+         0     0% 99.91%        60s  4.40%  github.com/hashicorp/memberlist.newMemberlist.gowrap4
+         0     0% 99.91%     20.66s  1.52%  github.com/jackc/pgx/v5.(*Conn).CopyFrom
+         0     0% 99.91%     20.66s  1.52%  github.com/jackc/pgx/v5.(*copyFrom).run
+         0     0% 99.91%     20.66s  1.52%  github.com/jackc/pgx/v5.(*dbTx).CopyFrom
+         0     0% 99.91%     20.66s  1.52%  github.com/jackc/pgx/v5/pgconn.(*PgConn).CopyFrom
+         0     0% 99.91%     10.80s  0.79%  github.com/jackc/pgx/v5/pgconn.(*PgConn).CopyFrom.func1
+         0     0% 99.91%      8.16s   0.6%  github.com/jackc/pgx/v5/pgconn.(*PgConn).peekMessage
+         0     0% 99.91%      8.16s   0.6%  github.com/jackc/pgx/v5/pgconn.(*PgConn).receiveMessage
+         0     0% 99.91%     20.66s  1.52%  github.com/jackc/pgx/v5/pgxpool.(*Tx).CopyFrom
+         0     0% 99.91%    110.70s  8.12%  github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1._LogService_Stream_Handler
+         0     0% 99.91%     55.31s  4.06%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*Consumer).Start.func1
+         0     0% 99.91%     55.31s  4.06%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*Consumer).handle
+         0     0% 99.91%    352.31s 25.86%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*pipeline).publish
+         0     0% 99.91%     99.07s  7.27%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*pipeline).run
+         0     0% 99.91%    352.31s 25.86%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*pipeline).start.gowrap1
+         0     0% 99.91%    101.66s  7.46%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*pipeline).submit
+         0     0% 99.91%    110.70s  8.12%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).Stream
+         0     0% 99.91%    102.26s  7.51%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).handle
+         0     0% 99.91%    102.26s  7.51%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).process
+         0     0% 99.91%     55.31s  4.06%  github.com/jamespolk/go-log-aggregator/internal/queue.(*Conn).Consume.func1

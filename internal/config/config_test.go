@@ -225,6 +225,11 @@ func TestValidate(t *testing.T) {
 			want:   "must not be publicly reachable",
 		},
 		{
+			name:   "unknown copy mode",
+			mutate: func(c *Config) { c.Writer.CopyMode = "fast" },
+			want:   "writer copy mode must be",
+		},
+		{
 			name:   "negative profile rate",
 			mutate: func(c *Config) { c.Admin.BlockProfileRate = -1 },
 			want:   "profile rates must not be negative",

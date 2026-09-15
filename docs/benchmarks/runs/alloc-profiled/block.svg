@@ -1,0 +1,1081 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" width="1400" height="358" onload="init(evt)" viewBox="0 0 1400 358" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<!-- Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples. -->
+<!-- NOTES:  -->
+<defs>
+	<linearGradient id="background" y1="0" y2="1" x1="0" x2="0" >
+		<stop stop-color="#eeeeee" offset="5%" />
+		<stop stop-color="#eeeeb0" offset="95%" />
+	</linearGradient>
+</defs>
+<style type="text/css">
+	text { font-family:Verdana; font-size:12px; fill:rgb(0,0,0); }
+	#search, #ignorecase { opacity:0.1; cursor:pointer; }
+	#search:hover, #search.show, #ignorecase:hover, #ignorecase.show { opacity:1; }
+	#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+	#title { text-anchor:middle; font-size:17px}
+	#unzoom { cursor:pointer; }
+	#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+	.hide { display:none; }
+	.parent { opacity:0.5; }
+</style>
+<script type="text/ecmascript">
+<![CDATA[
+	"use strict";
+	var details, searchbtn, unzoombtn, matchedtxt, svg, searching, currentSearchTerm, ignorecase, ignorecaseBtn;
+	function init(evt) {
+		details = document.getElementById("details").firstChild;
+		searchbtn = document.getElementById("search");
+		ignorecaseBtn = document.getElementById("ignorecase");
+		unzoombtn = document.getElementById("unzoom");
+		matchedtxt = document.getElementById("matched");
+		svg = document.getElementsByTagName("svg")[0];
+		searching = 0;
+		currentSearchTerm = null;
+
+		// use GET parameters to restore a flamegraphs state.
+		var params = get_params();
+		if (params.x && params.y)
+			zoom(find_group(document.querySelector('[x="' + params.x + '"][y="' + params.y + '"]')));
+                if (params.s) search(params.s);
+	}
+
+	// event listeners
+	window.addEventListener("click", function(e) {
+		var target = find_group(e.target);
+		if (target) {
+			if (target.nodeName == "a") {
+				if (e.ctrlKey === false) return;
+				e.preventDefault();
+			}
+			if (target.classList.contains("parent")) unzoom(true);
+			zoom(target);
+			if (!document.querySelector('.parent')) {
+				// we have basically done a clearzoom so clear the url
+				var params = get_params();
+				if (params.x) delete params.x;
+				if (params.y) delete params.y;
+				history.replaceState(null, null, parse_params(params));
+				unzoombtn.classList.add("hide");
+				return;
+			}
+
+			// set parameters for zoom state
+			var el = target.querySelector("rect");
+			if (el && el.attributes && el.attributes.y && el.attributes._orig_x) {
+				var params = get_params()
+				params.x = el.attributes._orig_x.value;
+				params.y = el.attributes.y.value;
+				history.replaceState(null, null, parse_params(params));
+			}
+		}
+		else if (e.target.id == "unzoom") clearzoom();
+		else if (e.target.id == "search") search_prompt();
+		else if (e.target.id == "ignorecase") toggle_ignorecase();
+	}, false)
+
+	// mouse-over for info
+	// show
+	window.addEventListener("mouseover", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = "Function: " + g_to_text(target);
+	}, false)
+
+	// clear
+	window.addEventListener("mouseout", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = ' ';
+	}, false)
+
+	// ctrl-F for search
+	// ctrl-I to toggle case-sensitive search
+	window.addEventListener("keydown",function (e) {
+		if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+			e.preventDefault();
+			search_prompt();
+		}
+		else if (e.ctrlKey && e.keyCode === 73) {
+			e.preventDefault();
+			toggle_ignorecase();
+		}
+	}, false)
+
+	// functions
+	function get_params() {
+		var params = {};
+		var paramsarr = window.location.search.substr(1).split('&');
+		for (var i = 0; i < paramsarr.length; ++i) {
+			var tmp = paramsarr[i].split("=");
+			if (!tmp[0] || !tmp[1]) continue;
+			params[tmp[0]]  = decodeURIComponent(tmp[1]);
+		}
+		return params;
+	}
+	function parse_params(params) {
+		var uri = "?";
+		for (var key in params) {
+			uri += key + '=' + encodeURIComponent(params[key]) + '&';
+		}
+		if (uri.slice(-1) == "&")
+			uri = uri.substring(0, uri.length - 1);
+		if (uri == '?')
+			uri = window.location.href.split('?')[0];
+		return uri;
+	}
+	function find_child(node, selector) {
+		var children = node.querySelectorAll(selector);
+		if (children.length) return children[0];
+	}
+	function find_group(node) {
+		var parent = node.parentElement;
+		if (!parent) return;
+		if (parent.id == "frames") return node;
+		return find_group(parent);
+	}
+	function orig_save(e, attr, val) {
+		if (e.attributes["_orig_" + attr] != undefined) return;
+		if (e.attributes[attr] == undefined) return;
+		if (val == undefined) val = e.attributes[attr].value;
+		e.setAttribute("_orig_" + attr, val);
+	}
+	function orig_load(e, attr) {
+		if (e.attributes["_orig_"+attr] == undefined) return;
+		e.attributes[attr].value = e.attributes["_orig_" + attr].value;
+		e.removeAttribute("_orig_"+attr);
+	}
+	function g_to_text(e) {
+		var text = find_child(e, "title").firstChild.nodeValue;
+		return (text)
+	}
+	function g_to_func(e) {
+		var func = g_to_text(e);
+		// if there's any manipulation we want to do to the function
+		// name before it's searched, do it here before returning.
+		return (func);
+	}
+	function update_text(e) {
+		var r = find_child(e, "rect");
+		var t = find_child(e, "text");
+		var w = parseFloat(r.attributes.width.value) -3;
+		var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+		t.attributes.x.value = parseFloat(r.attributes.x.value) + 3;
+
+		// Smaller than this size won't fit anything
+		if (w < 2 * 12 * 0.59) {
+			t.textContent = "";
+			return;
+		}
+
+		t.textContent = txt;
+		var sl = t.getSubStringLength(0, txt.length);
+		// check if only whitespace or if we can fit the entire string into width w
+		if (/^ *$/.test(txt) || sl < w)
+			return;
+
+		// this isn't perfect, but gives a good starting point
+		// and avoids calling getSubStringLength too often
+		var start = Math.floor((w/sl) * txt.length);
+		for (var x = start; x > 0; x = x-2) {
+			if (t.getSubStringLength(0, x + 2) <= w) {
+				t.textContent = txt.substring(0, x) + "..";
+				return;
+			}
+		}
+		t.textContent = "";
+	}
+
+	// zoom
+	function zoom_reset(e) {
+		if (e.attributes != undefined) {
+			orig_load(e, "x");
+			orig_load(e, "width");
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_reset(c[i]);
+		}
+	}
+	function zoom_child(e, x, ratio) {
+		if (e.attributes != undefined) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = (parseFloat(e.attributes.x.value) - x - 10) * ratio + 10;
+				if (e.tagName == "text")
+					e.attributes.x.value = find_child(e.parentNode, "rect[x]").attributes.x.value + 3;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseFloat(e.attributes.width.value) * ratio;
+			}
+		}
+
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_child(c[i], x - 10, ratio);
+		}
+	}
+	function zoom_parent(e) {
+		if (e.attributes) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = 10;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseInt(svg.width.baseVal.value) - (10 * 2);
+			}
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_parent(c[i]);
+		}
+	}
+	function zoom(node) {
+		var attr = find_child(node, "rect").attributes;
+		var width = parseFloat(attr.width.value);
+		var xmin = parseFloat(attr.x.value);
+		var xmax = parseFloat(xmin + width);
+		var ymin = parseFloat(attr.y.value);
+		var ratio = (svg.width.baseVal.value - 2 * 10) / width;
+
+		// XXX: Workaround for JavaScript float issues (fix me)
+		var fudge = 0.0001;
+
+		unzoombtn.classList.remove("hide");
+
+		var el = document.getElementById("frames").children;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var a = find_child(e, "rect").attributes;
+			var ex = parseFloat(a.x.value);
+			var ew = parseFloat(a.width.value);
+			var upstack;
+			// Is it an ancestor
+			if (0 == 0) {
+				upstack = parseFloat(a.y.value) > ymin;
+			} else {
+				upstack = parseFloat(a.y.value) < ymin;
+			}
+			if (upstack) {
+				// Direct ancestor
+				if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+					e.classList.add("parent");
+					zoom_parent(e);
+					update_text(e);
+				}
+				// not in current path
+				else
+					e.classList.add("hide");
+			}
+			// Children maybe
+			else {
+				// no common path
+				if (ex < xmin || ex + fudge >= xmax) {
+					e.classList.add("hide");
+				}
+				else {
+					zoom_child(e, xmin, ratio);
+					update_text(e);
+				}
+			}
+		}
+		search();
+	}
+	function unzoom(dont_update_text) {
+		unzoombtn.classList.add("hide");
+		var el = document.getElementById("frames").children;
+		for(var i = 0; i < el.length; i++) {
+			el[i].classList.remove("parent");
+			el[i].classList.remove("hide");
+			zoom_reset(el[i]);
+			if(!dont_update_text) update_text(el[i]);
+		}
+		search();
+	}
+	function clearzoom() {
+		unzoom();
+
+		// remove zoom state
+		var params = get_params();
+		if (params.x) delete params.x;
+		if (params.y) delete params.y;
+		history.replaceState(null, null, parse_params(params));
+	}
+
+	// search
+	function toggle_ignorecase() {
+		ignorecase = !ignorecase;
+		if (ignorecase) {
+			ignorecaseBtn.classList.add("show");
+		} else {
+			ignorecaseBtn.classList.remove("show");
+		}
+		reset_search();
+		search();
+	}
+	function reset_search() {
+		var el = document.querySelectorAll("#frames rect");
+		for (var i = 0; i < el.length; i++) {
+			orig_load(el[i], "fill")
+		}
+		var params = get_params();
+		delete params.s;
+		history.replaceState(null, null, parse_params(params));
+	}
+	function search_prompt() {
+		if (!searching) {
+			var term = prompt("Enter a search term (regexp " +
+			    "allowed, eg: ^ext4_)"
+			    + (ignorecase ? ", ignoring case" : "")
+			    + "\nPress Ctrl-i to toggle case sensitivity", "");
+			if (term != null) search(term);
+		} else {
+			reset_search();
+			searching = 0;
+			currentSearchTerm = null;
+			searchbtn.classList.remove("show");
+			searchbtn.firstChild.nodeValue = "Search"
+			matchedtxt.classList.add("hide");
+			matchedtxt.firstChild.nodeValue = ""
+		}
+	}
+	function search(term) {
+		if (term) currentSearchTerm = term;
+
+		var re = new RegExp(currentSearchTerm, ignorecase ? 'i' : '');
+		var el = document.getElementById("frames").children;
+		var matches = new Object();
+		var maxwidth = 0;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var func = g_to_func(e);
+			var rect = find_child(e, "rect");
+			if (func == null || rect == null)
+				continue;
+
+			// Save max width. Only works as we have a root frame
+			var w = parseFloat(rect.attributes.width.value);
+			if (w > maxwidth)
+				maxwidth = w;
+
+			if (func.match(re)) {
+				// highlight
+				var x = parseFloat(rect.attributes.x.value);
+				orig_save(rect, "fill");
+				rect.attributes.fill.value = "rgb(230,0,230)";
+
+				// remember matches
+				if (matches[x] == undefined) {
+					matches[x] = w;
+				} else {
+					if (w > matches[x]) {
+						// overwrite with parent
+						matches[x] = w;
+					}
+				}
+				searching = 1;
+			}
+		}
+		if (!searching)
+			return;
+		var params = get_params();
+		params.s = currentSearchTerm;
+		history.replaceState(null, null, parse_params(params));
+
+		searchbtn.classList.add("show");
+		searchbtn.firstChild.nodeValue = "Reset Search";
+
+		// calculate percent matched, excluding vertical overlap
+		var count = 0;
+		var lastx = -1;
+		var lastw = 0;
+		var keys = Array();
+		for (k in matches) {
+			if (matches.hasOwnProperty(k))
+				keys.push(k);
+		}
+		// sort the matched frames by their x location
+		// ascending, then width descending
+		keys.sort(function(a, b){
+			return a - b;
+		});
+		// Step through frames saving only the biggest bottom-up frames
+		// thanks to the sort order. This relies on the tree property
+		// where children are always smaller than their parents.
+		var fudge = 0.0001;	// JavaScript floating point
+		for (var k in keys) {
+			var x = parseFloat(keys[k]);
+			var w = matches[keys[k]];
+			if (x >= lastx + lastw - fudge) {
+				count += w;
+				lastx = x;
+				lastw = w;
+			}
+		}
+		// display matched percent
+		matchedtxt.classList.remove("hide");
+		var pct = 100 * count / maxwidth;
+		if (pct != 100) pct = pct.toFixed(1)
+		matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+	}
+]]>
+</script>
+<rect x="0.0" y="0" width="1400.0" height="358.0" fill="url(#background)"  />
+<text id="title" x="700.00" y="24" >alloc-profiled: block</text>
+<text id="details" x="10.00" y="341" > </text>
+<text id="unzoom" x="10.00" y="24" class="hide">Reset Zoom</text>
+<text id="search" x="1290.00" y="24" >Search</text>
+<text id="ignorecase" x="1374.00" y="24" >ic</text>
+<text id="matched" x="1290.00" y="341" > </text>
+<g id="frames">
+<g >
+<title>20 (99,065,974,648 ns, 7.27%)</title><rect x="722.3" y="277" width="100.3" height="15.0" fill="rgb(230,117,28)" rx="2" ry="2" />
+<text  x="725.26" y="287.5" >20</text>
+</g>
+<g >
+<title>1 (32,012,386,319 ns, 2.35%)</title><rect x="1079.1" y="261" width="32.4" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="1082.08" y="271.5" >1</text>
+</g>
+<g >
+<title>1 (20,000,465,735 ns, 1.47%)</title><rect x="1187.8" y="181" width="20.3" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="1190.79" y="191.5" ></text>
+</g>
+<g >
+<title>55 (12,397,903,226 ns, 0.91%)</title><rect x="1166.3" y="117" width="12.6" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
+<text  x="1169.32" y="127.5" ></text>
+</g>
+<g >
+<title>95 (828,930,292 ns, 0.06%)</title><rect x="1389.2" y="293" width="0.8" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
+<text  x="1392.16" y="303.5" ></text>
+</g>
+<g >
+<title>4 (112,609,535,197 ns, 8.26%)</title><rect x="1275.1" y="261" width="114.1" height="15.0" fill="rgb(227,104,24)" rx="2" ry="2" />
+<text  x="1278.11" y="271.5" >4</text>
+</g>
+<g >
+<title>83 (243,277,242 ns, 0.02%)</title><rect x="1140.3" y="101" width="0.2" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
+<text  x="1143.29" y="111.5" ></text>
+</g>
+<g >
+<title>17 (99,065,874,649 ns, 7.27%)</title><rect x="722.3" y="229" width="100.3" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
+<text  x="725.26" y="239.5" >17</text>
+</g>
+<g >
+<title>96 (629,513,527 ns, 0.05%)</title><rect x="416.3" y="261" width="0.7" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
+<text  x="419.34" y="271.5" ></text>
+</g>
+<g >
+<title>50 (20,045,446,999 ns, 1.47%)</title><rect x="1187.7" y="229" width="20.4" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
+<text  x="1190.75" y="239.5" ></text>
+</g>
+<g >
+<title>41 (32,012,386,319 ns, 2.35%)</title><rect x="1079.1" y="277" width="32.4" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
+<text  x="1082.08" y="287.5" >41</text>
+</g>
+<g >
+<title>68 (10,801,701,964 ns, 0.79%)</title><rect x="1208.1" y="277" width="10.9" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
+<text  x="1211.05" y="287.5" ></text>
+</g>
+<g >
+<title>27 (94,340,324,098 ns, 6.92%)</title><rect x="417.3" y="277" width="95.6" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
+<text  x="420.32" y="287.5" >27</text>
+</g>
+<g >
+<title>52 (20,894,199,798 ns, 1.53%)</title><rect x="1186.9" y="261" width="21.2" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="1189.89" y="271.5" ></text>
+</g>
+<g >
+<title>21 (97,830,409,010 ns, 7.18%)</title><rect x="122.7" y="277" width="99.1" height="15.0" fill="rgb(224,87,20)" rx="2" ry="2" />
+<text  x="125.70" y="287.5" >21</text>
+</g>
+<g >
+<title>1 (377,217,972 ns, 0.03%)</title><rect x="10.0" y="261" width="0.4" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="13.00" y="271.5" ></text>
+</g>
+<g >
+<title>29 (86,748,495,207 ns, 6.37%)</title><rect x="512.9" y="277" width="87.8" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
+<text  x="515.87" y="287.5" >29</text>
+</g>
+<g >
+<title>99 (603,130,143 ns, 0.04%)</title><rect x="10.6" y="165" width="0.6" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="13.57" y="175.5" ></text>
+</g>
+<g >
+<title>84 (243,277,242 ns, 0.02%)</title><rect x="1140.3" y="117" width="0.2" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
+<text  x="1143.29" y="127.5" ></text>
+</g>
+<g >
+<title>61 (20,313,884,967 ns, 1.49%)</title><rect x="1166.3" y="213" width="20.6" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="1169.32" y="223.5" ></text>
+</g>
+<g >
+<title>1 (105,515,072 ns, 0.01%)</title><rect x="1140.2" y="101" width="0.1" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="1143.18" y="111.5" ></text>
+</g>
+<g >
+<title>65 (20,378,491,461 ns, 1.50%)</title><rect x="1166.2" y="277" width="20.7" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
+<text  x="1169.25" y="287.5" ></text>
+</g>
+<g >
+<title>1 (629,513,527 ns, 0.05%)</title><rect x="416.3" y="197" width="0.7" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="419.34" y="207.5" ></text>
+</g>
+<g >
+<title>38 (55,305,600,640 ns, 4.06%)</title><rect x="1219.1" y="245" width="56.0" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
+<text  x="1222.09" y="255.5" >38</text>
+</g>
+<g >
+<title>18 (99,065,974,648 ns, 7.27%)</title><rect x="722.3" y="245" width="100.3" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
+<text  x="725.26" y="255.5" >18</text>
+</g>
+<g >
+<title>64 (360,327,524 ns, 0.03%)</title><rect x="1140.2" y="261" width="0.3" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
+<text  x="1143.17" y="271.5" ></text>
+</g>
+<g >
+<title>1 (97,754,359,904 ns, 7.17%)</title><rect x="221.8" y="261" width="99.0" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="224.78" y="271.5" >1</text>
+</g>
+<g >
+<title>62 (20,322,510,342 ns, 1.49%)</title><rect x="1166.3" y="229" width="20.6" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
+<text  x="1169.31" y="239.5" ></text>
+</g>
+<g >
+<title>98 (336,972,923 ns, 0.02%)</title><rect x="417.0" y="261" width="0.3" height="15.0" fill="rgb(233,131,31)" rx="2" ry="2" />
+<text  x="419.98" y="271.5" ></text>
+</g>
+<g >
+<title>81 (8,429,029,420 ns, 0.62%)</title><rect x="114.1" y="229" width="8.6" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
+<text  x="117.14" y="239.5" ></text>
+</g>
+<g >
+<title>105 (413,591,993 ns, 0.03%)</title><rect x="114.1" y="117" width="0.5" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
+<text  x="117.14" y="127.5" ></text>
+</g>
+<g >
+<title>87 (848,752,799 ns, 0.06%)</title><rect x="1186.9" y="149" width="0.8" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
+<text  x="1189.89" y="159.5" ></text>
+</g>
+<g >
+<title>115 (101,852,541 ns, 0.01%)</title><rect x="1219.0" y="245" width="0.1" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
+<text  x="1221.99" y="255.5" ></text>
+</g>
+<g >
+<title>1 (392,127,364 ns, 0.03%)</title><rect x="114.1" y="53" width="0.4" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="117.14" y="63.5" ></text>
+</g>
+<g >
+<title>47 (46,129,098,907 ns, 3.39%)</title><rect x="1140.2" y="293" width="46.7" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
+<text  x="1143.17" y="303.5" >47</text>
+</g>
+<g >
+<title>102 (392,127,364 ns, 0.03%)</title><rect x="114.1" y="69" width="0.4" height="15.0" fill="rgb(213,41,9)" rx="2" ry="2" />
+<text  x="117.14" y="79.5" ></text>
+</g>
+<g >
+<title>21 (97,754,359,904 ns, 7.17%)</title><rect x="221.8" y="277" width="99.0" height="15.0" fill="rgb(224,87,20)" rx="2" ry="2" />
+<text  x="224.78" y="287.5" >21</text>
+</g>
+<g >
+<title>90 (629,513,527 ns, 0.05%)</title><rect x="416.3" y="229" width="0.7" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
+<text  x="419.34" y="239.5" ></text>
+</g>
+<g >
+<title>46 (25,388,008,590 ns, 1.86%)</title><rect x="1140.5" y="277" width="25.7" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
+<text  x="1143.54" y="287.5" >46</text>
+</g>
+<g >
+<title>40 (55,407,453,181 ns, 4.07%)</title><rect x="1219.0" y="277" width="56.1" height="15.0" fill="rgb(217,57,13)" rx="2" ry="2" />
+<text  x="1221.99" y="287.5" >40</text>
+</g>
+<g >
+<title>60 (20,313,884,967 ns, 1.49%)</title><rect x="1166.3" y="197" width="20.6" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
+<text  x="1169.32" y="207.5" ></text>
+</g>
+<g >
+<title>1 (101,659,481,844 ns, 7.46%)</title><rect x="11.2" y="165" width="102.9" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="14.18" y="175.5" >1</text>
+</g>
+<g >
+<title>82 (243,277,242 ns, 0.02%)</title><rect x="1140.3" y="85" width="0.2" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
+<text  x="1143.29" y="95.5" ></text>
+</g>
+<g >
+<title>6 (168,020,567,961 ns, 12.33%)</title><rect x="1219.0" y="293" width="170.2" height="15.0" fill="rgb(214,44,10)" rx="2" ry="2" />
+<text  x="1221.99" y="303.5" >6</text>
+</g>
+<g >
+<title>58 (20,313,884,967 ns, 1.49%)</title><rect x="1166.3" y="165" width="20.6" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
+<text  x="1169.32" y="175.5" ></text>
+</g>
+<g >
+<title>109 (340,615,831 ns, 0.02%)</title><rect x="417.0" y="277" width="0.3" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
+<text  x="419.97" y="287.5" ></text>
+</g>
+<g >
+<title>23 (97,754,359,904 ns, 7.17%)</title><rect x="221.8" y="293" width="99.0" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
+<text  x="224.78" y="303.5" >23</text>
+</g>
+<g >
+<title>114 (149,268,570 ns, 0.01%)</title><rect x="10.4" y="277" width="0.1" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
+<text  x="13.38" y="287.5" ></text>
+</g>
+<g >
+<title>44 (28,306,264,393 ns, 2.08%)</title><rect x="1111.5" y="277" width="28.7" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
+<text  x="1114.50" y="287.5" >44</text>
+</g>
+<g >
+<title>14 (110,696,271,278 ns, 8.12%)</title><rect x="10.6" y="293" width="112.1" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
+<text  x="13.57" y="303.5" >14</text>
+</g>
+<g >
+<title>25 (94,976,855,472 ns, 6.97%)</title><rect x="320.8" y="293" width="96.2" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="323.78" y="303.5" >25</text>
+</g>
+<g >
+<title>1 (98,802,295,091 ns, 7.25%)</title><rect x="722.5" y="181" width="100.1" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="725.53" y="191.5" >1</text>
+</g>
+<g >
+<title>80 (8,429,029,420 ns, 0.62%)</title><rect x="114.1" y="213" width="8.6" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
+<text  x="117.14" y="223.5" ></text>
+</g>
+<g >
+<title>51 (20,045,446,999 ns, 1.47%)</title><rect x="1187.7" y="245" width="20.4" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
+<text  x="1190.75" y="255.5" ></text>
+</g>
+<g >
+<title>67 (10,801,701,964 ns, 0.79%)</title><rect x="1208.1" y="261" width="10.9" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
+<text  x="1211.05" y="271.5" ></text>
+</g>
+<g >
+<title>1 (94,347,341,945 ns, 6.92%)</title><rect x="320.8" y="261" width="95.5" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="323.78" y="271.5" >1</text>
+</g>
+<g >
+<title>50 (848,752,799 ns, 0.06%)</title><rect x="1186.9" y="213" width="0.8" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
+<text  x="1189.89" y="223.5" ></text>
+</g>
+<g >
+<title>112 (193,138,081 ns, 0.01%)</title><rect x="722.3" y="197" width="0.2" height="15.0" fill="rgb(207,11,2)" rx="2" ry="2" />
+<text  x="725.26" y="207.5" ></text>
+</g>
+<g >
+<title>57 (20,313,884,967 ns, 1.49%)</title><rect x="1166.3" y="149" width="20.6" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
+<text  x="1169.32" y="159.5" ></text>
+</g>
+<g >
+<title>60 (348,792,314 ns, 0.03%)</title><rect x="1140.2" y="197" width="0.3" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
+<text  x="1143.18" y="207.5" ></text>
+</g>
+<g >
+<title>19 (99,065,974,648 ns, 7.27%)</title><rect x="722.3" y="261" width="100.3" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
+<text  x="725.26" y="271.5" >19</text>
+</g>
+<g >
+<title>106 (413,591,993 ns, 0.03%)</title><rect x="114.1" y="133" width="0.5" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
+<text  x="117.14" y="143.5" ></text>
+</g>
+<g >
+<title>39 (55,305,600,640 ns, 4.06%)</title><rect x="1219.1" y="261" width="56.0" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
+<text  x="1222.09" y="271.5" >39</text>
+</g>
+<g >
+<title>58 (348,792,314 ns, 0.03%)</title><rect x="1140.2" y="165" width="0.3" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
+<text  x="1143.18" y="175.5" ></text>
+</g>
+<g >
+<title>1 (86,748,495,207 ns, 6.37%)</title><rect x="512.9" y="261" width="87.8" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="515.87" y="271.5" >1</text>
+</g>
+<g >
+<title>9 (102,262,611,987 ns, 7.51%)</title><rect x="10.6" y="213" width="103.5" height="15.0" fill="rgb(245,185,44)" rx="2" ry="2" />
+<text  x="13.57" y="223.5" >9</text>
+</g>
+<g >
+<title>93 (822,326,749 ns, 0.06%)</title><rect x="1389.2" y="261" width="0.8" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
+<text  x="1392.17" y="271.5" ></text>
+</g>
+<g >
+<title>56 (348,792,314 ns, 0.03%)</title><rect x="1140.2" y="133" width="0.3" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
+<text  x="1143.18" y="143.5" ></text>
+</g>
+<g >
+<title>113 (149,268,570 ns, 0.01%)</title><rect x="10.4" y="261" width="0.1" height="15.0" fill="rgb(251,211,50)" rx="2" ry="2" />
+<text  x="13.38" y="271.5" ></text>
+</g>
+<g >
+<title>37 (55,305,600,640 ns, 4.06%)</title><rect x="1219.1" y="229" width="56.0" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
+<text  x="1222.09" y="239.5" >37</text>
+</g>
+<g >
+<title>77 (8,429,029,420 ns, 0.62%)</title><rect x="114.1" y="165" width="8.6" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
+<text  x="117.14" y="175.5" ></text>
+</g>
+<g >
+<title>31 (60,003,286,911 ns, 4.40%)</title><rect x="600.7" y="277" width="60.8" height="15.0" fill="rgb(217,57,13)" rx="2" ry="2" />
+<text  x="603.72" y="287.5" >31</text>
+</g>
+<g >
+<title>15 (629,513,527 ns, 0.05%)</title><rect x="416.3" y="213" width="0.7" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
+<text  x="419.34" y="223.5" ></text>
+</g>
+<g >
+<title>5 (112,613,114,780 ns, 8.26%)</title><rect x="1275.1" y="277" width="114.1" height="15.0" fill="rgb(221,74,17)" rx="2" ry="2" />
+<text  x="1278.11" y="287.5" >5</text>
+</g>
+<g >
+<title>51 (848,752,799 ns, 0.06%)</title><rect x="1186.9" y="181" width="0.8" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
+<text  x="1189.89" y="191.5" ></text>
+</g>
+<g >
+<title>91 (629,513,527 ns, 0.05%)</title><rect x="416.3" y="245" width="0.7" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
+<text  x="419.34" y="255.5" ></text>
+</g>
+<g >
+<title>64 (20,322,510,342 ns, 1.49%)</title><rect x="1166.3" y="261" width="20.6" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
+<text  x="1169.31" y="271.5" ></text>
+</g>
+<g >
+<title>61 (348,792,314 ns, 0.03%)</title><rect x="1140.2" y="213" width="0.3" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="1143.18" y="223.5" ></text>
+</g>
+<g >
+<title>13 (110,696,271,278 ns, 8.12%)</title><rect x="10.6" y="277" width="112.1" height="15.0" fill="rgb(217,57,13)" rx="2" ry="2" />
+<text  x="13.57" y="287.5" >13</text>
+</g>
+<g >
+<title>62 (348,957,480 ns, 0.03%)</title><rect x="1140.2" y="229" width="0.3" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
+<text  x="1143.18" y="239.5" ></text>
+</g>
+<g >
+<title>2 (253,243,630,965 ns, 18.59%)</title><rect x="822.6" y="277" width="256.5" height="15.0" fill="rgb(240,163,39)" rx="2" ry="2" />
+<text  x="825.60" y="287.5" >2</text>
+</g>
+<g >
+<title>50 (848,752,799 ns, 0.06%)</title><rect x="1186.9" y="245" width="0.8" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
+<text  x="1189.89" y="255.5" ></text>
+</g>
+<g >
+<title>all (1,362,569,608,954 ns, 100%)</title><rect x="10.0" y="309" width="1380.0" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="13.00" y="319.5" ></text>
+</g>
+<g >
+<title>73 (8,015,437,427 ns, 0.59%)</title><rect x="114.6" y="101" width="8.1" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
+<text  x="117.56" y="111.5" ></text>
+</g>
+<g >
+<title>98 (101,343,917 ns, 0.01%)</title><rect x="1219.0" y="229" width="0.1" height="15.0" fill="rgb(233,131,31)" rx="2" ry="2" />
+<text  x="1221.99" y="239.5" ></text>
+</g>
+<g >
+<title>100 (603,130,143 ns, 0.04%)</title><rect x="10.6" y="181" width="0.6" height="15.0" fill="rgb(226,100,24)" rx="2" ry="2" />
+<text  x="13.57" y="191.5" ></text>
+</g>
+<g >
+<title>1 (28,306,164,394 ns, 2.08%)</title><rect x="1111.5" y="245" width="28.7" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="1114.50" y="255.5" >1</text>
+</g>
+<g >
+<title>59 (348,792,314 ns, 0.03%)</title><rect x="1140.2" y="181" width="0.3" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
+<text  x="1143.18" y="191.5" ></text>
+</g>
+<g >
+<title>84 (7,915,981,741 ns, 0.58%)</title><rect x="1178.9" y="117" width="8.0" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
+<text  x="1181.87" y="127.5" ></text>
+</g>
+<g >
+<title>15 (98,802,295,091 ns, 7.25%)</title><rect x="722.5" y="197" width="100.1" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
+<text  x="725.53" y="207.5" >15</text>
+</g>
+<g >
+<title>30 (86,748,495,207 ns, 6.37%)</title><rect x="512.9" y="293" width="87.8" height="15.0" fill="rgb(224,87,20)" rx="2" ry="2" />
+<text  x="515.87" y="303.5" >30</text>
+</g>
+<g >
+<title>92 (822,326,749 ns, 0.06%)</title><rect x="1389.2" y="245" width="0.8" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
+<text  x="1392.17" y="255.5" ></text>
+</g>
+<g >
+<title>26 (94,340,324,098 ns, 6.92%)</title><rect x="417.3" y="261" width="95.6" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
+<text  x="420.32" y="271.5" >26</text>
+</g>
+<g >
+<title>83 (7,915,981,741 ns, 0.58%)</title><rect x="1178.9" y="101" width="8.0" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
+<text  x="1181.87" y="111.5" ></text>
+</g>
+<g >
+<title>97 (629,513,527 ns, 0.05%)</title><rect x="416.3" y="277" width="0.7" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
+<text  x="419.34" y="287.5" ></text>
+</g>
+<g >
+<title>55 (105,515,072 ns, 0.01%)</title><rect x="1140.2" y="117" width="0.1" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
+<text  x="1143.18" y="127.5" ></text>
+</g>
+<g >
+<title>88 (848,752,799 ns, 0.06%)</title><rect x="1186.9" y="197" width="0.8" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
+<text  x="1189.89" y="207.5" ></text>
+</g>
+<g >
+<title>49 (20,000,465,735 ns, 1.47%)</title><rect x="1187.8" y="213" width="20.3" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
+<text  x="1190.79" y="223.5" ></text>
+</g>
+<g >
+<title>11 (110,696,271,278 ns, 8.12%)</title><rect x="10.6" y="245" width="112.1" height="15.0" fill="rgb(230,117,28)" rx="2" ry="2" />
+<text  x="13.57" y="255.5" >11</text>
+</g>
+<g >
+<title>1 (55,305,600,640 ns, 4.06%)</title><rect x="1219.1" y="181" width="56.0" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="1222.09" y="191.5" >1</text>
+</g>
+<g >
+<title>54 (20,894,399,796 ns, 1.53%)</title><rect x="1186.9" y="293" width="21.2" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
+<text  x="1189.89" y="303.5" ></text>
+</g>
+<g >
+<title>22 (97,830,509,009 ns, 7.18%)</title><rect x="122.7" y="293" width="99.1" height="15.0" fill="rgb(217,57,13)" rx="2" ry="2" />
+<text  x="125.70" y="303.5" >22</text>
+</g>
+<g >
+<title>74 (8,015,437,427 ns, 0.59%)</title><rect x="114.6" y="117" width="8.1" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
+<text  x="117.56" y="127.5" ></text>
+</g>
+<g >
+<title>101 (603,130,143 ns, 0.04%)</title><rect x="10.6" y="197" width="0.6" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="13.57" y="207.5" ></text>
+</g>
+<g >
+<title>1 (12,397,903,226 ns, 0.91%)</title><rect x="1166.3" y="101" width="12.6" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="1169.32" y="111.5" ></text>
+</g>
+<g >
+<title>69 (10,801,701,964 ns, 0.79%)</title><rect x="1208.1" y="293" width="10.9" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
+<text  x="1211.05" y="303.5" ></text>
+</g>
+<g >
+<title>10 (102,262,611,987 ns, 7.51%)</title><rect x="10.6" y="229" width="103.5" height="15.0" fill="rgb(236,146,35)" rx="2" ry="2" />
+<text  x="13.57" y="239.5" >10</text>
+</g>
+<g >
+<title>16 (99,065,874,649 ns, 7.27%)</title><rect x="722.3" y="213" width="100.3" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="725.26" y="223.5" >16</text>
+</g>
+<g >
+<title>85 (848,752,799 ns, 0.06%)</title><rect x="1186.9" y="117" width="0.8" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
+<text  x="1189.89" y="127.5" ></text>
+</g>
+<g >
+<title>45 (28,306,264,393 ns, 2.08%)</title><rect x="1111.5" y="293" width="28.7" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
+<text  x="1114.50" y="303.5" >45</text>
+</g>
+<g >
+<title>91 (822,326,749 ns, 0.06%)</title><rect x="1389.2" y="229" width="0.8" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
+<text  x="1392.17" y="239.5" ></text>
+</g>
+<g >
+<title>86 (848,752,799 ns, 0.06%)</title><rect x="1186.9" y="133" width="0.8" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
+<text  x="1189.89" y="143.5" ></text>
+</g>
+<g >
+<title>7 (101,659,481,844 ns, 7.46%)</title><rect x="11.2" y="181" width="102.9" height="15.0" fill="rgb(208,14,3)" rx="2" ry="2" />
+<text  x="14.18" y="191.5" >7</text>
+</g>
+<g >
+<title>53 (20,894,199,798 ns, 1.53%)</title><rect x="1186.9" y="277" width="21.2" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
+<text  x="1189.89" y="287.5" ></text>
+</g>
+<g >
+<title>82 (7,915,981,741 ns, 0.58%)</title><rect x="1178.9" y="85" width="8.0" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
+<text  x="1181.87" y="95.5" ></text>
+</g>
+<g >
+<title>1 (60,003,286,911 ns, 4.40%)</title><rect x="600.7" y="261" width="60.8" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="603.72" y="271.5" >1</text>
+</g>
+<g >
+<title>70 (8,014,360,304 ns, 0.59%)</title><rect x="114.6" y="53" width="8.1" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="117.56" y="63.5" ></text>
+</g>
+<g >
+<title>107 (377,217,972 ns, 0.03%)</title><rect x="10.0" y="277" width="0.4" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
+<text  x="13.00" y="287.5" ></text>
+</g>
+<g >
+<title>42 (32,012,386,319 ns, 2.35%)</title><rect x="1079.1" y="293" width="32.4" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
+<text  x="1082.08" y="303.5" >42</text>
+</g>
+<g >
+<title>66 (10,790,770,101 ns, 0.79%)</title><rect x="1208.1" y="245" width="10.9" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
+<text  x="1211.06" y="255.5" ></text>
+</g>
+<g >
+<title>110 (360,327,524 ns, 0.03%)</title><rect x="1140.2" y="277" width="0.3" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="1143.17" y="287.5" ></text>
+</g>
+<g >
+<title>72 (8,015,437,427 ns, 0.59%)</title><rect x="114.6" y="85" width="8.1" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
+<text  x="117.56" y="95.5" ></text>
+</g>
+<g >
+<title>63 (20,322,510,342 ns, 1.49%)</title><rect x="1166.3" y="245" width="20.6" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
+<text  x="1169.31" y="255.5" ></text>
+</g>
+<g >
+<title>1 (822,158,124 ns, 0.06%)</title><rect x="1389.2" y="181" width="0.8" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="1392.17" y="191.5" ></text>
+</g>
+<g >
+<title>75 (8,015,437,427 ns, 0.59%)</title><rect x="114.6" y="133" width="8.1" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
+<text  x="117.56" y="143.5" ></text>
+</g>
+<g >
+<title>28 (94,680,939,929 ns, 6.95%)</title><rect x="417.0" y="293" width="95.9" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
+<text  x="419.97" y="303.5" >28</text>
+</g>
+<g >
+<title>33 (60,000,445,119 ns, 4.40%)</title><rect x="661.5" y="277" width="60.8" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
+<text  x="664.50" y="287.5" >33</text>
+</g>
+<g >
+<title>32 (60,003,286,911 ns, 4.40%)</title><rect x="600.7" y="293" width="60.8" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
+<text  x="603.72" y="303.5" >32</text>
+</g>
+<g >
+<title>116 (101,852,541 ns, 0.01%)</title><rect x="1219.0" y="261" width="0.1" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
+<text  x="1221.99" y="271.5" ></text>
+</g>
+<g >
+<title>50 (848,752,799 ns, 0.06%)</title><rect x="1186.9" y="165" width="0.8" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
+<text  x="1189.89" y="175.5" ></text>
+</g>
+<g >
+<title>79 (8,429,029,420 ns, 0.62%)</title><rect x="114.1" y="197" width="8.6" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
+<text  x="117.14" y="207.5" ></text>
+</g>
+<g >
+<title>12 (110,696,271,278 ns, 8.12%)</title><rect x="10.6" y="261" width="112.1" height="15.0" fill="rgb(224,87,20)" rx="2" ry="2" />
+<text  x="13.57" y="271.5" >12</text>
+</g>
+<g >
+<title>90 (822,326,749 ns, 0.06%)</title><rect x="1389.2" y="213" width="0.8" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
+<text  x="1392.17" y="223.5" ></text>
+</g>
+<g >
+<title>108 (526,486,542 ns, 0.04%)</title><rect x="10.0" y="293" width="0.5" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
+<text  x="13.00" y="303.5" ></text>
+</g>
+<g >
+<title>103 (413,591,993 ns, 0.03%)</title><rect x="114.1" y="85" width="0.5" height="15.0" fill="rgb(207,11,2)" rx="2" ry="2" />
+<text  x="117.14" y="95.5" ></text>
+</g>
+<g >
+<title>48 (20,000,465,735 ns, 1.47%)</title><rect x="1187.8" y="197" width="20.3" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
+<text  x="1190.79" y="207.5" ></text>
+</g>
+<g >
+<title>56 (20,313,884,967 ns, 1.49%)</title><rect x="1166.3" y="133" width="20.6" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
+<text  x="1169.32" y="143.5" ></text>
+</g>
+<g >
+<title>15 (822,158,124 ns, 0.06%)</title><rect x="1389.2" y="197" width="0.8" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
+<text  x="1392.17" y="207.5" ></text>
+</g>
+<g >
+<title>1 (8,014,360,304 ns, 0.59%)</title><rect x="114.6" y="37" width="8.1" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="117.56" y="47.5" ></text>
+</g>
+<g >
+<title>63 (348,957,480 ns, 0.03%)</title><rect x="1140.2" y="245" width="0.3" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
+<text  x="1143.18" y="255.5" ></text>
+</g>
+<g >
+<title>1 (10,790,770,101 ns, 0.79%)</title><rect x="1208.1" y="229" width="10.9" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="1211.06" y="239.5" ></text>
+</g>
+<g >
+<title>57 (348,792,314 ns, 0.03%)</title><rect x="1140.2" y="149" width="0.3" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
+<text  x="1143.18" y="159.5" ></text>
+</g>
+<g >
+<title>1 (25,388,008,590 ns, 1.86%)</title><rect x="1140.5" y="261" width="25.7" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="1143.54" y="271.5" >1</text>
+</g>
+<g >
+<title>98 (602,623,729 ns, 0.04%)</title><rect x="10.6" y="149" width="0.6" height="15.0" fill="rgb(233,131,31)" rx="2" ry="2" />
+<text  x="13.57" y="159.5" ></text>
+</g>
+<g >
+<title>35 (55,305,600,640 ns, 4.06%)</title><rect x="1219.1" y="197" width="56.0" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
+<text  x="1222.09" y="207.5" >35</text>
+</g>
+<g >
+<title>1 (97,830,409,010 ns, 7.18%)</title><rect x="122.7" y="261" width="99.1" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="125.70" y="271.5" >1</text>
+</g>
+<g >
+<title>111 (193,138,081 ns, 0.01%)</title><rect x="722.3" y="181" width="0.2" height="15.0" fill="rgb(213,41,9)" rx="2" ry="2" />
+<text  x="725.26" y="191.5" ></text>
+</g>
+<g >
+<title>71 (8,015,437,427 ns, 0.59%)</title><rect x="114.6" y="69" width="8.1" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
+<text  x="117.56" y="79.5" ></text>
+</g>
+<g >
+<title>78 (8,429,029,420 ns, 0.62%)</title><rect x="114.1" y="181" width="8.6" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
+<text  x="117.14" y="191.5" ></text>
+</g>
+<g >
+<title>59 (20,313,884,967 ns, 1.49%)</title><rect x="1166.3" y="181" width="20.6" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
+<text  x="1169.32" y="191.5" ></text>
+</g>
+<g >
+<title>94 (828,930,292 ns, 0.06%)</title><rect x="1389.2" y="277" width="0.8" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
+<text  x="1392.16" y="287.5" ></text>
+</g>
+<g >
+<title>1 (253,243,630,965 ns, 18.59%)</title><rect x="822.6" y="261" width="256.5" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="825.60" y="271.5" >1</text>
+</g>
+<g >
+<title>104 (413,591,993 ns, 0.03%)</title><rect x="114.1" y="101" width="0.5" height="15.0" fill="rgb(251,211,50)" rx="2" ry="2" />
+<text  x="117.14" y="111.5" ></text>
+</g>
+<g >
+<title>8 (101,659,481,844 ns, 7.46%)</title><rect x="11.2" y="197" width="102.9" height="15.0" fill="rgb(251,215,51)" rx="2" ry="2" />
+<text  x="14.18" y="207.5" >8</text>
+</g>
+<g >
+<title>36 (55,305,600,640 ns, 4.06%)</title><rect x="1219.1" y="213" width="56.0" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
+<text  x="1222.09" y="223.5" >36</text>
+</g>
+<g >
+<title>24 (94,347,341,945 ns, 6.92%)</title><rect x="320.8" y="277" width="95.5" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
+<text  x="323.78" y="287.5" >24</text>
+</g>
+<g >
+<title>34 (60,000,445,119 ns, 4.40%)</title><rect x="661.5" y="293" width="60.8" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="664.50" y="303.5" >34</text>
+</g>
+<g >
+<title>3 (352,309,605,613 ns, 25.86%)</title><rect x="722.3" y="293" width="356.8" height="15.0" fill="rgb(234,133,31)" rx="2" ry="2" />
+<text  x="725.26" y="303.5" >3</text>
+</g>
+<g >
+<title>76 (8,429,029,420 ns, 0.62%)</title><rect x="114.1" y="149" width="8.6" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
+<text  x="117.14" y="159.5" ></text>
+</g>
+<g >
+<title>89 (848,752,799 ns, 0.06%)</title><rect x="1186.9" y="229" width="0.8" height="15.0" fill="rgb(233,131,31)" rx="2" ry="2" />
+<text  x="1189.89" y="239.5" ></text>
+</g>
+<g >
+<title>1 (60,000,445,119 ns, 4.40%)</title><rect x="661.5" y="261" width="60.8" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="664.50" y="271.5" >1</text>
+</g>
+<g >
+<title>43 (28,306,164,394 ns, 2.08%)</title><rect x="1111.5" y="261" width="28.7" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="1114.50" y="271.5" >43</text>
+</g>
+</g>
+</svg>

@@ -180,7 +180,21 @@ type Writer struct {
 	// StreamRefreshInterval is how often a stream's last_seen is rewritten. Trades
 	// freshness of /v1/labels against write volume.
 	StreamRefreshInterval time.Duration
+	// CopyMode selects how a batch reaches the hypertable: CopyModeDirect copies
+	// straight into logs and falls back to staging only when a redelivered record
+	// trips the dedup index; CopyModeStaging always goes through the temp table
+	// and INSERT ... ON CONFLICT (ADR-0002 §2). Direct is the default since phase 8
+	// measured it at roughly 1.3x the writer throughput of staging (ADR-0008,
+	// docs/benchmarks); staging remains for a deployment where replays are the
+	// norm rather than the exception.
+	CopyMode string
 }
+
+// Writer.CopyMode values.
+const (
+	CopyModeStaging = "staging"
+	CopyModeDirect  = "direct"
+)
 
 // Queue is the NATS JetStream connection.
 type Queue struct {
@@ -442,6 +456,7 @@ func Load() (*Config, error) {
 			RetryMaxDelay:         e.dur("WRITER_RETRY_MAX_DELAY", 5*time.Second),
 			StreamCacheSize:       e.int("WRITER_STREAM_CACHE_SIZE", 8192),
 			StreamRefreshInterval: e.dur("WRITER_STREAM_REFRESH_INTERVAL", 5*time.Minute),
+			CopyMode:              e.str("WRITER_COPY_MODE", CopyModeDirect),
 		},
 		Queue: Queue{
 			URL:            e.str("QUEUE_URL", "nats://nats:4222"),
@@ -767,6 +782,12 @@ func (w *Writer) Validate() error {
 	}
 	if w.FlushInterval <= 0 {
 		bad("writer flush interval must be positive, got %s", w.FlushInterval)
+	}
+	// Empty is allowed and means staging, the conservative path, so a Writer built
+	// as a struct literal (tests, embedding callers) gets the ADR-0002 behavior
+	// without knowing the knob exists.
+	if w.CopyMode != "" && w.CopyMode != CopyModeStaging && w.CopyMode != CopyModeDirect {
+		bad("writer copy mode must be %q or %q, got %q", CopyModeStaging, CopyModeDirect, w.CopyMode)
 	}
 	if w.QueueDepth < 1 {
 		bad("writer queue depth must be at least 1, got %d", w.QueueDepth)

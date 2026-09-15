@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -139,11 +140,18 @@ func (s *service) process(ctx context.Context, batch *logaggv1.LogBatch) *logagg
 	// Re-marshaled rather than forwarding the received bytes, because the invalid
 	// records have been filtered out and only the survivors should reach the queue.
 	// Letting one bad record through would poison every redelivery of the batch.
-	payload, err := proto.Marshal(&logaggv1.LogBatch{
+	//
+	// Into a pooled buffer: both publishes below copy the bytes into their
+	// connection's write buffer before returning, so the payload is dead by the
+	// time this function returns and can be reused. The baseline alloc profile had
+	// this marshal at 15% of all bytes allocated (docs/benchmarks).
+	buf := payloadPool.Get().(*[]byte) //nolint:errcheck // pool holds one type
+	payload, err := proto.MarshalOptions{}.MarshalAppend((*buf)[:0], &logaggv1.LogBatch{
 		BatchId: id,
 		Labels:  batch.GetLabels(),
 		Records: valid,
 	})
+	*buf = payload
 	if err != nil {
 		s.log.Error("encoding batch failed",
 			slog.String("batch_id", id),
@@ -160,8 +168,13 @@ func (s *service) process(ctx context.Context, batch *logaggv1.LogBatch) *logagg
 		payload: payload,
 		records: len(valid),
 	}); err != nil {
+		// Not recycled: on a client hang-up the publisher still owns the job and
+		// may be writing the payload. Every other failure is finished with it, but
+		// a leaked buffer is just garbage while a reused live one is corruption,
+		// so the rare error path takes the safe side.
 		return s.publishFailed(id, subject, streamID, received, len(valid), err)
 	}
+	defer payloadPool.Put(buf)
 
 	s.countAccepted(labels.Service, valid)
 
@@ -181,6 +194,9 @@ func (s *service) process(ctx context.Context, batch *logaggv1.LogBatch) *logagg
 		Rejected: uint32(rejected),   //nolint:gosec // bounded by MaxRecvMsgSize
 	})
 }
+
+// payloadPool holds marshal buffers for queue payloads; see process.
+var payloadPool = sync.Pool{New: func() any { b := make([]byte, 0, 64<<10); return &b }}
 
 // countAccepted increments the accepted counter once per (service, level)
 // present in the batch rather than once per record, since a batch is one

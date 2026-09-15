@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"reflect"
 	"testing"
 	"time"
 
@@ -119,26 +120,38 @@ func TestCopyRowMatchesColumnOrder(t *testing.T) {
 		Fields:   map[string]string{"b": "2", "a": "1"},
 	}
 
-	row := copyRow(&rec)
+	var cr copyRow
+	row := cr.fill(&rec)
 	if len(row) != len(logColumns) {
 		t.Fatalf("copyRow returned %d values for %d columns", len(row), len(logColumns))
 	}
 
+	// Values travel as pointers so nothing is boxed; deref to compare.
 	want := []any{at, int64(-42), int64(9), int16(model.LevelError), "boom"}
 	for i, w := range want {
-		if row[i] != w {
-			t.Errorf("column %s = %#v, want %#v", logColumns[i], row[i], w)
+		if got := reflect.ValueOf(row[i]).Elem().Interface(); got != w {
+			t.Errorf("column %s = %#v, want %#v", logColumns[i], got, w)
 		}
 	}
-	if got := string(row[5].([]byte)); got != "0123456789abcdef" {
+	if got := string(*row[5].(*[]byte)); got != "0123456789abcdef" {
 		t.Errorf("trace_id = %q", got)
 	}
-	if got := string(row[6].([]byte)); got != "01234567" {
+	if got := string(*row[6].(*[]byte)); got != "01234567" {
 		t.Errorf("span_id = %q", got)
 	}
 	// encoding/json sorts map keys, so the JSONB bytes are stable across runs.
-	if got := string(row[7].([]byte)); got != `{"a":"1","b":"2"}` {
+	if got := string(*row[7].(*[]byte)); got != `{"a":"1","b":"2"}` {
 		t.Errorf("fields = %s", got)
+	}
+
+	// The buffer is reused across rows, so a second record must not see the first
+	// one's optional columns.
+	plain := model.LogRecord{Time: at, Message: "plain"}
+	row = cr.fill(&plain)
+	for _, i := range []int{5, 6, 7} {
+		if row[i] != nil {
+			t.Errorf("column %s = %#v after a bare record, want nil", logColumns[i], row[i])
+		}
 	}
 }
 
@@ -146,14 +159,41 @@ func TestCopyRowUsesNullForAbsentOptionals(t *testing.T) {
 	t.Parallel()
 
 	rec := model.LogRecord{Time: time.Now(), Message: "plain"}
-	row := copyRow(&rec)
+	var cr copyRow
+	row := cr.fill(&rec)
 
 	// nil rather than an empty slice or "{}": NULL costs nothing per row, while an
 	// empty JSONB value costs bytes on every row that has no fields.
 	for _, i := range []int{5, 6, 7} {
-		if v, ok := row[i].([]byte); !ok || v != nil {
-			t.Errorf("column %s = %#v, want a nil []byte", logColumns[i], row[i])
+		if row[i] != nil {
+			t.Errorf("column %s = %#v, want nil", logColumns[i], row[i])
 		}
+	}
+}
+
+// The pool hands back cleared slices: a recycled slice must not leak the previous
+// shipment's records into the next one.
+func TestRecordPoolRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	s := NewRecords(3)
+	s = append(s, model.LogRecord{Message: "leak"}, model.LogRecord{Message: "leak"})
+	RecycleRecords(s)
+
+	again := NewRecords(3)
+	if len(again) != 0 {
+		t.Fatalf("recycled slice has len %d, want 0", len(again))
+	}
+	if cap(again) < 3 {
+		t.Fatalf("recycled slice has cap %d, want >= 3", cap(again))
+	}
+	if full := again[:cap(again)]; full[0].Message != "" || full[1].Message != "" {
+		t.Errorf("recycled slice still holds records: %+v", full[:2])
+	}
+
+	// Asking for more than any pooled slice holds allocates rather than failing.
+	if big := NewRecords(100_000); cap(big) < 100_000 {
+		t.Errorf("NewRecords(100000) cap = %d", cap(big))
 	}
 }
 

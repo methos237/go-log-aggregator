@@ -168,16 +168,29 @@ func TestWriterInsertsOneMillionRecords(t *testing.T) {
 		accepted, elapsed.Round(time.Millisecond), float64(accepted)/elapsed.Seconds())
 }
 
+// copyModes are the two write paths; every dedup guarantee has to hold on both,
+// since direct mode is only safe because it falls back to staging on a replay.
+var copyModes = []string{config.CopyModeStaging, config.CopyModeDirect}
+
 // TestWriterDeduplicatesOnReplay is the at-least-once guarantee. A redelivered batch
 // must leave the row count unchanged instead of erroring or duplicating.
 func TestWriterDeduplicatesOnReplay(t *testing.T) {
 	t.Parallel()
+	for _, mode := range copyModes {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			testWriterDeduplicatesOnReplay(t, mode)
+		})
+	}
+}
 
+func testWriterDeduplicatesOnReplay(t *testing.T, mode string) {
 	pool, _ := migratedDB(t)
 	ctx := testContext(t)
 
 	cfg := writerConfig()
 	cfg.BatchSize = 200
+	cfg.CopyMode = mode
 	w, reg := newWriter(t, pool, cfg)
 
 	labels := model.LabelSet{Service: "api", Host: "node-1", Env: "prod"}
@@ -202,6 +215,8 @@ func TestWriterDeduplicatesOnReplay(t *testing.T) {
 	submit(w)
 	require.NoError(t, w.Close(mustDeadline(t, time.Minute)))
 	require.Equal(t, int64(size), countLogs(ctx, t, pool))
+	require.Zero(t, counterValue(t, reg, "logagg_storage_direct_copy_fallbacks_total"),
+		"first delivery must not trip the dedup index")
 
 	// Same records, same timestamps and sequence numbers: exactly what JetStream
 	// redelivery looks like after a crash between the write and the ack.
@@ -215,6 +230,10 @@ func TestWriterDeduplicatesOnReplay(t *testing.T) {
 		"a full replay should insert nothing")
 	require.Equal(t, float64(size), counterValue(t, reg2, "logagg_storage_rows_deduplicated_total"),
 		"the dedup counter should account for every replayed row")
+	if mode == config.CopyModeDirect {
+		require.Equal(t, float64(size/200), counterValue(t, reg2, "logagg_storage_direct_copy_fallbacks_total"),
+			"every replayed batch should have fallen back to staging")
+	}
 
 	// And the first writer's counters should not have been touched by the replay.
 	require.Equal(t, float64(size), counterValue(t, reg, "logagg_storage_rows_inserted_total"))
@@ -224,11 +243,21 @@ func TestWriterDeduplicatesOnReplay(t *testing.T) {
 // batch where some records are new.
 func TestWriterHandlesPartialReplay(t *testing.T) {
 	t.Parallel()
+	for _, mode := range copyModes {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			testWriterHandlesPartialReplay(t, mode)
+		})
+	}
+}
 
+func testWriterHandlesPartialReplay(t *testing.T, mode string) {
 	pool, _ := migratedDB(t)
 	ctx := testContext(t)
 
-	w, _ := newWriter(t, pool, writerConfig())
+	cfg := writerConfig()
+	cfg.CopyMode = mode
+	w, _ := newWriter(t, pool, cfg)
 	stream := model.NewStream(model.LabelSet{Service: "api", Host: "h", Env: "prod"}, time.Now())
 	base := time.Now().Add(-time.Hour).Truncate(time.Millisecond)
 
@@ -238,7 +267,7 @@ func TestWriterHandlesPartialReplay(t *testing.T) {
 	require.Equal(t, int64(100), countLogs(ctx, t, pool))
 
 	// Records 50..149: half already stored, half new.
-	w2, reg := newWriter(t, pool, writerConfig())
+	w2, reg := newWriter(t, pool, cfg)
 	_, err = w2.Submit(ctx, storage.Shipment{Stream: stream, Records: synthesize(stream.ID, base, 50, 100)})
 	require.NoError(t, err)
 	require.NoError(t, w2.Close(mustDeadline(t, time.Minute)))
