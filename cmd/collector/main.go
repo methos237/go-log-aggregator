@@ -215,10 +215,10 @@ func run(dsnOverride string) error {
 	// after the agent has already been told nothing about it. Refused at startup
 	// because the alternative is discovering it as records_dropped_total climbing
 	// under a reason nobody expected.
-	if maxPayload := q.MaxPayload(); int64(cfg.Ingest.MaxRecvMsgBytes) > maxPayload {
+	if maxPayload := q.MaxPayload(); int64(cfg.Ingest.MaxRecvMsgBytes)+queue.PublishHeaderBytes > maxPayload {
 		return fmt.Errorf(
-			"ingest accepts messages up to %d bytes but the broker accepts %d: lower %sINGEST_MAX_RECV_BYTES or raise the broker's max_payload",
-			cfg.Ingest.MaxRecvMsgBytes, maxPayload, config.EnvPrefix)
+			"ingest accepts messages up to %d bytes but the broker accepts %d including %d bytes of headers: lower %sINGEST_MAX_RECV_BYTES or raise the broker's max_payload",
+			cfg.Ingest.MaxRecvMsgBytes, maxPayload, queue.PublishHeaderBytes, config.EnvPrefix)
 	}
 
 	health.Register("queue", queue.HealthCheck(q))

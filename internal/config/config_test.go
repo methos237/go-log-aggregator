@@ -2,6 +2,7 @@ package config
 
 import (
 	"log/slog"
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -293,6 +294,11 @@ func TestValidate(t *testing.T) {
 		{
 			name:   "tracing sample ratio above one",
 			mutate: func(c *Config) { c.Tracing.SampleRatio = 1.5 },
+			want:   "tracing sample ratio must be between 0 and 1",
+		},
+		{
+			name:   "tracing sample ratio NaN",
+			mutate: func(c *Config) { c.Tracing.SampleRatio = math.NaN() },
 			want:   "tracing sample ratio must be between 0 and 1",
 		},
 		{

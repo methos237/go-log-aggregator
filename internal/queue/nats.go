@@ -238,6 +238,12 @@ func streamConfig(cfg config.Queue) jetstream.StreamConfig {
 	}
 }
 
+// PublishHeaderBytes is the room a publish's headers take out of the
+// broker's max_payload, which counts headers and payload together. A
+// traceparent header block is about 85 bytes; this leaves room for a
+// tracestate and the broker's own headers.
+const PublishHeaderBytes = 512
+
 // Publish sends payload and waits for JetStream to acknowledge it durably.
 //
 // The wait is the point. Returning before the ack would let the ingest handler

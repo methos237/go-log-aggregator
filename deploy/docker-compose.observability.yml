@@ -20,6 +20,25 @@ services:
     environment:
       LOGAGG_TRACING_ENABLED: "true"
       LOGAGG_TRACING_ENDPOINT: jaeger:4317
+      # Dogfooding: the agent also follows the collector's own container, so
+      # logagg ingests its own logs. Compose names the container from the
+      # project and service; collector output is one JSON record per line,
+      # which is what the extractor turns into fields. Lives here rather
+      # than in the base file so the chaos test, which kills collector-1 and
+      # runs without this overlay, does not spend its run reconnecting to a
+      # dead container.
+      LOGAGG_AGENT_CONTAINERS: logagg-collector-1
+      LOGAGG_AGENT_EXTRACT_JSON: "true"
+    volumes:
+      # Read-only Docker socket for the container source above. Read-only
+      # stops nothing on the API itself, so this is dev-stack-only.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # The socket's group inside the container, where the agent runs as a
+    # non-root user. Root on Docker Desktop; on a Linux host export
+    # DOCKER_GID=$(stat -c %g /var/run/docker.sock) first, or the source
+    # logs "permission denied" every 30s and ships nothing.
+    group_add:
+      - "${DOCKER_GID:-0}"
     depends_on:
       jaeger:
         condition: service_started

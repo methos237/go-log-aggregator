@@ -34,14 +34,6 @@ var ackCodeNames = []string{"accepted", "overloaded", "invalid", "internal"}
 
 var tracer = otel.Tracer("github.com/jamespolk/go-log-aggregator/internal/ingest")
 
-// ackLabel is the metric and span label for an ack code.
-func ackLabel(code logaggv1.AckCode) string {
-	if i := int(code) - 1; i >= 0 && i < len(ackCodeNames) {
-		return ackCodeNames[i]
-	}
-	return "unspecified"
-}
-
 // Stream is the bidirectional ingest RPC.
 //
 // One goroutine per stream, and the batches on a stream are handled strictly in
@@ -101,7 +93,7 @@ func (s *service) handle(ctx context.Context, batch *logaggv1.LogBatch) *logaggv
 	if ack.GetCode() != logaggv1.AckCode_ACK_CODE_ACCEPTED {
 		span.SetStatus(codes.Error, ack.GetDetail())
 	}
-	span.SetAttributes(attribute.String("ack.code", ackLabel(ack.GetCode())))
+	span.SetAttributes(attribute.String("ack.code", ackCodeLabel(ack.GetCode())))
 	return ack
 }
 

@@ -51,12 +51,13 @@ message is a child of `jetstream.publish` on whichever node published it. That
 hop is what turns two traces into one.
 
 The carrier is `queue.HeaderCarrier`, not the SDK's `propagation.HeaderCarrier`.
-The SDK's is `http.Header` underneath and canonicalizes keys on `Get`, while
-NATS preserves header key case on the wire. Against a real broker the
-`traceparent` came back in lowercase and a canonicalizing `Get` could not see
-it, so every writer span became a new trace. The unit tests, which never cross
-a broker, passed; the integration test caught it. `HeaderCarrier.Get` matches
-case-insensitively.
+The SDK's is `http.Header` underneath and canonicalizes keys on `Get`, so it
+only ever looks for `Traceparent`. Against a real broker the key did not
+round-trip with its case intact: written through the SDK carrier, it came back
+from JetStream as `traceparent`, the canonicalizing `Get` could not see it, and
+every writer span became a new trace. The unit tests, which never cross a
+broker, passed; the integration test caught it. `HeaderCarrier.Get` matches
+case-insensitively, so whichever side changes the case, the context survives.
 
 ### The writer's batch has one parent and many links
 

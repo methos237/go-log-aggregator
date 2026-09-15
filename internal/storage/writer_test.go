@@ -400,8 +400,14 @@ func TestWriteBatchParentsOnFirstTraceAndLinksTheRest(t *testing.T) {
 			TraceID: trace.TraceID{b}, SpanID: trace.SpanID{b}, TraceFlags: trace.FlagsSampled,
 		})
 	}
+	unsampled := trace.NewSpanContext(trace.SpanContextConfig{TraceID: trace.TraceID{9}, SpanID: trace.SpanID{9}})
 	untraced := Shipment{Stream: stream, Records: []model.LogRecord{{Time: now}}}
 	batch.add(&untraced, cache, now)
+	// An unsampled trace arrives first: it must not hold the parent slot once
+	// a sampled one shows up, or a parent-based sampler drops the write span.
+	first := Shipment{Stream: stream, Records: []model.LogRecord{{Time: now}},
+		Context: trace.ContextWithSpanContext(context.Background(), unsampled)}
+	batch.add(&first, cache, now)
 	for i := byte(1); i <= 3; i++ {
 		sh := Shipment{Stream: stream, Records: []model.LogRecord{{Time: now, Seq: int64(i)}},
 			Context: trace.ContextWithSpanContext(context.Background(), spanCtx(i))}
@@ -409,10 +415,13 @@ func TestWriteBatchParentsOnFirstTraceAndLinksTheRest(t *testing.T) {
 	}
 
 	if !batch.parent.Equal(spanCtx(1)) {
-		t.Errorf("parent = %v, want the first traced shipment", batch.parent)
+		t.Errorf("parent = %v, want the first sampled shipment", batch.parent)
 	}
-	if len(batch.links) != 2 {
-		t.Fatalf("links = %d, want 2 (every traced shipment after the first)", len(batch.links))
+	if len(batch.links) != 3 {
+		t.Fatalf("links = %d, want 3 (the unsampled one plus every sampled shipment after the first)", len(batch.links))
+	}
+	if !batch.links[0].SpanContext.Equal(unsampled) {
+		t.Error("the demoted unsampled parent was not kept as a link")
 	}
 	batch.reset()
 	if batch.parent.IsValid() || len(batch.links) != 0 {

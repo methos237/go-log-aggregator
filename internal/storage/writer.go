@@ -435,10 +435,10 @@ func (w *Writer) flush(dbCtx context.Context, log *slog.Logger, batch *writeBatc
 		w.metrics.BatchSize.Observe(float64(len(batch.records)))
 	}
 
-	// One span per flush, parented on the first shipment's trace and linked to
-	// the rest: a batch merges many publishes, and a trace can only have one
-	// parent. The first one therefore shows the whole agent-to-Postgres path
-	// as a tree; the others reach the write through a link.
+	// One span per flush, parented on the first sampled shipment's trace and
+	// linked to the rest: a batch merges many publishes, and a trace can only
+	// have one parent. That one therefore shows the whole agent-to-Postgres
+	// path as a tree; the others reach the write through a link.
 	ctx, span := tracer.Start(trace.ContextWithSpanContext(dbCtx, batch.parent), "writer.batch",
 		trace.WithLinks(batch.links...),
 		trace.WithAttributes(
@@ -695,8 +695,9 @@ type writeBatch struct {
 	// never sees a duplicate key, which ON CONFLICT DO UPDATE would reject.
 	streams map[model.StreamID]model.Stream
 	acks    []func(error)
-	// parent is the first traced shipment's span context and links the rest;
-	// see flush for why a batch cannot be a child of all of them.
+	// parent is the first sampled shipment's span context (or the first
+	// traced one, if none is sampled) and links hold the rest; see flush for
+	// why a batch cannot be a child of all of them.
 	parent trace.SpanContext
 	links  []trace.Link
 }
@@ -715,9 +716,17 @@ func (b *writeBatch) add(sh *Shipment, cache *streamCache, now time.Time) {
 	}
 	if sh.Context != nil {
 		if sc := trace.SpanContextFromContext(sh.Context); sc.IsValid() {
-			if !b.parent.IsValid() {
+			switch {
+			case !b.parent.IsValid():
 				b.parent = sc
-			} else {
+			case sc.IsSampled() && !b.parent.IsSampled():
+				// A parent-based sampler follows the parent, so an unsampled
+				// first shipment would drop the write span for every sampled
+				// one behind it. The first sampled context takes the parent
+				// slot and the previous holder becomes a link.
+				b.links = append(b.links, trace.Link{SpanContext: b.parent})
+				b.parent = sc
+			default:
 				b.links = append(b.links, trace.Link{SpanContext: sc})
 			}
 		}

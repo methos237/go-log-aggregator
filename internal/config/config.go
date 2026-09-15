@@ -715,7 +715,7 @@ func (c *Config) Validate() error {
 	if c.Tracing.Enabled && c.Tracing.Endpoint == "" {
 		bad("tracing endpoint must not be empty when tracing is enabled")
 	}
-	if r := c.Tracing.SampleRatio; r < 0 || r > 1 {
+	if r := c.Tracing.SampleRatio; !(r >= 0 && r <= 1) { // also rejects NaN
 		bad("tracing sample ratio must be between 0 and 1, got %v", r)
 	}
 	// Agent is deliberately not validated here: a collector process never

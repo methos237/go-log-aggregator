@@ -33,9 +33,10 @@ type Metrics struct {
 	// Consumed is the cost of at-least-once delivery, and a climbing ratio means
 	// batches are timing out before the writer finishes them.
 	Redeliveries prometheus.Counter
-	// Pending is the JetStream consumer's backlog as of the last message this
-	// node received: messages the stream holds that no consumer has been handed
-	// yet. Rising while Consumed is flat means the writers are the bottleneck.
+	// Pending is the JetStream consumer's backlog: messages the stream holds
+	// that no collector has been handed yet. Polled from the consumer, so it
+	// is current while this node is idle and identical on every node. Rising
+	// while Consumed is flat means the writers are the bottleneck.
 	Pending prometheus.Gauge
 	// Fanout counts batches copied to the live-tail subject. A failure here is a
 	// tail reader missing a batch, never an agent losing one, which is why it is
@@ -83,7 +84,7 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Namespace: observability.Namespace,
 			Subsystem: queueSubsystem,
 			Name:      "pending",
-			Help:      "JetStream messages not yet delivered to any consumer, as of the last delivery to this node.",
+			Help:      "JetStream messages not yet delivered to any consumer.",
 		}),
 
 		Fanout: f.NewCounterVec(prometheus.CounterOpts{

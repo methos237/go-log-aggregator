@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -551,18 +553,6 @@ func (s *Shipper) demoteRemaining(o outstanding) {
 // line is taken by pointer purely to keep gocritic's hugeParam check happy —
 // Line itself (see source.go) stays a plain value everywhere else,
 // including on the channel Run reads from.
-// levelOf reads the record's level from an extracted "level" field, accepting
-// every spelling model.ParseLevel does. No field, or one it does not
-// recognize, is LevelUnspecified: the model package's own answer for "no
-// level known", not a guess. Inference from the message text is deliberately
-// not attempted.
-func levelOf(fields map[string]string) model.Level {
-	if lvl, err := model.ParseLevel(fields["level"]); err == nil {
-		return lvl
-	}
-	return model.LevelUnspecified
-}
-
 func (s *Shipper) addLine(line *Line) {
 	labels, ok := s.labels(line.Source)
 	if !ok {
@@ -663,7 +653,14 @@ func (s *Shipper) newAccumulator(labels model.LabelSet) *accumulator {
 	// exactly this situation — a caller keeping a LabelSet past the
 	// lifetime of the call that produced it.
 	labels = labels.Clone()
-	envelope := &logaggv1.LogBatch{Labels: labels.Proto()}
+	// Sized with everything sendNow adds later, so a batch filled to
+	// MaxBatchBytes still fits under the collector's receive ceiling: a
+	// batch ID as long as the counter can make one, and a W3C traceparent.
+	envelope := &logaggv1.LogBatch{
+		BatchId:      fmt.Sprintf("agent-%d", uint64(math.MaxUint64)),
+		Labels:       labels.Proto(),
+		TraceContext: map[string]string{"traceparent": strings.Repeat("0", 55)},
+	}
 	return &accumulator{
 		labels:        labels,
 		overhead:      proto.Size(envelope),
@@ -770,7 +767,7 @@ func (s *Shipper) sendNow(batch *logaggv1.LogBatch, cursors map[string]Cursor, f
 	// ride along. A root span has no parent by definition, so the background
 	// context is the right one; the run context's cancellation must not end
 	// a span that an in-flight ack will still settle.
-	ctx, span := tracer.Start(context.Background(), "agent.ship", //nolint:contextcheck // root span, see above trace.WithSpanKind(trace.SpanKindProducer),
+	ctx, span := tracer.Start(context.Background(), "agent.ship", trace.WithSpanKind(trace.SpanKindProducer),
 		trace.WithAttributes(
 			attribute.String("batch.id", batch.GetBatchId()),
 			attribute.Int("batch.records", len(batch.GetRecords())),
@@ -835,11 +832,12 @@ func (s *Shipper) processAck(ack *logaggv1.Ack) {
 	o := s.pendingAcks[0]
 	s.pendingAcks = s.pendingAcks[1:]
 	s.metrics.Acks.WithLabelValues(ackLabel(ack.GetCode())).Inc()
+	// Ended here, before the demote paths below get a chance to end it with
+	// their generic text: the collector's reason is the useful one.
 	if ack.GetCode() == logaggv1.AckCode_ACK_CODE_ACCEPTED {
-		defer o.endSpan(codes.Ok, "")
+		o.endSpan(codes.Ok, "")
 	} else {
-		// Ending twice is a no-op, so the demote paths below may end it first.
-		defer o.endSpan(codes.Error, ackLabel(ack.GetCode())+": "+ack.GetDetail())
+		o.endSpan(codes.Error, ackLabel(ack.GetCode())+": "+ack.GetDetail())
 	}
 
 	switch ack.GetCode() {
@@ -969,6 +967,18 @@ func (s *Shipper) advanceCheckpoint(source string, cur Cursor) {
 		return
 	}
 	s.checkpoint.Set(source, cur)
+}
+
+// levelOf reads the record's level from an extracted "level" field, accepting
+// every spelling model.ParseLevel does. No field, or one it does not
+// recognize, is LevelUnspecified: the model package's own answer for "no
+// level known", not a guess. Inference from the message text is deliberately
+// not attempted.
+func levelOf(fields map[string]string) model.Level {
+	if lvl, err := model.ParseLevel(fields["level"]); err == nil {
+		return lvl
+	}
+	return model.LevelUnspecified
 }
 
 // countDropped records n records dropped for reason under this package's
