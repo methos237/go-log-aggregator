@@ -28,6 +28,7 @@ func TestNewMetricsRegistersEverything(t *testing.T) {
 	want := []string{
 		"logagg_queue_publish_duration_seconds",
 		"logagg_queue_published_bytes_total",
+		"logagg_queue_pending",
 	}
 	for _, name := range want {
 		if !seen[name] {

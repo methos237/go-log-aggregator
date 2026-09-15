@@ -9,6 +9,11 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 
@@ -26,6 +31,8 @@ const MaxAckDetailLen = 512
 
 // ackCodeNames are the metric label values for the codes this service returns.
 var ackCodeNames = []string{"accepted", "overloaded", "invalid", "internal"}
+
+var tracer = otel.Tracer("github.com/jamespolk/go-log-aggregator/internal/ingest")
 
 // Stream is the bidirectional ingest RPC.
 //
@@ -72,11 +79,32 @@ func (s *service) handle(ctx context.Context, batch *logaggv1.LogBatch) *logaggv
 	started := time.Now()
 	defer func() { s.metrics.BatchDuration.Observe(time.Since(started).Seconds()) }()
 
+	// The agent's ship span is the parent, carried in the batch because a
+	// bidirectional stream has no per-message metadata to put it in.
+	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.MapCarrier(batch.GetTraceContext()))
+	ctx, span := tracer.Start(ctx, "collector.ingest", trace.WithSpanKind(trace.SpanKindConsumer),
+		trace.WithAttributes(
+			attribute.String("batch.id", batch.GetBatchId()),
+			attribute.Int("batch.records", len(batch.GetRecords())),
+		))
+	defer span.End()
+
+	ack := s.process(ctx, batch)
+	if ack.GetCode() != logaggv1.AckCode_ACK_CODE_ACCEPTED {
+		span.SetStatus(codes.Error, ack.GetDetail())
+	}
+	span.SetAttributes(attribute.String("ack.code", ackCodeLabel(ack.GetCode())))
+	return ack
+}
+
+// process validates and publishes one batch and builds its ack.
+func (s *service) process(ctx context.Context, batch *logaggv1.LogBatch) *logaggv1.Ack {
 	id := batch.GetBatchId()
 	records := batch.GetRecords()
 	received := len(records)
 	if received > 0 {
 		s.metrics.RecordsReceived.Add(float64(received))
+		s.metrics.BytesReceived.Add(float64(proto.Size(batch)))
 	}
 
 	labels := model.LabelSetFromProto(batch.GetLabels())
@@ -91,6 +119,10 @@ func (s *service) handle(ctx context.Context, batch *logaggv1.LogBatch) *logaggv
 	// rather than trusting a wire field, so a stream ID can never disagree with the
 	// labels it is supposed to identify.
 	streamID := labels.ID()
+	trace.SpanFromContext(ctx).SetAttributes(
+		attribute.Int64("stream.id", int64(streamID)),
+		attribute.String("stream.service", labels.Service),
+	)
 
 	valid, firstErr := s.acceptable(streamID, records)
 	rejected := received - len(valid)
@@ -131,7 +163,7 @@ func (s *service) handle(ctx context.Context, batch *logaggv1.LogBatch) *logaggv
 		return s.publishFailed(id, subject, streamID, received, len(valid), err)
 	}
 
-	s.metrics.RecordsAccepted.Add(float64(len(valid)))
+	s.countAccepted(labels.Service, valid)
 
 	// After the durable ack, before the agent's. The tail copy is fire-and-forget,
 	// so a failure costs a tail reader one batch and the agent nothing; it is
@@ -148,6 +180,20 @@ func (s *service) handle(ctx context.Context, batch *logaggv1.LogBatch) *logaggv
 		Accepted: uint32(len(valid)), //nolint:gosec // bounded by MaxRecvMsgSize
 		Rejected: uint32(rejected),   //nolint:gosec // bounded by MaxRecvMsgSize
 	})
+}
+
+// countAccepted increments the accepted counter once per (service, level)
+// present in the batch rather than once per record, since a batch is one
+// service and rarely more than a couple of levels.
+func (s *service) countAccepted(service string, records []*logaggv1.LogRecord) {
+	// Records are already validated, so every level here is a known one.
+	byLevel := make(map[model.Level]int, 2)
+	for _, pb := range records {
+		byLevel[model.Level(pb.GetLevel())]++
+	}
+	for lvl, n := range byLevel {
+		s.metrics.RecordsAccepted.WithLabelValues(service, lvl.String()).Add(float64(n))
+	}
 }
 
 // acceptable filters the records that pass validation, returning them and the

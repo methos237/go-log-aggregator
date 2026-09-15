@@ -5,9 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
+	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
 
 	logaggv1 "github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1"
@@ -126,14 +133,29 @@ type accumulator struct {
 }
 
 // outstanding is one batch sent but not yet acknowledged.
+var tracer = otel.Tracer("github.com/jamespolk/go-log-aggregator/internal/agent")
+
 type outstanding struct {
 	batch         *logaggv1.LogBatch
 	sourceCursors map[string]Cursor
+	// span is the agent.ship span, open from Send until the ack that settles
+	// the batch or the stream loss that requeues it.
+	span trace.Span
 	// fromSpool marks a batch that was Peek'd from the spool rather than
 	// built fresh this run. Its bytes are still safely on disk,
 	// unreleased, until an ack says otherwise — see teardownStream and
 	// processAck for what that changes.
 	fromSpool bool
+}
+
+// endSpan closes the ship span. Nil-safe because tests build outstanding
+// entries by hand, and ending twice is a no-op in the SDK.
+func (o outstanding) endSpan(code codes.Code, description string) {
+	if o.span == nil {
+		return
+	}
+	o.span.SetStatus(code, description)
+	o.span.End()
 }
 
 // ackResult is what the receiver goroutine hands back to Run: exactly one of
@@ -304,6 +326,8 @@ func NewShipper(cfg *ShipperConfig) (*Shipper, error) {
 // ingest.DialLazy's own doc comment — only for a configuration problem
 // (a malformed TLS combination, say) caught at dial time, or for a failure
 // committing the checkpoint during the final flush.
+//
+//nolint:contextcheck // sendNow roots each agent.ship span in a background context on purpose; see its comment
 func (s *Shipper) Run(ctx context.Context, in <-chan Line) error {
 	client, err := ingest.DialLazy(s.ingestCfg)
 	if err != nil {
@@ -386,6 +410,8 @@ runLoop:
 // the next attempt rather than retrying immediately, so a down collector
 // does not turn this into a busy loop; on success it starts the receiver
 // goroutine and immediately looks for spool backlog to drain.
+//
+//nolint:contextcheck // same root-span reason as Run
 func (s *Shipper) tryConnect(ctx context.Context) {
 	stream, err := s.client.Stream(ctx)
 	if err != nil {
@@ -476,6 +502,7 @@ func (s *Shipper) demoteOutstanding(batches ...outstanding) {
 		if !o.fromSpool {
 			s.appendToSpool(o.batch, o.sourceCursors)
 		}
+		o.endSpan(codes.Error, "requeued to spool")
 	}
 }
 
@@ -541,17 +568,14 @@ func (s *Shipper) addLine(line *Line) {
 	}
 
 	rec := model.LogRecord{
-		Time: line.Time,
-		Seq:  line.Cursor.Start,
-		// Level inference is deliberately out of scope for this phase;
-		// LevelUnspecified is the model package's own answer for "no level
-		// known," not a guess.
-		Level:   model.LevelUnspecified,
+		Time:    line.Time,
+		Seq:     line.Cursor.Start,
 		Message: string(line.Bytes),
 	}
 	if s.extractor != nil {
 		rec.Fields = s.extractor.Fields(line.Bytes)
 	}
+	rec.Level = levelOf(rec.Fields)
 
 	var pb *logaggv1.LogRecord
 	var size int
@@ -629,7 +653,14 @@ func (s *Shipper) newAccumulator(labels model.LabelSet) *accumulator {
 	// exactly this situation — a caller keeping a LabelSet past the
 	// lifetime of the call that produced it.
 	labels = labels.Clone()
-	envelope := &logaggv1.LogBatch{Labels: labels.Proto()}
+	// Sized with everything sendNow adds later, so a batch filled to
+	// MaxBatchBytes still fits under the collector's receive ceiling: a
+	// batch ID as long as the counter can make one, and a W3C traceparent.
+	envelope := &logaggv1.LogBatch{
+		BatchId:      fmt.Sprintf("agent-%d", uint64(math.MaxUint64)),
+		Labels:       labels.Proto(),
+		TraceContext: map[string]string{"traceparent": strings.Repeat("0", 55)},
+	}
 	return &accumulator{
 		labels:        labels,
 		overhead:      proto.Size(envelope),
@@ -730,8 +761,23 @@ func (s *Shipper) dispatch(batch *logaggv1.LogBatch, cursors map[string]Cursor) 
 // exactly as if it had gone out cleanly and teardownStream — triggered
 // either here or later by the receiver goroutine — is what decides its fate.
 func (s *Shipper) sendNow(batch *logaggv1.LogBatch, cursors map[string]Cursor, fromSpool bool) {
+	// The trace starts here, not at the line read: a batch is the unit the
+	// rest of the pipeline sees. A spooled batch gets a fresh span per attempt
+	// with the map rebuilt, so a stale tracestate from a previous run cannot
+	// ride along. A root span has no parent by definition, so the background
+	// context is the right one; the run context's cancellation must not end
+	// a span that an in-flight ack will still settle.
+	ctx, span := tracer.Start(context.Background(), "agent.ship", trace.WithSpanKind(trace.SpanKindProducer),
+		trace.WithAttributes(
+			attribute.String("batch.id", batch.GetBatchId()),
+			attribute.Int("batch.records", len(batch.GetRecords())),
+			attribute.Bool("batch.from_spool", fromSpool),
+		))
+	batch.TraceContext = make(map[string]string, 2)
+	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(batch.TraceContext))
+
 	err := s.stream.Send(batch)
-	s.pendingAcks = append(s.pendingAcks, outstanding{batch: batch, sourceCursors: cursors, fromSpool: fromSpool})
+	s.pendingAcks = append(s.pendingAcks, outstanding{batch: batch, sourceCursors: cursors, fromSpool: fromSpool, span: span})
 	if err != nil {
 		s.teardownStream()
 	}
@@ -786,6 +832,13 @@ func (s *Shipper) processAck(ack *logaggv1.Ack) {
 	o := s.pendingAcks[0]
 	s.pendingAcks = s.pendingAcks[1:]
 	s.metrics.Acks.WithLabelValues(ackLabel(ack.GetCode())).Inc()
+	// Ended here, before the demote paths below get a chance to end it with
+	// their generic text: the collector's reason is the useful one.
+	if ack.GetCode() == logaggv1.AckCode_ACK_CODE_ACCEPTED {
+		o.endSpan(codes.Ok, "")
+	} else {
+		o.endSpan(codes.Error, ackLabel(ack.GetCode())+": "+ack.GetDetail())
+	}
 
 	switch ack.GetCode() {
 	case logaggv1.AckCode_ACK_CODE_ACCEPTED:
@@ -914,6 +967,18 @@ func (s *Shipper) advanceCheckpoint(source string, cur Cursor) {
 		return
 	}
 	s.checkpoint.Set(source, cur)
+}
+
+// levelOf reads the record's level from an extracted "level" field, accepting
+// every spelling model.ParseLevel does. No field, or one it does not
+// recognize, is LevelUnspecified: the model package's own answer for "no
+// level known", not a guess. Inference from the message text is deliberately
+// not attempted.
+func levelOf(fields map[string]string) model.Level {
+	if lvl, err := model.ParseLevel(fields["level"]); err == nil {
+		return lvl
+	}
+	return model.LevelUnspecified
 }
 
 // countDropped records n records dropped for reason under this package's

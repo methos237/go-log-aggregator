@@ -32,7 +32,11 @@ type Metrics struct {
 	RecordsReceived prometheus.Counter
 	// RecordsAccepted counts records durably queued, i.e. the ones an agent was told
 	// it may forget.
-	RecordsAccepted prometheus.Counter
+	RecordsAccepted *prometheus.CounterVec
+	// BytesReceived is wire bytes of every batch as it arrives, before
+	// validation. Divided by RecordsReceived it is the average record size,
+	// which is what sizes the queue's disk ceiling and the writer's batches.
+	BytesReceived prometheus.Counter
 	// RecordsDropped is shared with the storage layer; see observability.RecordsDropped.
 	RecordsDropped *prometheus.CounterVec
 	// QueueDepth and QueueWait describe the bounded intake channel, in the same
@@ -67,11 +71,18 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Help:      "Records received from agents, before validation.",
 		}),
 
-		RecordsAccepted: f.NewCounter(prometheus.CounterOpts{
+		RecordsAccepted: f.NewCounterVec(prometheus.CounterOpts{
 			Namespace: observability.Namespace,
 			Subsystem: ingestSubsystem,
 			Name:      "records_accepted_total",
-			Help:      "Records durably published to the queue and acknowledged to the agent.",
+			Help:      "Records durably published to the queue and acknowledged to the agent, by service and level.",
+		}, []string{"service", "level"}),
+
+		BytesReceived: f.NewCounter(prometheus.CounterOpts{
+			Namespace: observability.Namespace,
+			Subsystem: ingestSubsystem,
+			Name:      "bytes_total",
+			Help:      "Wire bytes received from agents, before validation.",
 		}),
 
 		RecordsDropped: observability.RecordsDropped(reg),

@@ -33,6 +33,7 @@ type Config struct {
 	Queue   Queue
 	Cluster Cluster
 	Log     Log
+	Tracing Tracing
 	Agent   Agent
 }
 
@@ -82,17 +83,26 @@ type Admin struct {
 	EnablePprof bool
 }
 
+// QueuePublishHeaderBytes is the room a queue publish's headers take out of
+// the broker's max_payload, which counts headers and payload together. A
+// traceparent header block is about 85 bytes; this leaves room for a
+// tracestate and the broker's own headers. The ingest ceiling's default and
+// the collector's startup check both subtract it.
+const QueuePublishHeaderBytes = 512
+
 // Ingest is the gRPC listener that agents stream into.
 type Ingest struct {
 	Addr string
 	// MaxRecvMsgBytes caps a single gRPC message. Agents batch, so this bounds
 	// batch size on the wire and is a first-line defense against memory abuse.
 	//
-	// It must not exceed the broker's max_payload. A batch above that is accepted
-	// here, validated, re-marshaled and then refused by NATS as unsendable — a
-	// well-formed batch permanently dropped. cmd/collector checks the two against
-	// each other at startup, and the default matches the NATS server default (1MB)
-	// rather than gRPC's (4MB) so a stock stack is coherent.
+	// It must not exceed the broker's max_payload less QueuePublishHeaderBytes,
+	// since the broker counts a message's headers against the same limit. A
+	// batch above that is accepted here, validated, re-marshaled and then
+	// refused by NATS as unsendable — a well-formed batch permanently dropped.
+	// cmd/collector checks the two against each other at startup, and the
+	// default is the NATS server default (1MB) less the header room, rather
+	// than gRPC's 4MB, so a stock stack is coherent.
 	MaxRecvMsgBytes int
 	// BufferSize is the depth of the bounded channel between the gRPC handler
 	// and the queue publisher, in batches. Full buffer means shed load, never grow.
@@ -246,6 +256,23 @@ type Log struct {
 	AddSource bool
 }
 
+// Tracing configures OpenTelemetry trace export. Off by default: a process with
+// nothing listening on the endpoint would otherwise log an export failure
+// every batch interval.
+type Tracing struct {
+	Enabled bool
+	// Endpoint is the OTLP/gRPC collector address, host:port. Jaeger accepts
+	// OTLP natively, so this is what the compose stack's Jaeger listens on.
+	Endpoint string
+	// Insecure sends spans over plaintext gRPC. Fine inside a compose network,
+	// wrong anywhere the endpoint is reached over a real wire.
+	Insecure bool
+	// SampleRatio is the fraction of new traces recorded, 0 to 1. A child span
+	// always follows its parent's decision, so one ratio covers the whole
+	// agent-to-write trace.
+	SampleRatio float64
+}
+
 // Agent configures the log-shipping agent's pipeline: which sources to
 // read, how to join and extract structure from their lines, and how to
 // reach the collector. It has no default that assumes any particular
@@ -377,7 +404,7 @@ func Load() (*Config, error) {
 			// ":9095" and opts in below, because inside a container the listener has to
 			// bind every interface for the runtime to forward to it.
 			Addr:            e.str("INGEST_ADDR", "127.0.0.1:9095"),
-			MaxRecvMsgBytes: e.bytes("INGEST_MAX_RECV_BYTES", 1<<20),
+			MaxRecvMsgBytes: e.bytes("INGEST_MAX_RECV_BYTES", 1<<20-QueuePublishHeaderBytes),
 			BufferSize:      e.int("INGEST_BUFFER_SIZE", 8192),
 			PublishWorkers:  e.int("INGEST_PUBLISH_WORKERS", 8),
 			TLSCertFile:     e.str("INGEST_TLS_CERT_FILE", ""),
@@ -445,6 +472,12 @@ func Load() (*Config, error) {
 			Level:     e.level("LOG_LEVEL", slog.LevelInfo),
 			Format:    e.str("LOG_FORMAT", "json"),
 			AddSource: e.bool("LOG_ADD_SOURCE", false),
+		},
+		Tracing: Tracing{
+			Enabled:     e.bool("TRACING_ENABLED", false),
+			Endpoint:    e.str("TRACING_ENDPOINT", "localhost:4317"),
+			Insecure:    e.bool("TRACING_INSECURE", true),
+			SampleRatio: e.float("TRACING_SAMPLE_RATIO", 1.0),
 		},
 	}
 
@@ -687,6 +720,12 @@ func (c *Config) Validate() error {
 	}
 	if c.Log.Format != "json" && c.Log.Format != "text" {
 		bad("log format must be json or text, got %q", c.Log.Format)
+	}
+	if c.Tracing.Enabled && c.Tracing.Endpoint == "" {
+		bad("tracing endpoint must not be empty when tracing is enabled")
+	}
+	if r := c.Tracing.SampleRatio; !(r >= 0 && r <= 1) { // also rejects NaN
+		bad("tracing sample ratio must be between 0 and 1, got %v", r)
 	}
 	// Agent is deliberately not validated here: a collector process never
 	// sets any LOGAGG_AGENT_* variable and must stay valid regardless, while
@@ -938,6 +977,19 @@ func (e *env) dur(key string, def time.Duration) time.Duration {
 	v, err := time.ParseDuration(raw)
 	if err != nil {
 		e.fail(key, raw, errors.New("not a duration (e.g. 500ms, 10s, 2m)"))
+		return def
+	}
+	return v
+}
+
+func (e *env) float(key string, def float64) float64 {
+	raw, ok := e.lookup(key)
+	if !ok {
+		return def
+	}
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		e.fail(key, raw, errors.New("not a number (e.g. 0.1)"))
 		return def
 	}
 	return v

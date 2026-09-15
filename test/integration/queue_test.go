@@ -9,7 +9,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 
+	"github.com/jamespolk/go-log-aggregator/internal/config"
 	"github.com/jamespolk/go-log-aggregator/internal/queue"
 )
 
@@ -109,7 +113,50 @@ func TestDefaultIngestCeilingFitsTheBroker(t *testing.T) {
 
 	defaults, err := defaultConfig()
 	require.NoError(t, err)
-	require.LessOrEqual(t, int64(defaults.Ingest.MaxRecvMsgBytes), q.MaxPayload(),
-		"the default ingest ceiling is above this broker's max_payload, so an oversized batch would be dropped rather than refused")
+	require.LessOrEqual(t, int64(defaults.Ingest.MaxRecvMsgBytes)+config.QueuePublishHeaderBytes, q.MaxPayload(),
+		"the default ingest ceiling plus header room is above this broker's max_payload, so an oversized batch would be dropped rather than refused")
 	require.False(t, errors.Is(err, context.Canceled))
+}
+
+// The trace context has to survive the broker: the writer's span on whichever
+// node consumes a message joins the publisher's trace only if the headers the
+// publisher injected come back out of JetStream intact.
+func TestPublishCarriesTraceContextInHeaders(t *testing.T) {
+	t.Parallel()
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+
+	stream, durable, prefix := uniqueStream(t)
+	cfg := queueConfig(&collectorOptions{stream: stream, durable: durable, subjectPrefix: prefix})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	q, err := queue.Connect(ctx, cfg, nil, testLogger(t))
+	require.NoError(t, err, "connect queue")
+	t.Cleanup(func() {
+		closeCtx, closeCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer closeCancel()
+		require.NoError(t, q.Close(closeCtx))
+	})
+
+	got := make(chan trace.SpanContext, 1)
+	sub, err := q.Consume(ctx, func(m queue.Message) {
+		got <- trace.SpanContextFromContext(otel.GetTextMapPropagator().Extract(ctx, queue.HeaderCarrier(m.Header())))
+		require.NoError(t, m.Ack())
+	})
+	require.NoError(t, err, "consume")
+	t.Cleanup(sub.Stop)
+
+	want := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: trace.TraceID{0x0a, 0xf7}, SpanID: trace.SpanID{0xb7}, TraceFlags: trace.FlagsSampled,
+	})
+	require.NoError(t, q.Publish(trace.ContextWithSpanContext(ctx, want), q.Subject("test", "traced"), []byte("x")))
+
+	select {
+	case sc := <-got:
+		require.Equal(t, want.TraceID(), sc.TraceID(), "trace id did not survive the broker")
+		require.Equal(t, want.SpanID(), sc.SpanID(), "the consumer's parent must be the publish span")
+	case <-time.After(30 * time.Second):
+		t.Fatal("message never consumed")
+	}
 }

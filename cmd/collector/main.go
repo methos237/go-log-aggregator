@@ -146,6 +146,11 @@ func run(dsnOverride string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	stopTracing, err := observability.NewTracer(ctx, cfg.Tracing, "logagg-collector", cfg.Node.Name)
+	if err != nil {
+		return fmt.Errorf("set up tracing: %w", err)
+	}
+
 	log.Info("collector starting",
 		slog.String("env", cfg.Node.Env),
 		slog.String("commit", version.Commit),
@@ -169,7 +174,7 @@ func run(dsnOverride string) error {
 		return fmt.Errorf("open database: %w", err)
 	}
 	defer pool.Close()
-	metrics.Registerer.MustRegister(storage.NewPoolCollector(pool))
+	metrics.Registerer.MustRegister(storage.NewPoolCollector(pool), storage.NewCompressionCollector(pool, log))
 
 	// A dead database makes this node unready rather than dead: restarting would not
 	// bring Postgres back, and phase 2's JetStream buffer is what absorbs the outage.
@@ -210,10 +215,10 @@ func run(dsnOverride string) error {
 	// after the agent has already been told nothing about it. Refused at startup
 	// because the alternative is discovering it as records_dropped_total climbing
 	// under a reason nobody expected.
-	if maxPayload := q.MaxPayload(); int64(cfg.Ingest.MaxRecvMsgBytes) > maxPayload {
+	if maxPayload := q.MaxPayload(); int64(cfg.Ingest.MaxRecvMsgBytes)+config.QueuePublishHeaderBytes > maxPayload {
 		return fmt.Errorf(
-			"ingest accepts messages up to %d bytes but the broker accepts %d: lower %sINGEST_MAX_RECV_BYTES or raise the broker's max_payload",
-			cfg.Ingest.MaxRecvMsgBytes, maxPayload, config.EnvPrefix)
+			"ingest accepts messages up to %d bytes but the broker accepts %d including %d bytes of headers: lower %sINGEST_MAX_RECV_BYTES or raise the broker's max_payload",
+			cfg.Ingest.MaxRecvMsgBytes, maxPayload, config.QueuePublishHeaderBytes, config.EnvPrefix)
 	}
 
 	health.Register("queue", queue.HealthCheck(q))
@@ -254,7 +259,7 @@ func run(dsnOverride string) error {
 
 	// /readyz reports ready only once every registered dependency answers.
 	apiSrv := httpapi.New(&cfg.HTTP, health, httpapi.Deps{
-		DB: pool, Runner: runner, Node: cfg.Node.Name, Cluster: clusterView(members), Tails: tails,
+		DB: pool, Runner: executor.Instrumented{Runner: runner, Metrics: executor.NewMetrics(metrics.Registerer)}, Node: cfg.Node.Name, Cluster: clusterView(members), Tails: tails,
 	}, log)
 	adminSrv := observability.NewAdminServer(cfg.Admin, metrics, log)
 
@@ -393,6 +398,10 @@ func run(dsnOverride string) error {
 		}
 		if adminErr := adminSrv.Shutdown(shutdownCtx); adminErr != nil {
 			errs = append(errs, fmt.Errorf("admin shutdown: %w", adminErr))
+		}
+		// After the writer: its last batch's spans are the ones still buffered.
+		if traceErr := stopTracing(shutdownCtx); traceErr != nil {
+			errs = append(errs, fmt.Errorf("tracing shutdown: %w", traceErr))
 		}
 		return errors.Join(errs...)
 	})

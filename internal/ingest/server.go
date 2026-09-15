@@ -87,7 +87,7 @@ func New(ctx context.Context, cfg config.Ingest, q queue.Publisher, metrics *Met
 	// Shutdown that arrives first wait on a WaitGroup another goroutine is still
 	// adding to, which is a data race and, worse, an occasional missed drain.
 	pipe := newPipeline(ctx, cfg, q, metrics, log)
-	pipe.start()
+	pipe.start() //nolint:contextcheck // run publishes under the pipeline's lifetime context, not the request's; see its comment
 
 	// MaxRecvMsgSize is the first line of defense on an untrusted boundary: agents
 	// batch, so it bounds how much memory one unauthenticated peer can make this

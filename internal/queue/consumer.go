@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -24,9 +25,9 @@ import (
 type Message interface {
 	Data() []byte
 	Subject() string
-	// Redeliveries is how many times this message has been delivered, counting the
-	// current delivery. One means a first attempt.
-	Redeliveries() uint64
+	// Header is the message's headers, where the publisher put the trace
+	// context. Nil when the message carried none.
+	Header() map[string][]string
 	Ack() error
 	Nak() error
 	Term() error
@@ -61,7 +62,7 @@ func (c *Conn) Consume(ctx context.Context, h Handler) (Subscription, error) {
 
 	sub, err := cons.Consume(func(msg jetstream.Msg) {
 		m := &message{msg: msg}
-		if m.Redeliveries() > 1 {
+		if meta, metaErr := msg.Metadata(); metaErr == nil && meta.NumDelivered > 1 {
 			c.metrics.Redeliveries.Inc()
 		}
 		c.metrics.Consumed.Inc()
@@ -71,12 +72,52 @@ func (c *Conn) Consume(ctx context.Context, h Handler) (Subscription, error) {
 		return nil, fmt.Errorf("consume from %s: %w", c.cfg.Durable, err)
 	}
 
+	// The backlog is polled rather than read off each delivery's metadata: a
+	// value stamped on the last message this node saw goes stale the moment
+	// the node is idle, and five nodes would report five different pasts.
+	stop := make(chan struct{})
+	go c.pollPending(ctx, cons, stop)
+
 	c.log.Info("queue consumer started",
 		slog.String("durable", c.cfg.Durable),
 		slog.Int("max_ack_pending", c.cfg.MaxAckPending),
 		slog.Duration("ack_wait", c.cfg.AckWait),
 	)
-	return sub, nil
+	return consumeSubscription{sub: sub, stop: stop}, nil
+}
+
+// pendingPollInterval is how often the consumer backlog gauge is refreshed.
+// Once per scrape interval is plenty; the call is one round trip to the broker.
+const pendingPollInterval = 5 * time.Second
+
+func (c *Conn) pollPending(ctx context.Context, cons jetstream.Consumer, stop <-chan struct{}) {
+	tick := time.NewTicker(pendingPollInterval)
+	defer tick.Stop()
+	for {
+		pollCtx, cancel := context.WithTimeout(ctx, pendingPollInterval)
+		if info, err := cons.Info(pollCtx); err == nil {
+			c.metrics.Pending.Set(float64(info.NumPending))
+		}
+		cancel()
+		select {
+		case <-tick.C:
+		case <-stop:
+			return
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// consumeSubscription stops the pending poller along with the consumer.
+type consumeSubscription struct {
+	sub  jetstream.ConsumeContext
+	stop chan struct{}
+}
+
+func (s consumeSubscription) Stop() {
+	close(s.stop)
+	s.sub.Stop()
 }
 
 // consumerConfig is the durable pull consumer the writers bind to.
@@ -108,21 +149,9 @@ type message struct {
 	msg jetstream.Msg
 }
 
-func (m *message) Data() []byte    { return m.msg.Data() }
-func (m *message) Subject() string { return m.msg.Subject() }
-func (m *message) Ack() error      { return m.msg.Ack() }
-func (m *message) Nak() error      { return m.msg.Nak() }
-func (m *message) Term() error     { return m.msg.Term() }
-
-// Redeliveries reports the delivery count, or 1 when the metadata is unavailable.
-//
-// Unavailable metadata means the message did not come from a stream, which cannot
-// happen on this path; reporting a first delivery is the reading that avoids
-// inflating the redelivery metric on a message that has no history.
-func (m *message) Redeliveries() uint64 {
-	meta, err := m.msg.Metadata()
-	if err != nil {
-		return 1
-	}
-	return meta.NumDelivered
-}
+func (m *message) Data() []byte                { return m.msg.Data() }
+func (m *message) Subject() string             { return m.msg.Subject() }
+func (m *message) Header() map[string][]string { return m.msg.Headers() }
+func (m *message) Ack() error                  { return m.msg.Ack() }
+func (m *message) Nak() error                  { return m.msg.Nak() }
+func (m *message) Term() error                 { return m.msg.Term() }

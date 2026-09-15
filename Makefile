@@ -8,8 +8,10 @@ SHELL := /usr/bin/env bash
 
 COMPOSE_FILE       := deploy/docker-compose.yml
 COMPOSE_SCALE_FILE := deploy/docker-compose.scale.yml
-COMPOSE            := docker compose -f $(COMPOSE_FILE)
-COMPOSE_SCALE      := docker compose -f $(COMPOSE_FILE) -f $(COMPOSE_SCALE_FILE)
+COMPOSE_OBS_FILE   := deploy/docker-compose.observability.yml
+COMPOSE            := docker compose -f $(COMPOSE_FILE) -f $(COMPOSE_OBS_FILE)
+COMPOSE_SCALE      := docker compose -f $(COMPOSE_FILE) -f $(COMPOSE_SCALE_FILE) -f $(COMPOSE_OBS_FILE)
+OBS_SERVICES       := prometheus grafana jaeger
 
 VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT     ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
@@ -153,16 +155,19 @@ docker-build: ## Build both service images (collector and agent)
 
 .PHONY: dev
 dev: ## Start the core dev stack (db, broker, collector; no agent -- see dev-agent)
-	$(COMPOSE) up -d --build --wait --wait-timeout 240 timescaledb nats collector
+	$(COMPOSE) up -d --build --wait --wait-timeout 240 timescaledb nats collector $(OBS_SERVICES)
 	@echo
 	@echo "  api      http://127.0.0.1:8080/healthz"
 	@echo "  metrics  http://127.0.0.1:9090/metrics"
 	@echo "  nats     http://127.0.0.1:8222/healthz"
 	@echo "  postgres postgres://logagg:logagg@127.0.0.1:5432/logagg"
+	@echo "  grafana  http://127.0.0.1:3000/dashboards"
+	@echo "  jaeger   http://127.0.0.1:16686"
+	@echo "  prom     http://127.0.0.1:9091/targets"
 
 .PHONY: dev-agent
 dev-agent: ## Start the dev stack plus the agent and its log-writing sidecar
-	$(COMPOSE) up -d --build --wait --wait-timeout 240 timescaledb nats collector agent logwriter
+	$(COMPOSE) up -d --build --wait --wait-timeout 240 timescaledb nats collector agent logwriter $(OBS_SERVICES)
 	@echo
 	@echo "  agent state   docker volume logagg_agent-state (survives 'docker compose restart agent')"
 	@echo "  agent logs    make dev-logs (or: $(COMPOSE) logs -f agent)"
@@ -202,11 +207,13 @@ dev-ps: ## Show dev stack container status
 
 .PHONY: dev-scale
 dev-scale: ## Scale collectors behind the proxy: make dev-scale N=5
-	$(COMPOSE_SCALE) up -d --build --wait --wait-timeout 240 --scale collector=$(or $(N),3) timescaledb nats collector proxy
+	$(COMPOSE_SCALE) up -d --build --wait --wait-timeout 240 --scale collector=$(or $(N),3) timescaledb nats collector proxy $(OBS_SERVICES)
 	@echo
 	@echo "  api      http://127.0.0.1:8080/v1/cluster   (proxy, any collector)"
 	@echo "  ingest   127.0.0.1:9095                     (proxy, any collector)"
 	@echo "  metrics  per replica on 127.0.0.1:9190-9199; see make dev-ps"
+	@echo "  grafana  http://127.0.0.1:3000/dashboards   (every replica, via DNS discovery)"
+	@echo "  jaeger   http://127.0.0.1:16686"
 
 .PHONY: psql
 psql: ## Open a psql shell against the dev database
