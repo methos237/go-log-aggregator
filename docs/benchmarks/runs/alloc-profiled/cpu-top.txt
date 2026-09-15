@@ -1,0 +1,39 @@
+File: app
+Build ID: e24d3e03592a894826d4536a4e41832a5e903dbe
+Type: samples
+Time: 2026-09-15 11:19:39 EDT
+Duration: 20s, Total samples = 1734 
+Showing nodes accounting for 1502, 86.62% of 1734 total
+Dropped 438 nodes (cum <= 8)
+Showing top 30 nodes out of 176
+      flat  flat%   sum%        cum   cum%
+       331 19.09% 19.09%        331 19.09%  runtime.(*spanInlineMarkBits).init
+       319 18.40% 37.49%        319 18.40%  runtime.memmove
+       290 16.72% 54.21%        290 16.72%  runtime.memclrNoHeapPointers
+       101  5.82% 60.03%        123  7.09%  google.golang.org/protobuf/internal/impl.consumeInt64
+        96  5.54% 65.57%         96  5.54%  internal/runtime/syscall/linux.Syscall6
+        85  4.90% 70.47%         87  5.02%  runtime.tryDeferToSpanScan
+        47  2.71% 73.18%         62  3.58%  runtime.(*mspan).moveInlineMarks
+        36  2.08% 75.26%        127  7.32%  runtime.scanObject
+        26  1.50% 76.76%         26  1.50%  runtime.(*mspan).init
+        26  1.50% 78.26%         26  1.50%  runtime.asyncPreempt
+        22  1.27% 79.53%         22  1.27%  runtime.heapSetTypeSmallHeader (inline)
+        15  0.87% 80.39%         15  0.87%  runtime.futex
+        14  0.81% 81.20%         31  1.79%  runtime.mallocgcTinySC2
+        11  0.63% 81.83%         21  1.21%  runtime.scanObjectsSmall
+         9  0.52% 82.35%        317 18.28%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*Consumer).handle
+         9  0.52% 82.87%        981 56.57%  google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshalPointerEager
+         9  0.52% 83.39%         47  2.71%  google.golang.org/protobuf/internal/impl.pointer.AppendPointerSlice (inline)
+         8  0.46% 83.85%          8  0.46%  runtime.markBits.setMarked (inline)
+         7   0.4% 84.26%         16  0.92%  google.golang.org/protobuf/internal/impl.(*MessageInfo).sizePointerSlow
+         7   0.4% 84.66%        253 14.59%  runtime.mallocgcSmallScanNoHeader
+         5  0.29% 84.95%        720 41.52%  runtime.mallocgc
+         5  0.29% 85.24%         10  0.58%  unicode/utf8.Valid
+         4  0.23% 85.47%        156  9.00%  github.com/jackc/pgx/v5/pgtype.(*Map).Encode
+         4  0.23% 85.70%        137  7.90%  github.com/jackc/pgx/v5/pgtype.(*derefPointerEncodePlan).Encode
+         4  0.23% 85.93%        978 56.40%  google.golang.org/protobuf/internal/impl.consumeMessageSliceInfo
+         4  0.23% 86.16%          9  0.52%  runtime.pcvalue
+         2  0.12% 86.27%         16  0.92%  google.golang.org/protobuf/internal/impl.(*MessageInfo).marshalAppendPointer
+         2  0.12% 86.39%         61  3.52%  reflect.packEfaceData
+         2  0.12% 86.51%         15  0.87%  runtime.(*fixalloc).alloc
+         2  0.12% 86.62%        343 19.78%  runtime.mallocgcSmallNoscan

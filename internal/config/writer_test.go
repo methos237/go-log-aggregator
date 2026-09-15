@@ -18,6 +18,7 @@ func validWriter() Writer {
 		RetryMaxDelay:         5 * time.Second,
 		StreamCacheSize:       8192,
 		StreamRefreshInterval: 5 * time.Minute,
+		CopyMode:              CopyModeDirect,
 	}
 }
 

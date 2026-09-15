@@ -1,0 +1,39 @@
+File: app
+Build ID: c2de856be28fe541bd33b496eaace9122c54e3ac
+Type: samples
+Time: 2026-09-15 10:05:46 EDT
+Duration: 20s, Total samples = 864 
+Showing nodes accounting for 715, 82.75% of 864 total
+Dropped 390 nodes (cum <= 4)
+Showing top 30 nodes out of 207
+      flat  flat%   sum%        cum   cum%
+       222 25.69% 25.69%        222 25.69%  runtime.memclrNoHeapPointers
+       112 12.96% 38.66%        112 12.96%  runtime.memmove
+        84  9.72% 48.38%         84  9.72%  runtime.(*spanInlineMarkBits).init
+        65  7.52% 55.90%         65  7.52%  internal/runtime/syscall/linux.Syscall6
+        47  5.44% 61.34%         49  5.67%  runtime.tryDeferToSpanScan
+        31  3.59% 64.93%         31  3.59%  runtime.asyncPreempt
+        21  2.43% 67.36%         68  7.87%  runtime.scanObject
+        17  1.97% 69.33%        123 14.24%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*Consumer).handle
+        15  1.74% 71.06%         38  4.40%  google.golang.org/protobuf/encoding/protowire.AppendVarint
+        14  1.62% 72.69%         20  2.31%  runtime.scanObjectsSmall
+        13  1.50% 74.19%        229 26.50%  google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshalPointerEager
+        11  1.27% 75.46%         11  1.27%  runtime.futex
+         8  0.93% 76.39%         12  1.39%  runtime.(*mspan).moveInlineMarks
+         6  0.69% 77.08%         10  1.16%  runtime.(*unwinder).resolveInternal
+         5  0.58% 77.66%          5  0.58%  runtime.madvise
+         5  0.58% 78.24%        259 29.98%  runtime.mallocgc
+         4  0.46% 78.70%          4  0.46%  internal/runtime/atomic.(*UnsafePointer).Load (inline)
+         4  0.46% 79.17%          4  0.46%  runtime.(*stkframe).getStackMap
+         4  0.46% 79.63%          4  0.46%  runtime.heapSetTypeSmallHeader (inline)
+         4  0.46% 80.09%          4  0.46%  runtime.stackpoolalloc
+         3  0.35% 80.44%         32  3.70%  github.com/jackc/pgx/v5/pgtype.(*Map).Encode
+         3  0.35% 80.79%          7  0.81%  google.golang.org/protobuf/internal/impl.consumeInt64
+         3  0.35% 81.13%         19  2.20%  runtime.(*sweepLocked).sweep
+         3  0.35% 81.48%          7  0.81%  runtime.mapaccess2
+         2  0.23% 81.71%         57  6.60%  github.com/jackc/pgx/v5.(*copyFrom).buildCopyBuf
+         2  0.23% 81.94%          4  0.46%  github.com/jamespolk/go-log-aggregator/internal/model.LogRecordFromProto
+         2  0.23% 82.18%         61  7.06%  google.golang.org/protobuf/internal/impl.(*MessageInfo).marshalAppendPointer
+         2  0.23% 82.41%          6  0.69%  google.golang.org/protobuf/internal/impl.appendInt64NoZero
+         2  0.23% 82.64%          8  0.93%  runtime.(*mheap).initSpan
+         1  0.12% 82.75%         35  4.05%  github.com/jackc/pgx/v5.encodeCopyValue

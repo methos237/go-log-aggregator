@@ -86,8 +86,11 @@ type Shipment struct {
 	// stream it did not send.
 	Stream model.Stream
 	// Records is taken over by Submit, which stamps the stream ID onto each entry
-	// and compacts out any that fail validation. Callers must not read or reuse the
-	// slice afterwards.
+	// and compacts out any that fail validation. The slice must exclusively own its
+	// backing array (NewRecords is the intended source): once a worker has copied
+	// it into a batch the writer clears the whole array and recycles it, so a
+	// caller must neither read it afterwards nor hand two shipments slices of one
+	// array.
 	Records []model.LogRecord
 
 	// Ack is called exactly once, with nil when every accepted record is durably
@@ -373,6 +376,7 @@ func (w *Writer) work(ctx, dbCtx context.Context, id int) {
 			w.addDepth(-len(sh.Records))
 			w.observeQueueWait(&sh)
 			batch.add(&sh, w.streams, w.now())
+			RecycleRecords(sh.Records)
 
 			if flushAt == nil {
 				timer.Reset(w.cfg.FlushInterval)
@@ -413,6 +417,7 @@ func (w *Writer) drainInto(dbCtx context.Context, log *slog.Logger, batch *write
 			w.addDepth(-len(sh.Records))
 			w.observeQueueWait(&sh)
 			batch.add(&sh, w.streams, w.now())
+			RecycleRecords(sh.Records)
 			if batch.full(w.cfg.BatchSize) {
 				w.flush(dbCtx, log, batch)
 			}
@@ -434,6 +439,15 @@ func (w *Writer) flush(dbCtx context.Context, log *slog.Logger, batch *writeBatc
 	if w.metrics != nil {
 		w.metrics.BatchSize.Observe(float64(len(batch.records)))
 	}
+
+	// One global insertion order for both copy paths. The staging insert's
+	// ORDER BY gave every writer in the cluster the same lock order on the dedup
+	// index (see insertFromStagingSQL); the direct COPY has no ORDER BY, so the
+	// records are sorted here instead, and both paths get it for the price of
+	// sorting a few thousand rows. Index locality comes with it.
+	slices.SortFunc(batch.records, func(a, b model.LogRecord) int {
+		return cmp.Or(cmp.Compare(a.StreamID, b.StreamID), cmp.Compare(a.Seq, b.Seq), a.Time.Compare(b.Time))
+	})
 
 	// One span per flush, parented on the first sampled shipment's trace and
 	// linked to the rest: a batch merges many publishes, and a trace can only
@@ -585,10 +599,20 @@ func (w *Writer) commitStreams(ctx context.Context, batch *writeBatch) error {
 	return nil
 }
 
-// commitRecords stages the batch with COPY and moves it into the hypertable.
+// commitRecords moves the batch into the hypertable.
+//
+// The staging path (ADR-0002 §2) is the correctness default: COPY into a temp
+// table, then INSERT ... ON CONFLICT DO NOTHING, so a redelivered record is a no-op.
+// The direct path copies straight into logs and skips the second pass. COPY has no
+// ON CONFLICT, so a replayed record aborts it with a unique violation; the batch is
+// then redone through staging, which is what keeps direct mode safe under
+// at-least-once delivery. Replays pay for both paths, everything else pays for one.
 func (w *Writer) commitRecords(ctx context.Context, batch *writeBatch) (n int64, err error) {
 	ctx, span := tracer.Start(ctx, "pg.copy", trace.WithSpanKind(trace.SpanKindClient),
-		trace.WithAttributes(attribute.Int("db.rows", len(batch.records))))
+		trace.WithAttributes(
+			attribute.Int("db.rows", len(batch.records)),
+			attribute.String("db.copy_mode", w.cfg.CopyMode),
+		))
 	defer func() {
 		if err != nil {
 			span.RecordError(err)
@@ -597,6 +621,39 @@ func (w *Writer) commitRecords(ctx context.Context, batch *writeBatch) (n int64,
 		span.End()
 	}()
 
+	if w.cfg.CopyMode == config.CopyModeDirect {
+		n, err = w.copyDirect(ctx, batch.records)
+		if !isUniqueViolation(err) {
+			return n, err
+		}
+		if w.metrics != nil {
+			w.metrics.DirectCopyFallbacks.Inc()
+		}
+		span.AddEvent("dedup index hit, falling back to staging")
+	}
+	return w.copyViaStaging(ctx, batch.records)
+}
+
+// copyDirect COPYs the records into the hypertable in one transaction.
+func (w *Writer) copyDirect(ctx context.Context, records []model.LogRecord) (int64, error) {
+	tx, err := w.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	copied, err := copyRecords(ctx, tx, "logs", records)
+	if err != nil {
+		return 0, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit %d records: %w", copied, err)
+	}
+	return copied, nil
+}
+
+// copyViaStaging stages the batch with COPY and moves it into the hypertable.
+func (w *Writer) copyViaStaging(ctx context.Context, records []model.LogRecord) (int64, error) {
 	tx, err := w.pool.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("begin: %w", err)
@@ -609,20 +666,16 @@ func (w *Writer) commitRecords(ctx context.Context, batch *writeBatch) (n int64,
 	if _, err = tx.Exec(ctx, createStagingSQL); err != nil {
 		return 0, fmt.Errorf("create staging table: %w", err)
 	}
-
-	records := batch.records
-	copied, err := tx.CopyFrom(ctx,
-		pgx.Identifier{"logs_staging"},
-		logColumns,
-		pgx.CopyFromSlice(len(records), func(i int) ([]any, error) {
-			return copyRow(&records[i]), nil
-		}),
-	)
-	if err != nil {
-		return 0, fmt.Errorf("copy %d records into staging: %w", len(records), err)
+	// The insert below sorts the batch, and the image's work_mem (2MB) holds about
+	// 7k rows of 200-byte messages before the sort spills to disk. Phase 8 measured
+	// 1.5GB of temp files across a sweep, and the spill is what made 20k-row
+	// batches cost 8x a 5k one. LOCAL, so it lasts exactly this transaction.
+	if _, err = tx.Exec(ctx, "SET LOCAL work_mem = '64MB'"); err != nil {
+		return 0, fmt.Errorf("set work_mem: %w", err)
 	}
-	if copied != int64(len(records)) {
-		return 0, fmt.Errorf("copied %d of %d records into staging", copied, len(records))
+	copied, err := copyRecords(ctx, tx, "logs_staging", records)
+	if err != nil {
+		return 0, err
 	}
 
 	tag, err := tx.Exec(ctx, insertFromStagingSQL)
@@ -636,30 +689,75 @@ func (w *Writer) commitRecords(ctx context.Context, batch *writeBatch) (n int64,
 	return tag.RowsAffected(), nil
 }
 
-// copyRow renders one record in logColumns order.
-//
-// Nil rather than an empty slice or "{}" for absent optional columns: NULL costs a
-// bit in the row header, while an empty JSONB value costs bytes per row and makes
-// "has fields" a value comparison instead of a null check.
-func copyRow(r *model.LogRecord) []any {
-	var fields []byte
-	if len(r.Fields) > 0 {
-		fields = marshalFields(r.Fields)
+// copyRecords COPYs every record into table and checks the count.
+func copyRecords(ctx context.Context, tx pgx.Tx, table string, records []model.LogRecord) (int64, error) {
+	// One row buffer for the whole COPY. pgx encodes each row into its wire buffer
+	// before asking for the next, so reusing the slice is safe, and it is what
+	// turned copyRow from the writer's largest allocation site into none: the
+	// baseline alloc profile had it at 9% of all bytes (docs/benchmarks).
+	var row copyRow
+	copied, err := tx.CopyFrom(ctx,
+		pgx.Identifier{table},
+		logColumns,
+		pgx.CopyFromSlice(len(records), func(i int) ([]any, error) {
+			return row.fill(&records[i]), nil
+		}),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("copy %d records into %s: %w", len(records), table, err)
 	}
-	return []any{
-		r.Time,
-		int64(r.StreamID),
-		r.Seq,
-		int16(r.Level),
-		r.Message,
-		nilIfEmpty(r.TraceID),
-		nilIfEmpty(r.SpanID),
-		fields,
+	if copied != int64(len(records)) {
+		return 0, fmt.Errorf("copied %d of %d records into %s", copied, len(records), table)
 	}
+	return copied, nil
 }
 
-func nilIfEmpty(b []byte) []byte {
-	if len(b) == 0 {
+// isUniqueViolation reports whether err is PostgreSQL's unique_violation, which on
+// the direct path means a redelivered record met the dedup index.
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505" // pgerrcode.UniqueViolation, without the import
+}
+
+// copyRow renders records in logColumns order, reusing one []any and handing pgx
+// pointers rather than values. A value in an interface is boxed onto the heap
+// (time.Time, int64 and string all are); a pointer into the record is not, and pgx
+// dereferences pointers when it encodes. The converted columns live in the struct
+// for the same reason.
+type copyRow struct {
+	values   [8]any
+	streamID int64
+	level    int16
+	fields   []byte
+}
+
+// fill renders r. Nil rather than an empty slice or "{}" for absent optional
+// columns: NULL costs a bit in the row header, while an empty JSONB value costs
+// bytes per row and makes "has fields" a value comparison instead of a null check.
+func (c *copyRow) fill(r *model.LogRecord) []any {
+	c.streamID = int64(r.StreamID)
+	c.level = int16(r.Level)
+	c.fields = nil
+	if len(r.Fields) > 0 {
+		c.fields = marshalFields(r.Fields)
+	}
+	c.values = [8]any{
+		&r.Time,
+		&c.streamID,
+		&r.Seq,
+		&c.level,
+		&r.Message,
+		nilIfEmpty(&r.TraceID),
+		nilIfEmpty(&r.SpanID),
+		nilIfEmpty(&c.fields),
+	}
+	return c.values[:]
+}
+
+// nilIfEmpty maps an absent optional column to SQL NULL. A typed nil pointer
+// would do the same, but an untyped nil is unambiguous to every codec.
+func nilIfEmpty(b *[]byte) any {
+	if len(*b) == 0 {
 		return nil
 	}
 	return b
@@ -700,6 +798,46 @@ type writeBatch struct {
 	// why a batch cannot be a child of all of them.
 	parent trace.SpanContext
 	links  []trace.Link
+}
+
+// recordPool recycles the slices shipments arrive in. Submit takes the slice over
+// and add copies it into the batch, so once a worker has added a shipment its
+// slice is garbage; a 500-record slice is ~60KB, a large object the allocator
+// zeroes and the GC scans, and the baseline profile had the consumer allocating
+// one per message (7% of all bytes). Pooled slices are cleared on return so they
+// hold no strings alive.
+var recordPool = sync.Pool{New: func() any { s := make([]model.LogRecord, 0, 512); return &s }}
+
+// maxPooledRecords bounds what RecycleRecords keeps; a shipment is bounded by the
+// ingest message size, and anything past this is an outlier not worth pinning.
+const maxPooledRecords = 1 << 16
+
+// NewRecords returns an empty slice with room for n records, possibly recycled.
+// Pass the filled slice to Writer.Submit, which owns it from then on.
+func NewRecords(n int) []model.LogRecord {
+	sp := recordPool.Get().(*[]model.LogRecord) //nolint:errcheck // pool holds one type
+	if cap(*sp) < n {
+		// Too small for this shipment: drop it and allocate. Putting it back
+		// would refill the pool's per-P slot with the small slice and keep the
+		// larger recycled ones out of reach, so the pool would never converge.
+		return make([]model.LogRecord, 0, n)
+	}
+	return (*sp)[:0]
+}
+
+// RecycleRecords returns a slice obtained from NewRecords once nothing reads it.
+// Exported for the test that proves the round trip; production callers are the
+// writer's workers.
+func RecycleRecords(s []model.LogRecord) {
+	// Nothing to keep, or too big to keep: an oversized slice would be pinned
+	// and fully cleared on every recycle for the rest of the process's life.
+	if cap(s) == 0 || cap(s) > maxPooledRecords {
+		return
+	}
+	s = s[:cap(s)]
+	clear(s)
+	s = s[:0]
+	recordPool.Put(&s)
 }
 
 func newWriteBatch(capacity int) *writeBatch {

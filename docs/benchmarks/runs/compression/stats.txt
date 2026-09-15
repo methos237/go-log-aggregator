@@ -1,0 +1,8 @@
+rows: 3050000
+chunks: 1
+hypertable size before: 1112 MB
+before: total=1112 MB table=772 MB index=340 MB
+after:  total=209 MB table=544 kB index=192 kB
+ratio: 5.3x total, 1452.7x table
+bytes per row uncompressed: 382
+bytes per row compressed: 72

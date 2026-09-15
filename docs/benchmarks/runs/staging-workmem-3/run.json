@@ -1,0 +1,64 @@
+{
+  "name": "staging-workmem-3",
+  "started_at": "2026-09-15T15:27:19Z",
+  "commit": "7a4ee85",
+  "profiled": false,
+  "loadgen_exit": 0,
+  "hardware": {
+    "cpu": "Apple M2 Pro",
+    "cores": 10,
+    "memory_bytes": 17179869184,
+    "os": "macOS 26.6.2",
+    "go": "go1.27.1",
+    "docker": "29.4.3",
+    "docker_vm_cpus": 10,
+    "docker_vm_memory_bytes": 8217059328,
+    "docker_vm_available_mb": 3744,
+    "docker_vm_swap_used_mb": 33,
+    "other_containers_running": 0
+  },
+  "env": {
+    "PG_MAX_WAL_SIZE": "4GB",
+    "PG_CHECKPOINT_TIMEOUT": "15min"
+  },
+  "loadgen": {
+    "addr": "127.0.0.1:9095",
+    "records": 3000000,
+    "batch_size": 500,
+    "streams": 64,
+    "senders": 4,
+    "message_size": 200,
+    "rate": 0,
+    "duration_sec": 0,
+    "ramp_sec": 0,
+    "took_sec": 42.433350875,
+    "batches": 6000,
+    "accepted": 3000000,
+    "rejected": 0,
+    "shed": 0,
+    "refused": 0,
+    "acks_overloaded": 0,
+    "acks_invalid": 0,
+    "acks_internal": 0,
+    "records_per_sec": 70699.10667289482,
+    "ack_p50_ms": 177.634959,
+    "ack_p95_ms": 761.882834,
+    "ack_p99_ms": 2014.878292,
+    "ack_max_ms": 3395.655417
+  },
+  "end_to_end": {
+    "rows_before": 50000,
+    "rows_after": 3050000,
+    "drain_sec": 43.73,
+    "collector_mem_mb_at_drain": 924,
+    "sustained_records_per_sec": 34817.58740270209
+  },
+  "writer": {
+    "rows_inserted": 3E+6,
+    "rows_deduplicated": 0,
+    "write_retries": 0,
+    "writes": 602,
+    "mean_write_ms": 562.3870431893688,
+    "mean_batch_size": 4983.388704318937
+  }
+}

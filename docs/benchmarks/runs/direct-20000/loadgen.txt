@@ -1,0 +1,7 @@
+sending 3000000 records in batches of 500 across 64 streams via 4 senders to 127.0.0.1:9095, unpaced
+
+6000 batches acked in 41.639s
+  accepted  3000000 records (72047/sec)
+  rejected  0 records (0 shed under backpressure, 0 refused)
+  acks      overloaded=0 invalid=0 internal=0
+  ack lat   p50=205.0ms p95=1072.7ms p99=2062.1ms max=2877.2ms

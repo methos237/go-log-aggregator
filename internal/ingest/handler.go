@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -139,12 +140,20 @@ func (s *service) process(ctx context.Context, batch *logaggv1.LogBatch) *logagg
 	// Re-marshaled rather than forwarding the received bytes, because the invalid
 	// records have been filtered out and only the survivors should reach the queue.
 	// Letting one bad record through would poison every redelivery of the batch.
-	payload, err := proto.Marshal(&logaggv1.LogBatch{
+	//
+	// Into a pooled buffer: both publishes below copy the bytes into their
+	// connection's write buffer before returning, so the payload is dead by the
+	// time this function returns and can be reused. The baseline alloc profile had
+	// this marshal at 15% of all bytes allocated (docs/benchmarks).
+	buf := payloadPool.Get().(*[]byte) //nolint:errcheck // pool holds one type
+	payload, err := proto.MarshalOptions{}.MarshalAppend((*buf)[:0], &logaggv1.LogBatch{
 		BatchId: id,
 		Labels:  batch.GetLabels(),
 		Records: valid,
 	})
+	*buf = payload
 	if err != nil {
+		payloadPool.Put(buf)
 		s.log.Error("encoding batch failed",
 			slog.String("batch_id", id),
 			slog.Int64("stream_id", int64(streamID)),
@@ -160,8 +169,17 @@ func (s *service) process(ctx context.Context, batch *logaggv1.LogBatch) *logagg
 		payload: payload,
 		records: len(valid),
 	}); err != nil {
+		// Shed and closed mean the job never entered the pipeline, so nothing
+		// else holds the buffer and shedding under sustained overload must not
+		// turn into allocation churn. Any other error -- above all a client
+		// hang-up -- leaves the publisher owning a job it may still be writing,
+		// and a leaked buffer is garbage while a reused live one is corruption.
+		if errors.Is(err, errShed) || errors.Is(err, errPipelineClosed) {
+			payloadPool.Put(buf)
+		}
 		return s.publishFailed(id, subject, streamID, received, len(valid), err)
 	}
+	defer payloadPool.Put(buf)
 
 	s.countAccepted(labels.Service, valid)
 
@@ -181,6 +199,9 @@ func (s *service) process(ctx context.Context, batch *logaggv1.LogBatch) *logagg
 		Rejected: uint32(rejected),   //nolint:gosec // bounded by MaxRecvMsgSize
 	})
 }
+
+// payloadPool holds marshal buffers for queue payloads; see process.
+var payloadPool = sync.Pool{New: func() any { b := make([]byte, 0, 64<<10); return &b }}
 
 // countAccepted increments the accepted counter once per (service, level)
 // present in the batch rather than once per record, since a batch is one

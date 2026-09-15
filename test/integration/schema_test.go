@@ -169,7 +169,7 @@ func TestMigrationsRoundTrip(t *testing.T) {
 	version, dirty, err := storage.SchemaVersion(ctx, dsn)
 	require.NoError(t, err)
 	require.False(t, dirty, "schema should not be dirty after a clean migration")
-	require.Equal(t, uint(3), version, "expected three migrations to be applied")
+	require.Equal(t, uint(4), version, "expected four migrations to be applied")
 
 	// Re-running must be a no-op, which is what makes MigrateOnStart safe on every
 	// replica's boot.

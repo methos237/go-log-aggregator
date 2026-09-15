@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="360" viewBox="0 0 720 360" role="img" aria-label="Sustained end-to-end throughput after each optimization">
+<style>text{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}</style>
+<rect width="100%" height="100%" fill="#fcfcfb"/>
+<text x="72" y="28" font-size="15" font-weight="600" fill="#0b0b0b">Sustained end-to-end throughput after each optimization</text>
+<text x="72" y="46" font-size="12" fill="#52514e">records/s (baseline load shape), in the order the work happened</text>
+<line x1="72" x2="696" y1="304.0" y2="304.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="64" y="304.0" font-size="11" fill="#52514e" text-anchor="end" dominant-baseline="middle">0</text>
+<line x1="72" x2="696" y1="224.0" y2="224.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="64" y="224.0" font-size="11" fill="#52514e" text-anchor="end" dominant-baseline="middle">20 000</text>
+<line x1="72" x2="696" y1="144.0" y2="144.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="64" y="144.0" font-size="11" fill="#52514e" text-anchor="end" dominant-baseline="middle">40 000</text>
+<line x1="72" x2="696" y1="64.0" y2="64.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="64" y="64.0" font-size="11" fill="#52514e" text-anchor="end" dominant-baseline="middle">60 000</text>
+<path d="M95.4 304.0 v-128.7 a4 4 0 0 1 4 -4 h49.2 a4 4 0 0 1 4 4 v128.7 z" fill="#2a78d6"/>
+<text x="124.0" y="165.3" font-size="12" fill="#0b0b0b" text-anchor="middle">33 186</text>
+<text x="124.0" y="324" font-size="12" fill="#52514e" text-anchor="middle">baseline</text>
+<path d="M199.4 304.0 v-116.2 a4 4 0 0 1 4 -4 h49.2 a4 4 0 0 1 4 4 v116.2 z" fill="#2a78d6"/>
+<text x="228.0" y="177.8" font-size="12" fill="#0b0b0b" text-anchor="middle">30 042</text>
+<text x="228.0" y="324" font-size="12" fill="#52514e" text-anchor="middle">WAL sizing</text>
+<path d="M303.4 304.0 v-136.0 a4 4 0 0 1 4 -4 h49.2 a4 4 0 0 1 4 4 v136.0 z" fill="#2a78d6"/>
+<text x="332.0" y="158.0" font-size="12" fill="#0b0b0b" text-anchor="middle">34 995</text>
+<text x="332.0" y="324" font-size="12" fill="#52514e" text-anchor="middle">+ fewer allocs</text>
+<path d="M407.4 304.0 v-173.6 a4 4 0 0 1 4 -4 h49.2 a4 4 0 0 1 4 4 v173.6 z" fill="#2a78d6"/>
+<text x="436.0" y="120.4" font-size="12" fill="#0b0b0b" text-anchor="middle">44 397</text>
+<text x="436.0" y="324" font-size="12" fill="#52514e" text-anchor="middle">+ work_mem</text>
+<path d="M511.4 304.0 v-184.3 a4 4 0 0 1 4 -4 h49.2 a4 4 0 0 1 4 4 v184.3 z" fill="#2a78d6"/>
+<text x="540.0" y="109.7" font-size="12" fill="#0b0b0b" text-anchor="middle">47 070</text>
+<text x="540.0" y="324" font-size="12" fill="#52514e" text-anchor="middle">+ direct COPY</text>
+<path d="M615.4 304.0 v-219.6 a4 4 0 0 1 4 -4 h49.2 a4 4 0 0 1 4 4 v219.6 z" fill="#2a78d6"/>
+<text x="644.0" y="74.4" font-size="12" fill="#0b0b0b" text-anchor="middle">55 903</text>
+<text x="644.0" y="324" font-size="12" fill="#52514e" text-anchor="middle">+ drop time idx</text>
+<line x1="72" x2="696" y1="304.0" y2="304.0" stroke="#52514e" stroke-width="1"/>
+</svg>

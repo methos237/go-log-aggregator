@@ -1,0 +1,64 @@
+{
+  "name": "wal4g-workers-8",
+  "started_at": "2026-09-15T14:45:32Z",
+  "commit": "7a4ee85",
+  "profiled": false,
+  "loadgen_exit": 1,
+  "hardware": {
+    "cpu": "Apple M2 Pro",
+    "cores": 10,
+    "memory_bytes": 17179869184,
+    "os": "macOS 26.6.2",
+    "go": "go1.27.1",
+    "docker": "29.4.3",
+    "docker_vm_cpus": 10,
+    "docker_vm_memory_bytes": 8217059328,
+    "docker_vm_available_mb": 3707,
+    "docker_vm_swap_used_mb": 30,
+    "other_containers_running": 0
+  },
+  "env": {
+    "PG_MAX_WAL_SIZE": "4GB",
+    "PG_CHECKPOINT_TIMEOUT": "15min",
+    "LOGAGG_WRITER_WORKERS": "8"
+  },
+  "loadgen": {
+    "addr": "127.0.0.1:9095",
+    "records": 3000000,
+    "batch_size": 500,
+    "streams": 64,
+    "senders": 4,
+    "message_size": 200,
+    "rate": 0,
+    "duration_sec": 0,
+    "ramp_sec": 0,
+    "took_sec": 135.750047125,
+    "batches": 6000,
+    "accepted": 2993500,
+    "rejected": 6500,
+    "shed": 0,
+    "refused": 6500,
+    "acks_overloaded": 0,
+    "acks_invalid": 0,
+    "acks_internal": 13,
+    "records_per_sec": 22051.55772243346,
+    "ack_p50_ms": 576.261167,
+    "ack_p95_ms": 2332.344125,
+    "ack_p99_ms": 14993.745167,
+    "ack_max_ms": 34823.751625
+  },
+  "end_to_end": {
+    "rows_before": 50000,
+    "rows_after": 3050000,
+    "drain_sec": 61.64,
+    "sustained_records_per_sec": 15165.404961397695
+  },
+  "writer": {
+    "rows_inserted": 3E+6,
+    "rows_deduplicated": 0,
+    "write_retries": 0,
+    "writes": 673,
+    "mean_write_ms": 2220.3863298662704,
+    "mean_batch_size": 4457.652303120357
+  }
+}

@@ -1,0 +1,38 @@
+File: app
+Build ID: e24d3e03592a894826d4536a4e41832a5e903dbe
+Type: delay
+Time: 2026-09-15 11:21:05 EDT
+Showing nodes accounting for 25.44s, 100% of 25.44s total
+Dropped 80 nodes (cum <= 0.13s)
+Showing top 30 nodes out of 62
+      flat  flat%   sum%        cum   cum%
+    23.36s 91.82% 91.82%     23.36s 91.82%  sync.(*Mutex).Unlock (partial-inline)
+     2.06s  8.09% 99.90%      2.06s  8.09%  runtime.unlock (inline)
+     0.02s 0.083%   100%      0.76s  2.98%  sync.(*RWMutex).Unlock
+         0     0%   100%     22.49s 88.42%  github.com/jackc/pgx/v5/pgconn.(*PgConn).signalMessage.func1
+         0     0%   100%      0.13s   0.5%  github.com/jackc/pgx/v5/pgxpool.(*Conn).Release
+         0     0%   100%      0.13s   0.5%  github.com/jackc/pgx/v5/pgxpool.(*Tx).Commit
+         0     0%   100%      0.13s   0.5%  github.com/jackc/puddle/v2.(*Pool[go.shape.*uint8]).releaseAcquiredResource
+         0     0%   100%      0.13s   0.5%  github.com/jackc/puddle/v2.(*Resource[go.shape.*uint8]).Release
+         0     0%   100%      1.70s  6.68%  github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1._LogService_Stream_Handler
+         0     0%   100%      0.57s  2.26%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*Consumer).Start.func1
+         0     0%   100%      0.57s  2.26%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*Consumer).handle
+         0     0%   100%      0.19s  0.74%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*pipeline).publish
+         0     0%   100%      0.19s  0.74%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*pipeline).run
+         0     0%   100%      0.19s  0.74%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*pipeline).start.gowrap1
+         0     0%   100%      1.70s  6.68%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).Stream
+         0     0%   100%      0.45s  1.75%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).handle
+         0     0%   100%      0.45s  1.75%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).process
+         0     0%   100%      0.57s  2.26%  github.com/jamespolk/go-log-aggregator/internal/queue.(*Conn).Consume.func1
+         0     0%   100%      0.45s  1.75%  github.com/jamespolk/go-log-aggregator/internal/queue.(*Conn).Fanout
+         0     0%   100%      0.19s  0.74%  github.com/jamespolk/go-log-aggregator/internal/queue.(*Conn).Publish
+         0     0%   100%      0.13s   0.5%  github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).Start.gowrap1
+         0     0%   100%      0.13s   0.5%  github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).commitRecords
+         0     0%   100%      0.13s   0.5%  github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).copyViaStaging
+         0     0%   100%      0.13s   0.5%  github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).flush
+         0     0%   100%      0.13s   0.5%  github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).work
+         0     0%   100%      0.13s   0.5%  github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).writeOnce
+         0     0%   100%      0.45s  1.75%  github.com/nats-io/nats%2ego.(*Conn).Publish (inline)
+         0     0%   100%      0.19s  0.74%  github.com/nats-io/nats%2ego.(*Conn).RequestMsgWithContext
+         0     0%   100%      0.18s  0.73%  github.com/nats-io/nats%2ego.(*Conn).createNewRequestAndSend
+         0     0%   100%      0.51s  2.02%  github.com/nats-io/nats%2ego.(*Conn).publish

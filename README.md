@@ -47,13 +47,15 @@ pipeline to see what it can take.
 
 ## Status
 
-Phases 1 through 7 of 9 are complete: the schema and write path, the ingest service,
+Phases 1 through 8 of 9 are complete: the schema and write path, the ingest service,
 the agent, the query language with its HTTP API and `logctl query`, the cluster
 layer (gossip membership, hash ring, query fan-out, a proxy for the scaled stack, and
 a chaos test that kills two of five collectors mid-ingest), live tail over
-WebSocket with `logctl tail`, and observability: the full metric set, one trace from
-the agent's send to the Postgres commit, and Grafana dashboards provisioned from git.
-Phase 8 adds benchmarks, phase 9 polish. Each phase is one GitHub issue
+WebSocket with `logctl tail`, observability (the full metric set, one trace from
+the agent's send to the Postgres commit, Grafana dashboards provisioned from git),
+and benchmarks: a reproducible harness, published numbers with their methodology and
+hardware, and an optimization log of six measured changes in
+[`docs/benchmarks/`](docs/benchmarks/README.md). Phase 9 is polish. Each phase is one GitHub issue
 and one pull request, and every design decision that shaped the code is written up in
 [`docs/decisions/`](docs/decisions/).
 
@@ -89,9 +91,10 @@ echo "hello from logctl" | ./bin/logctl send -addr 127.0.0.1:9095 -service demo
 ./bin/loadgen -addr 127.0.0.1:9095 -records 200000    # synthetic load
 ```
 
-`loadgen` prints accepted and rejected counts and exits non-zero if anything was
-rejected, so you can use it as a check as well as a demo. The configurable-rate load
-generator arrives in phase 8.
+`loadgen` prints accepted and rejected counts, ack latency percentiles, and exits
+non-zero if anything was rejected, so you can use it as a check as well as a demo.
+`-rate`, `-ramp` and `-duration` pace a run; `make bench-run NAME=...` wraps it in the
+benchmark harness described in [`docs/benchmarks/`](docs/benchmarks/README.md).
 
 Then query them back:
 

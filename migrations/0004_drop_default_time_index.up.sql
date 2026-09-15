@@ -1,0 +1,13 @@
+-- Drop the index create_hypertable made by default on (time DESC).
+--
+-- 0001 created logs_time_level ON (time DESC, level), whose leading column serves
+-- every time-ordered scan the default index served, so logs_time_idx was a second
+-- copy of the same ordering: 89 MB per 3M rows here, and one more B-tree to
+-- maintain on every insert. Phase 8 measured dropping it at about 8% off the
+-- mean write time (docs/benchmarks, ADR-0008 §5). Dropping the hypertable index
+-- drops it from every chunk.
+--
+-- IF EXISTS because a fresh database created after this migration has no such
+-- index only if 0001 were changed, and 0001 is applied history; the guard keeps
+-- the file idempotent either way.
+DROP INDEX IF EXISTS logs_time_idx;

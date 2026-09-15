@@ -81,6 +81,12 @@ type HTTP struct {
 type Admin struct {
 	Addr        string
 	EnablePprof bool
+	// BlockProfileRate and MutexProfileFraction feed runtime.SetBlockProfileRate
+	// and runtime.SetMutexProfileFraction. Both default to off: sampling costs
+	// throughput, so the benchmark harness turns them on for a profiled run
+	// rather than every deployment paying for a profile nobody reads.
+	BlockProfileRate     int
+	MutexProfileFraction int
 }
 
 // QueuePublishHeaderBytes is the room a queue publish's headers take out of
@@ -174,7 +180,22 @@ type Writer struct {
 	// StreamRefreshInterval is how often a stream's last_seen is rewritten. Trades
 	// freshness of /v1/labels against write volume.
 	StreamRefreshInterval time.Duration
+	// CopyMode selects how a batch reaches the hypertable: CopyModeDirect copies
+	// straight into logs and falls back to staging only when a redelivered record
+	// trips the dedup index; CopyModeStaging always goes through the temp table
+	// and INSERT ... ON CONFLICT (ADR-0002 §2). Direct is the default since phase 8
+	// measured it at roughly 1.3x the writer throughput of staging (ADR-0008,
+	// docs/benchmarks); staging remains for a deployment where replays are the
+	// norm rather than the exception. Required: a struct literal has to pick one,
+	// so the shipped default lives in exactly one place (Load).
+	CopyMode string
 }
+
+// Writer.CopyMode values.
+const (
+	CopyModeStaging = "staging"
+	CopyModeDirect  = "direct"
+)
 
 // Queue is the NATS JetStream connection.
 type Queue struct {
@@ -394,8 +415,10 @@ func Load() (*Config, error) {
 			TailPingInterval: e.dur("HTTP_TAIL_PING_INTERVAL", 30*time.Second),
 		},
 		Admin: Admin{
-			Addr:        e.str("ADMIN_ADDR", ":9090"),
-			EnablePprof: e.bool("ADMIN_ENABLE_PPROF", true),
+			Addr:                 e.str("ADMIN_ADDR", ":9090"),
+			EnablePprof:          e.bool("ADMIN_ENABLE_PPROF", true),
+			BlockProfileRate:     e.int("ADMIN_BLOCK_PROFILE_RATE", 0),
+			MutexProfileFraction: e.int("ADMIN_MUTEX_PROFILE_FRACTION", 0),
 		},
 		Ingest: Ingest{
 			// Loopback by default, unlike the HTTP and admin listeners. Those serve
@@ -434,6 +457,7 @@ func Load() (*Config, error) {
 			RetryMaxDelay:         e.dur("WRITER_RETRY_MAX_DELAY", 5*time.Second),
 			StreamCacheSize:       e.int("WRITER_STREAM_CACHE_SIZE", 8192),
 			StreamRefreshInterval: e.dur("WRITER_STREAM_REFRESH_INTERVAL", 5*time.Minute),
+			CopyMode:              e.str("WRITER_COPY_MODE", CopyModeDirect),
 		},
 		Queue: Queue{
 			URL:            e.str("QUEUE_URL", "nats://nats:4222"),
@@ -621,6 +645,10 @@ func (c *Config) Validate() error {
 	if c.Admin.Addr == c.HTTP.Addr {
 		bad("admin addr %q must differ from http addr: pprof must not be publicly reachable", c.Admin.Addr)
 	}
+	if c.Admin.BlockProfileRate < 0 || c.Admin.MutexProfileFraction < 0 {
+		bad("admin profile rates must not be negative, got block=%d mutex=%d",
+			c.Admin.BlockProfileRate, c.Admin.MutexProfileFraction)
+	}
 	if c.Ingest.MaxRecvMsgBytes <= 0 {
 		bad("ingest max recv bytes must be positive, got %d", c.Ingest.MaxRecvMsgBytes)
 	}
@@ -755,6 +783,9 @@ func (w *Writer) Validate() error {
 	}
 	if w.FlushInterval <= 0 {
 		bad("writer flush interval must be positive, got %s", w.FlushInterval)
+	}
+	if w.CopyMode != CopyModeStaging && w.CopyMode != CopyModeDirect {
+		bad("writer copy mode must be %q or %q, got %q", CopyModeStaging, CopyModeDirect, w.CopyMode)
 	}
 	if w.QueueDepth < 1 {
 		bad("writer queue depth must be at least 1, got %d", w.QueueDepth)

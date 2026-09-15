@@ -353,10 +353,14 @@ var lineSQL = [...]string{LineContains: "ILIKE", LineNotContains: "NOT ILIKE", L
 // matched literally. Postgres's default escape character is the backslash.
 var likeMeta = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
-// lineFilter writes a predicate on the raw message. Substring search is the
-// ILIKE baseline from roadmap §2.4; phase 8 benchmarks it against pg_trgm and
-// tsvector and lands the winner here. Unlike selector regexes, line regexes are
-// deliberately unanchored: `|~ "timeout"` is a search, not a whole-line match.
+// lineFilter writes a predicate on the raw message. Substring search is ILIKE,
+// which phase 8 kept after measuring it against a pg_trgm GIN index and a
+// tsvector GIN index (docs/benchmarks, ADR-0008 §6): tsvector matches words, not
+// substrings, and lost on both semantics and speed; a trigram index makes a
+// needle-in-haystack search ~50x faster and is used by ILIKE automatically when
+// present, so it is an opt-in index rather than a change here. Unlike selector
+// regexes, line regexes are deliberately unanchored: `|~ "timeout"` is a search,
+// not a whole-line match.
 func (s *stmt) lineFilter(f LineFilter) {
 	v := f.Text
 	if f.Op.IsRegex() {

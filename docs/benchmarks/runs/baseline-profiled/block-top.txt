@@ -1,0 +1,38 @@
+File: app
+Build ID: c2de856be28fe541bd33b496eaace9122c54e3ac
+Type: delay
+Time: 2026-09-15 10:08:22 EDT
+Showing nodes accounting for 2735.73s, 99.86% of 2739.58s total
+Dropped 203 nodes (cum <= 13.70s)
+Showing top 30 nodes out of 69
+      flat  flat%   sum%        cum   cum%
+  2344.77s 85.59% 85.59%   2344.77s 85.59%  runtime.selectgo
+   199.95s  7.30% 92.89%    199.95s  7.30%  sync.(*Cond).Wait
+   164.48s  6.00% 98.89%    164.48s  6.00%  runtime.chanrecv2
+    26.53s  0.97% 99.86%     26.53s  0.97%  sync.(*Mutex).Lock (inline)
+         0     0% 99.86%       120s  4.38%  github.com/hashicorp/memberlist.(*Memberlist).checkBroadcastQueueDepth
+         0     0% 99.86%    150.01s  5.48%  github.com/hashicorp/memberlist.(*Memberlist).pushPullTrigger
+         0     0% 99.86%    168.33s  6.14%  github.com/hashicorp/memberlist.(*Memberlist).schedule.gowrap2
+         0     0% 99.86%    150.01s  5.48%  github.com/hashicorp/memberlist.(*Memberlist).schedule.gowrap3
+         0     0% 99.86%    167.49s  6.11%  github.com/hashicorp/memberlist.(*Memberlist).schedule.gowrap4
+         0     0% 99.86%    335.82s 12.26%  github.com/hashicorp/memberlist.(*Memberlist).triggerFunc
+         0     0% 99.86%       120s  4.38%  github.com/hashicorp/memberlist.newMemberlist.gowrap4
+         0     0% 99.86%     73.62s  2.69%  github.com/jackc/pgx/v5.(*Conn).CopyFrom
+         0     0% 99.86%     73.62s  2.69%  github.com/jackc/pgx/v5.(*copyFrom).run
+         0     0% 99.86%     73.62s  2.69%  github.com/jackc/pgx/v5.(*dbTx).CopyFrom
+         0     0% 99.86%     73.62s  2.69%  github.com/jackc/pgx/v5/pgconn.(*PgConn).CopyFrom
+         0     0% 99.86%     43.56s  1.59%  github.com/jackc/pgx/v5/pgconn.(*PgConn).CopyFrom.func1
+         0     0% 99.86%     25.13s  0.92%  github.com/jackc/pgx/v5/pgconn.(*PgConn).peekMessage
+         0     0% 99.86%     25.13s  0.92%  github.com/jackc/pgx/v5/pgconn.(*PgConn).receiveMessage
+         0     0% 99.86%     59.99s  2.19%  github.com/jackc/pgx/v5/pgxpool.(*Pool).backgroundHealthCheck
+         0     0% 99.86%     73.62s  2.69%  github.com/jackc/pgx/v5/pgxpool.(*Tx).CopyFrom
+         0     0% 99.86%     59.99s  2.19%  github.com/jackc/pgx/v5/pgxpool.NewWithConfig.func5
+         0     0% 99.86%    267.26s  9.76%  github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1._LogService_Stream_Handler
+         0     0% 99.86%     83.25s  3.04%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*Consumer).Start.func1
+         0     0% 99.86%     83.25s  3.04%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*Consumer).handle
+         0     0% 99.86%    707.72s 25.83%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*pipeline).publish
+         0     0% 99.86%    258.80s  9.45%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*pipeline).run
+         0     0% 99.86%    707.72s 25.83%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*pipeline).start.gowrap1
+         0     0% 99.86%    262.19s  9.57%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*pipeline).submit
+         0     0% 99.86%    267.26s  9.76%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).Stream
+         0     0% 99.86%    262.88s  9.60%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).handle

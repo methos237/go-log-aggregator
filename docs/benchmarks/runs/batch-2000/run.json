@@ -1,0 +1,62 @@
+{
+  "name": "batch-2000",
+  "started_at": "2026-09-15T14:29:46Z",
+  "commit": "7a4ee85",
+  "profiled": false,
+  "loadgen_exit": 1,
+  "hardware": {
+    "cpu": "Apple M2 Pro",
+    "cores": 10,
+    "memory_bytes": 17179869184,
+    "os": "macOS 26.6.2",
+    "go": "go1.27.1",
+    "docker": "29.4.3",
+    "docker_vm_cpus": 10,
+    "docker_vm_memory_bytes": 8217059328,
+    "docker_vm_available_mb": 3713,
+    "docker_vm_swap_used_mb": 30,
+    "other_containers_running": 0
+  },
+  "env": {
+    "LOGAGG_WRITER_BATCH_SIZE": "2000"
+  },
+  "loadgen": {
+    "addr": "127.0.0.1:9095",
+    "records": 3000000,
+    "batch_size": 500,
+    "streams": 64,
+    "senders": 4,
+    "message_size": 200,
+    "rate": 0,
+    "duration_sec": 0,
+    "ramp_sec": 0,
+    "took_sec": 158.602907541,
+    "batches": 6000,
+    "accepted": 2991000,
+    "rejected": 9000,
+    "shed": 0,
+    "refused": 9000,
+    "acks_overloaded": 0,
+    "acks_invalid": 0,
+    "acks_internal": 18,
+    "records_per_sec": 18858.41846390366,
+    "ack_p50_ms": 226.712959,
+    "ack_p95_ms": 2038.727333,
+    "ack_p99_ms": 17135.911958,
+    "ack_max_ms": 41117.761958
+  },
+  "end_to_end": {
+    "rows_before": 50000,
+    "rows_after": 3050000,
+    "drain_sec": 285.15,
+    "sustained_records_per_sec": 6740.237526722346
+  },
+  "writer": {
+    "rows_inserted": 3E+6,
+    "rows_deduplicated": 0,
+    "write_retries": 4,
+    "writes": 1509,
+    "mean_write_ms": 921.8091451292246,
+    "mean_batch_size": 1993.3730947647448
+  }
+}
