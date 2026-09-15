@@ -331,3 +331,7 @@ certs-verify: ## Show what the development certificates actually say
 		echo "--- $$f"; \
 		openssl x509 -in $(CERT_DIR)/$$f.pem -noout -subject -dates -ext subjectAltName,extendedKeyUsage; \
 	done
+
+.PHONY: bench-run
+bench-run: ## Phase 8 end-to-end benchmark run: make bench-run NAME=baseline [RECORDS=..] [PROFILE=1] [LOGAGG_*=..]
+	NAME=$(NAME) bash deploy/bench.sh

@@ -1,0 +1,26 @@
+# Overlay for benchmark runs. Applied by deploy/bench.sh on top of the base file,
+# and deliberately *not* the observability overlay: trace export and metric
+# scraping are work the collector does for someone else, and a benchmark of the
+# collector should not include it.
+#
+# Every knob a phase 8 run sweeps is passed through here with the collector's own
+# default as the fallback, so an unset variable means "the shipped value" and a
+# run's environment is the whole description of what was different about it.
+services:
+  collector:
+    environment:
+      # Info-level logging under load is a measurable cost that is not the write
+      # path. Warnings and errors still show; a run that produces any is suspect.
+      LOGAGG_LOG_LEVEL: ${LOGAGG_LOG_LEVEL:-warn}
+
+      LOGAGG_WRITER_WORKERS: ${LOGAGG_WRITER_WORKERS:-4}
+      LOGAGG_WRITER_BATCH_SIZE: ${LOGAGG_WRITER_BATCH_SIZE:-5000}
+      LOGAGG_WRITER_FLUSH_INTERVAL: ${LOGAGG_WRITER_FLUSH_INTERVAL:-250ms}
+      LOGAGG_WRITER_QUEUE_DEPTH: ${LOGAGG_WRITER_QUEUE_DEPTH:-1024}
+      LOGAGG_DB_MAX_CONNS: ${LOGAGG_DB_MAX_CONNS:-16}
+
+      # Block and mutex sampling are off unless bench.sh is asked for a profiled
+      # run (PROFILE=1); both cost throughput, so numbers and profiles come from
+      # separate runs.
+      LOGAGG_ADMIN_BLOCK_PROFILE_RATE: ${LOGAGG_ADMIN_BLOCK_PROFILE_RATE:-0}
+      LOGAGG_ADMIN_MUTEX_PROFILE_FRACTION: ${LOGAGG_ADMIN_MUTEX_PROFILE_FRACTION:-0}

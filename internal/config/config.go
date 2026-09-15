@@ -81,6 +81,12 @@ type HTTP struct {
 type Admin struct {
 	Addr        string
 	EnablePprof bool
+	// BlockProfileRate and MutexProfileFraction feed runtime.SetBlockProfileRate
+	// and runtime.SetMutexProfileFraction. Both default to off: sampling costs
+	// throughput, so the benchmark harness turns them on for a profiled run
+	// rather than every deployment paying for a profile nobody reads.
+	BlockProfileRate     int
+	MutexProfileFraction int
 }
 
 // QueuePublishHeaderBytes is the room a queue publish's headers take out of
@@ -394,8 +400,10 @@ func Load() (*Config, error) {
 			TailPingInterval: e.dur("HTTP_TAIL_PING_INTERVAL", 30*time.Second),
 		},
 		Admin: Admin{
-			Addr:        e.str("ADMIN_ADDR", ":9090"),
-			EnablePprof: e.bool("ADMIN_ENABLE_PPROF", true),
+			Addr:                 e.str("ADMIN_ADDR", ":9090"),
+			EnablePprof:          e.bool("ADMIN_ENABLE_PPROF", true),
+			BlockProfileRate:     e.int("ADMIN_BLOCK_PROFILE_RATE", 0),
+			MutexProfileFraction: e.int("ADMIN_MUTEX_PROFILE_FRACTION", 0),
 		},
 		Ingest: Ingest{
 			// Loopback by default, unlike the HTTP and admin listeners. Those serve
@@ -620,6 +628,10 @@ func (c *Config) Validate() error {
 	}
 	if c.Admin.Addr == c.HTTP.Addr {
 		bad("admin addr %q must differ from http addr: pprof must not be publicly reachable", c.Admin.Addr)
+	}
+	if c.Admin.BlockProfileRate < 0 || c.Admin.MutexProfileFraction < 0 {
+		bad("admin profile rates must not be negative, got block=%d mutex=%d",
+			c.Admin.BlockProfileRate, c.Admin.MutexProfileFraction)
 	}
 	if c.Ingest.MaxRecvMsgBytes <= 0 {
 		bad("ingest max recv bytes must be positive, got %d", c.Ingest.MaxRecvMsgBytes)

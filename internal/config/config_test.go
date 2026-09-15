@@ -225,6 +225,11 @@ func TestValidate(t *testing.T) {
 			want:   "must not be publicly reachable",
 		},
 		{
+			name:   "negative profile rate",
+			mutate: func(c *Config) { c.Admin.BlockProfileRate = -1 },
+			want:   "profile rates must not be negative",
+		},
+		{
 			name:   "zero query timeout",
 			mutate: func(c *Config) { c.HTTP.QueryTimeout = 0 },
 			want:   "query timeout must be positive",

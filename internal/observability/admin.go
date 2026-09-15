@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/pprof"
+	"runtime"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -45,6 +46,16 @@ func NewAdminServer(cfg config.Admin, m *Metrics, log *slog.Logger) *AdminServer
 		mux.HandleFunc("GET /debug/pprof/profile", pprof.Profile)
 		mux.HandleFunc("GET /debug/pprof/symbol", pprof.Symbol)
 		mux.HandleFunc("GET /debug/pprof/trace", pprof.Trace)
+
+		// Block and mutex profiles are empty unless the runtime is told to sample,
+		// and sampling has a cost, so both stay off until a profiled run asks.
+		// pprof.Index serves /debug/pprof/{heap,allocs,block,mutex,goroutine}.
+		if cfg.BlockProfileRate > 0 {
+			runtime.SetBlockProfileRate(cfg.BlockProfileRate)
+		}
+		if cfg.MutexProfileFraction > 0 {
+			runtime.SetMutexProfileFraction(cfg.MutexProfileFraction)
+		}
 	}
 
 	return &AdminServer{
