@@ -32,6 +32,18 @@ services:
   timescaledb:
     # timescale/timescaledb:2.22.1-pg17
     image: timescale/timescaledb@sha256:fba60021a224479e174ae1ec577c1a0576d5185b09fe9e622f1d19e4bf5bab0d
+    # Two server flags on top of what timescaledb-tune writes at first boot. With
+    # the tuned 1 GB max_wal_size the ingest benchmark ran a checkpoint every few
+    # seconds, wrote 3x the WAL, and the writeback stalled JetStream on the shared
+    # disk badly enough to time out publishes. 4 GB / 15 min took that to one
+    # checkpoint per run (ADR-0008 §3, docs/benchmarks). The price is a longer
+    # crash recovery, which is why stop_grace_period below is generous.
+    command:
+      - postgres
+      - -c
+      - max_wal_size=4GB
+      - -c
+      - checkpoint_timeout=15min
     environment:
       POSTGRES_USER: logagg
       POSTGRES_PASSWORD: logagg
@@ -45,6 +57,10 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - timescale-data:/var/lib/postgresql/data
+    # Compose's default 10s grace is not enough for Postgres to checkpoint and
+    # exit cleanly under load; it gets SIGKILLed, and the next start is a crash
+    # recovery that can outlast the healthcheck (phase 8 hit exactly this).
+    stop_grace_period: 60s
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U logagg -d logagg"]
       interval: 5s
