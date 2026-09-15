@@ -255,8 +255,9 @@ with `LOGAGG_`-prefixed environment variables, for example `LOGAGG_LOG_LEVEL=deb
 values are reported all at once at startup rather than one per restart.
 
 Two settings are checked against each other, since getting them wrong is silent.
-`LOGAGG_INGEST_MAX_RECV_BYTES` must not exceed the broker's `max_payload`, or a batch
-above it would be accepted, validated, then refused as unsendable. `LOGAGG_QUEUE_ACK_WAIT`
+`LOGAGG_INGEST_MAX_RECV_BYTES` plus the room a publish's trace headers take must not
+exceed the broker's `max_payload`, or a batch above it would be accepted, validated,
+then refused as unsendable. `LOGAGG_QUEUE_ACK_WAIT`
 must exceed the writer's worst case, or a batch still being written gets redelivered.
 The collector verifies the first against the live broker at startup and the second in
 configuration validation.

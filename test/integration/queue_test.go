@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/jamespolk/go-log-aggregator/internal/config"
 	"github.com/jamespolk/go-log-aggregator/internal/queue"
 )
 
@@ -112,8 +113,8 @@ func TestDefaultIngestCeilingFitsTheBroker(t *testing.T) {
 
 	defaults, err := defaultConfig()
 	require.NoError(t, err)
-	require.LessOrEqual(t, int64(defaults.Ingest.MaxRecvMsgBytes), q.MaxPayload(),
-		"the default ingest ceiling is above this broker's max_payload, so an oversized batch would be dropped rather than refused")
+	require.LessOrEqual(t, int64(defaults.Ingest.MaxRecvMsgBytes)+config.QueuePublishHeaderBytes, q.MaxPayload(),
+		"the default ingest ceiling plus header room is above this broker's max_payload, so an oversized batch would be dropped rather than refused")
 	require.False(t, errors.Is(err, context.Canceled))
 }
 
