@@ -1,0 +1,26 @@
+File: app
+Build ID: c2de856be28fe541bd33b496eaace9122c54e3ac
+Type: inuse_space
+Time: 2026-09-15 10:08:22 EDT
+Showing nodes accounting for 405.29MB, 99.00% of 409.38MB total
+Dropped 47 nodes (cum <= 2.05MB)
+      flat  flat%   sum%        cum   cum%
+  152.53MB 37.26% 37.26%   152.53MB 37.26%  github.com/nats-io/nats%2ego.(*Conn).parse
+  105.52MB 25.78% 63.04%   105.52MB 25.78%  google.golang.org/protobuf/internal/impl.consumeStringValidateUTF8
+   77.01MB 18.81% 81.85%    77.01MB 18.81%  reflect.unsafe_New
+   61.17MB 14.94% 96.79%   250.23MB 61.12%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*Consumer).handle
+    6.53MB  1.60% 98.38%     6.53MB  1.60%  google.golang.org/protobuf/internal/impl.pointer.AppendPointerSlice (inline)
+    2.53MB  0.62% 99.00%     2.53MB  0.62%  github.com/jamespolk/go-log-aggregator/internal/storage.newWriteBatch (inline)
+         0     0% 99.00%   250.23MB 61.12%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*Consumer).Start.func1
+         0     0% 99.00%   250.23MB 61.12%  github.com/jamespolk/go-log-aggregator/internal/queue.(*Conn).Consume.func1
+         0     0% 99.00%     2.53MB  0.62%  github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).work
+         0     0% 99.00%   152.53MB 37.26%  github.com/nats-io/nats%2ego.(*Conn).readLoop
+         0     0% 99.00%   250.23MB 61.12%  github.com/nats-io/nats%2ego.(*Conn).waitForMsgs
+         0     0% 99.00%   250.23MB 61.12%  github.com/nats-io/nats.go/jetstream.(*pullConsumer).Consume.func1
+         0     0% 99.00%   189.06MB 46.18%  google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshal
+         0     0% 99.00%   189.06MB 46.18%  google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshalPointer
+         0     0% 99.00%   189.06MB 46.18%  google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshalPointerEager
+         0     0% 99.00%   189.06MB 46.18%  google.golang.org/protobuf/internal/impl.consumeMessageSliceInfo
+         0     0% 99.00%   189.06MB 46.18%  google.golang.org/protobuf/proto.Unmarshal
+         0     0% 99.00%   189.06MB 46.18%  google.golang.org/protobuf/proto.UnmarshalOptions.unmarshal
+         0     0% 99.00%    77.01MB 18.81%  reflect.New

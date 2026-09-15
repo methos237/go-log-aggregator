@@ -38,6 +38,10 @@ DURATION=${DURATION:-}
 RAMP=${RAMP:-}
 WARMUP_RECORDS=${WARMUP_RECORDS:-50000}
 PROFILE=${PROFILE:-0}
+# BUILD=0 reuses the collector image from the last build, so a sweep of config
+# knobs can run while the working tree is being edited without the image changing
+# under it. Anything that changes code must build.
+BUILD=${BUILD:-1}
 CPU_PROFILE_SECONDS=${CPU_PROFILE_SECONDS:-20}
 DRAIN_TIMEOUT=${DRAIN_TIMEOUT:-600}
 OUT=${OUT:-docs/benchmarks/runs/$NAME}
@@ -71,6 +75,9 @@ wait_for_rows() {
 		if [ "$(echo "$(now) $started" | awk '{print ($1 - $2 > '"$DRAIN_TIMEOUT"')}')" = 1 ]; then
 			fail "only $have of $want rows landed within ${DRAIN_TIMEOUT}s"
 		fi
+		# A dead collector never drains; say so now instead of at the timeout.
+		[ "$(docker inspect -f '{{.State.Running}}' logagg-collector-1 2>/dev/null)" = true ] ||
+			fail "collector stopped mid-run with $have of $want rows landed"
 		sleep 0.2
 	done
 	echo "$(now) $started" | awk '{printf "%.2f", $1 - $2}'
@@ -102,14 +109,24 @@ hardware() {
 		mem=$(awk '/MemTotal/ {print $2 * 1024}' /proc/meminfo)
 		os=$(uname -sr)
 	fi
+	# The VM's memory state matters as much as its size: a swapping VM produces
+	# numbers that measure the swap, and the first baseline attempt did exactly
+	# that with a neighbouring project's containers still running.
+	local vm_free vm_swap
+	read -r vm_free vm_swap <<<"$(docker run --rm alpine sh -c \
+		'free -m | awk "/^Mem:/ {f=\$7} /^Swap:/ {s=\$3} END {print f, s}"' 2>/dev/null || echo "null null")"
 	jq -n \
 		--arg cpu "$cpu" --argjson cores "$cores" --argjson mem "$mem" --arg os "$os" \
+		--argjson vm_free "$vm_free" --argjson vm_swap "$vm_swap" \
+		--argjson other_containers "$(docker ps --format '{{.Names}}' | grep -vc '^logagg-' || true)" \
 		--arg go "$(go version | awk '{print $3}')" \
 		--arg docker "$(docker version --format '{{.Server.Version}}')" \
 		--argjson docker_cpus "$(docker info --format '{{.NCPU}}')" \
 		--argjson docker_mem "$(docker info --format '{{.MemTotal}}')" \
 		'{cpu: $cpu, cores: $cores, memory_bytes: $mem, os: $os, go: $go,
-		  docker: $docker, docker_vm_cpus: $docker_cpus, docker_vm_memory_bytes: $docker_mem}'
+		  docker: $docker, docker_vm_cpus: $docker_cpus, docker_vm_memory_bytes: $docker_mem,
+		  docker_vm_available_mb: $vm_free, docker_vm_swap_used_mb: $vm_swap,
+		  other_containers_running: $other_containers}'
 }
 
 # metric_delta prints after-minus-before for a metric, summed over its label sets
@@ -166,8 +183,17 @@ fi
 for s in agent logwriter proxy prometheus grafana jaeger; do
 	docker stop "logagg-$s-1" >/dev/null 2>&1 || true
 done
-$COMPOSE up -d --wait --wait-timeout 240 timescaledb nats
-$COMPOSE up -d --build --force-recreate --wait --wait-timeout 240 collector
+# A database recreated with a new server flag may spend a while in crash
+# recovery (the larger max_wal_size gets, the longer), and Compose reports that
+# as unhealthy rather than waiting. Give it a few tries before giving up.
+for attempt in 1 2 3 4 5 6; do
+	$COMPOSE up -d --wait --wait-timeout 240 timescaledb nats && break
+	[ "$attempt" = 6 ] && fail "database did not become healthy"
+	sleep 20
+done
+build_flag=(--build)
+[ "$BUILD" = 0 ] && build_flag=()
+$COMPOSE up -d "${build_flag[@]}" --force-recreate --wait --wait-timeout 240 collector
 # Only logs, not streams: the collector caches which stream rows exist, and
 # truncating streams under it would fail every batch on its foreign key. The
 # collector has just migrated the schema, so the table exists even on a fresh
@@ -197,9 +223,15 @@ else
 fi
 [ -n "$RAMP" ] && args+=(-ramp "$RAMP")
 started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-bin/loadgen "${args[@]}" | tee "$OUT/loadgen.txt"
+# A non-zero exit (refused records) is a result to record, not a reason to stop:
+# the accepted count is still exact and the drain still measures the writer.
+loadgen_exit=0
+bin/loadgen "${args[@]}" 2>&1 | tee "$OUT/loadgen.txt" || loadgen_exit=${PIPESTATUS[0]}
 
 accepted=$(jq -r .accepted "$OUT/loadgen.json")
+# The collector's footprint at its fullest: the client has stopped and the writer
+# is still holding everything it has not yet written.
+collector_mem_mb=$(docker stats --no-stream --format '{{.MemUsage}}' logagg-collector-1 | awk '{v=$1; if (v ~ /GiB/) {sub(/GiB/,"",v); v*=1024} else sub(/MiB/,"",v); printf "%d", v}')
 say "draining: waiting for $accepted rows to land"
 drain_sec=$(wait_for_rows $((rows_before + accepted)))
 echo "drained in ${drain_sec}s"
@@ -232,11 +264,12 @@ jq -n \
 	--arg name "$NAME" --arg started "$started_at" \
 	--arg commit "$(git rev-parse --short HEAD)" \
 	--argjson hardware "$(hardware)" \
-	--argjson env "$(env | grep '^LOGAGG_' | jq -Rn '[inputs | capture("(?<key>[^=]+)=(?<value>.*)")] | from_entries')" \
+	--argjson env "$(env | grep -E '^(LOGAGG|PG)_' | jq -Rn '[inputs | capture("(?<key>[^=]+)=(?<value>.*)")] | from_entries')" \
 	--argjson loadgen "$(cat "$OUT/loadgen.json")" \
 	--argjson profiled "$([ "$PROFILE" = 1 ] && echo true || echo false)" \
+	--argjson loadgen_exit "$loadgen_exit" \
 	--argjson rows_before "$rows_before" --argjson rows_after "$rows_after" \
-	--argjson drain_sec "$drain_sec" \
+	--argjson drain_sec "$drain_sec" --argjson collector_mem_mb "${collector_mem_mb:-0}" \
 	--argjson rows_inserted "$(metric_delta logagg_storage_rows_inserted_total)" \
 	--argjson rows_deduplicated "$(metric_delta logagg_storage_rows_deduplicated_total)" \
 	--argjson write_retries "$(metric_delta logagg_storage_write_retries_total)" \
@@ -245,10 +278,11 @@ jq -n \
 	--argjson batch_n "$(metric_delta logagg_batch_size_count)" \
 	'{
 	  name: $name, started_at: $started, commit: $commit, profiled: $profiled,
-	  hardware: $hardware, collector_env: $env, loadgen: $loadgen,
+	  loadgen_exit: $loadgen_exit,
+	  hardware: $hardware, env: $env, loadgen: $loadgen,
 	  end_to_end: {
 	    rows_before: $rows_before, rows_after: $rows_after,
-	    drain_sec: $drain_sec,
+	    drain_sec: $drain_sec, collector_mem_mb_at_drain: $collector_mem_mb,
 	    # Accepted records over client time plus the drain: the rate the database
 	    # actually absorbed, which is the number that matters when the client is
 	    # faster than the writer.

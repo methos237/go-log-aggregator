@@ -1,0 +1,38 @@
+File: app
+Build ID: c2de856be28fe541bd33b496eaace9122c54e3ac
+Type: delay
+Time: 2026-09-15 10:08:22 EDT
+Showing nodes accounting for 100.97s, 100% of 100.99s total
+Dropped 109 nodes (cum <= 0.50s)
+Showing top 30 nodes out of 35
+      flat  flat%   sum%        cum   cum%
+    83.84s 83.02% 83.02%     83.84s 83.02%  runtime.unlock (inline)
+    16.99s 16.82% 99.84%     16.99s 16.82%  sync.(*Mutex).Unlock (inline)
+     0.14s  0.14%   100%      0.72s  0.71%  sync.(*RWMutex).Unlock
+         0     0%   100%      8.12s  8.04%  github.com/jackc/pgx/v5.(*copyFrom).buildCopyBuf
+         0     0%   100%      8.12s  8.04%  github.com/jackc/pgx/v5.(*copyFrom).run.func1
+         0     0%   100%      7.86s  7.78%  github.com/jackc/pgx/v5.(*copyFromSlice).Values
+         0     0%   100%     16.09s 15.93%  github.com/jackc/pgx/v5/pgconn.(*PgConn).signalMessage.func1
+         0     0%   100%     75.88s 75.13%  github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1._LogService_Stream_Handler
+         0     0%   100%     75.88s 75.13%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).Stream
+         0     0%   100%     75.57s 74.83%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).handle
+         0     0%   100%     75.57s 74.83%  github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).process
+         0     0%   100%      7.86s  7.78%  github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).commitRecords.func3
+         0     0%   100%      7.86s  7.78%  github.com/jamespolk/go-log-aggregator/internal/storage.copyRow
+         0     0%   100%      0.59s  0.58%  github.com/nats-io/nats%2ego.(*Conn).publish
+         0     0%   100%     75.88s 75.13%  google.golang.org/grpc.(*Server).handleStream
+         0     0%   100%     75.88s 75.13%  google.golang.org/grpc.(*Server).processStreamingRPC
+         0     0%   100%     75.88s 75.13%  google.golang.org/grpc.(*Server).serveStreams.func2.1
+         0     0%   100%     75.20s 74.46%  google.golang.org/protobuf/proto.Marshal
+         0     0%   100%     75.20s 74.46%  google.golang.org/protobuf/proto.MarshalOptions.marshal
+         0     0%   100%     75.25s 74.51%  runtime.(*mcache).allocLarge
+         0     0%   100%      8.43s  8.35%  runtime.(*mcache).nextFree
+         0     0%   100%      8.43s  8.35%  runtime.(*mcache).refill
+         0     0%   100%      8.43s  8.35%  runtime.(*mcentral).cacheSpan
+         0     0%   100%      8.21s  8.13%  runtime.(*mcentral).grow
+         0     0%   100%     83.46s 82.64%  runtime.(*mheap).alloc
+         0     0%   100%     83.46s 82.64%  runtime.(*mheap).alloc.func1
+         0     0%   100%     83.44s 82.62%  runtime.(*mheap).allocSpan
+         0     0%   100%      1.59s  1.57%  runtime.convT
+         0     0%   100%     75.25s 74.51%  runtime.makeslice
+         0     0%   100%     83.68s 82.86%  runtime.mallocgc
