@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -154,7 +155,14 @@ func render(root string, c chart) (string, error) {
 			}
 			return "", err
 		}
-		pts = append(pts, point{b.label, c.value(r)})
+		v := c.value(r)
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			// A run whose counters did not add up (collector restarted mid-run,
+			// missing metric family) has nothing to chart; skipping it beats a
+			// NaN label or an axis loop that never ends.
+			continue
+		}
+		pts = append(pts, point{b.label, v})
 	}
 	if len(pts) == 0 {
 		return "", fmt.Errorf("no runs found")

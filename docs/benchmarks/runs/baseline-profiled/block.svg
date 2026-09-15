@@ -430,640 +430,544 @@
 <text id="matched" x="1290.00" y="341" > </text>
 <g id="frames">
 <g >
-<title>50 (2,685,719,545 ns, 0.10%)</title><rect x="1353.8" y="181" width="1.3" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
-<text  x="1356.79" y="191.5" ></text>
+<title>google.golang.org/grpc.recv (4,368,381,040 ns, 0.16%)</title><rect x="1280.6" y="165" width="2.2" height="15.0" fill="rgb(246,191,45)" rx="2" ry="2" />
+<text  x="1283.63" y="175.5" ></text>
 </g>
 <g >
-<title>58 (43,514,305,729 ns, 1.59%)</title><rect x="1355.2" y="245" width="21.9" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="1358.17" y="255.5" >58</text>
+<title>github.com/jamespolk/go-log-aggregator/internal/observability.(*Health).ReadyHandler.func1 (2,793,915,767 ns, 0.10%)</title><rect x="1366.6" y="149" width="1.4" height="15.0" fill="rgb(209,21,5)" rx="2" ry="2" />
+<text  x="1369.64" y="159.5" ></text>
 </g>
 <g >
-<title>99 (687,879,314 ns, 0.03%)</title><rect x="10.7" y="149" width="0.3" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
-<text  x="13.68" y="159.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).Stream (267,264,318,370 ns, 9.76%)</title><rect x="1148.2" y="229" width="134.6" height="15.0" fill="rgb(243,175,42)" rx="2" ry="2" />
+<text  x="1151.21" y="239.5" >github.com/jamesp..</text>
 </g>
 <g >
-<title>50 (70,930,103,311 ns, 2.59%)</title><rect x="1298.4" y="181" width="35.8" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
-<text  x="1301.43" y="191.5" >50</text>
+<title>github.com/nats-io/nats.go/jetstream.(*pullConsumer).Info (10,700,262,157 ns, 0.39%)</title><rect x="703.4" y="261" width="5.4" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
+<text  x="706.43" y="271.5" ></text>
 </g>
 <g >
-<title>1 (20,000,763,852 ns, 0.73%)</title><rect x="1378.5" y="181" width="10.1" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="1381.53" y="191.5" ></text>
+<title>net/http.HandlerFunc.ServeHTTP (2,793,915,767 ns, 0.10%)</title><rect x="1366.6" y="213" width="1.4" height="15.0" fill="rgb(209,19,4)" rx="2" ry="2" />
+<text  x="1369.64" y="223.5" ></text>
 </g>
 <g >
-<title>102 (689,772,604 ns, 0.03%)</title><rect x="10.7" y="197" width="0.3" height="15.0" fill="rgb(213,41,9)" rx="2" ry="2" />
-<text  x="13.68" y="207.5" ></text>
+<title>io.(*PipeWriter).Write (1,113,079,114 ns, 0.04%)</title><rect x="1356.0" y="293" width="0.5" height="15.0" fill="rgb(214,45,10)" rx="2" ry="2" />
+<text  x="1358.98" y="303.5" ></text>
 </g>
 <g >
-<title>97 (2,778,804,688 ns, 0.10%)</title><rect x="1388.6" y="293" width="1.4" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
-<text  x="1391.60" y="303.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/observability.(*Health).Check.gowrap1 (2,778,804,688 ns, 0.10%)</title><rect x="702.0" y="293" width="1.4" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="705.04" y="303.5" ></text>
 </g>
 <g >
-<title>21 (167,480,983,196 ns, 6.11%)</title><rect x="372.9" y="277" width="84.4" height="15.0" fill="rgb(224,87,20)" rx="2" ry="2" />
-<text  x="375.90" y="287.5" >21</text>
+<title>github.com/jamespolk/go-log-aggregator/internal/ingest.(*pipeline).submit (262,190,508,441 ns, 9.57%)</title><rect x="1148.2" y="181" width="132.1" height="15.0" fill="rgb(232,125,30)" rx="2" ry="2" />
+<text  x="1151.21" y="191.5" >github.com/james..</text>
 </g>
 <g >
-<title>53 (70,930,103,311 ns, 2.59%)</title><rect x="1298.4" y="229" width="35.8" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="1301.43" y="239.5" >53</text>
+<title>github.com/jamespolk/go-log-aggregator/internal/ingest.(*pipeline).publish (707,716,303,677 ns, 25.83%)</title><rect x="345.5" y="277" width="356.5" height="15.0" fill="rgb(242,173,41)" rx="2" ry="2" />
+<text  x="348.54" y="287.5" >github.com/jamespolk/go-log-aggregator/internal/..</text>
 </g>
 <g >
-<title>98 (2,777,580,519 ns, 0.10%)</title><rect x="1353.7" y="277" width="1.4" height="15.0" fill="rgb(233,131,31)" rx="2" ry="2" />
-<text  x="1356.75" y="287.5" ></text>
+<title>github.com/nats-io/nats%2ego.(*Conn).RequestWithContext (2,662,605,344 ns, 0.10%)</title><rect x="702.1" y="213" width="1.3" height="15.0" fill="rgb(232,125,29)" rx="2" ry="2" />
+<text  x="705.09" y="223.5" ></text>
 </g>
 <g >
-<title>80 (4,191,562,044 ns, 0.15%)</title><rect x="143.2" y="101" width="2.1" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="146.19" y="111.5" ></text>
+<title>sync.(*RWMutex).Lock (205,930,362 ns, 0.01%)</title><rect x="10.1" y="213" width="0.1" height="15.0" fill="rgb(239,158,37)" rx="2" ry="2" />
+<text  x="13.11" y="223.5" ></text>
 </g>
 <g >
-<title>87 (4,368,381,040 ns, 0.16%)</title><rect x="143.1" y="213" width="2.2" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
-<text  x="146.10" y="223.5" ></text>
+<title>google.golang.org/grpc.(*Server).handleStream (267,264,318,370 ns, 9.76%)</title><rect x="1148.2" y="277" width="134.6" height="15.0" fill="rgb(209,18,4)" rx="2" ry="2" />
+<text  x="1151.21" y="287.5" >google.golang.org..</text>
 </g>
 <g >
-<title>53 (2,685,719,545 ns, 0.10%)</title><rect x="1353.8" y="229" width="1.3" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="1356.79" y="239.5" ></text>
+<title>github.com/nats-io/nats%2ego.(*Conn).waitForMsgs (283,290,297,459 ns, 10.34%)</title><rect x="925.8" y="277" width="142.7" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
+<text  x="928.83" y="287.5" >github.com/nats-io..</text>
 </g>
 <g >
-<title>79 (4,181,625,964 ns, 0.15%)</title><rect x="143.2" y="85" width="2.1" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
-<text  x="146.19" y="95.5" ></text>
+<title>github.com/nats-io/nats.go/jetstream.(*jetStream).apiRequestJSON (2,662,605,344 ns, 0.10%)</title><rect x="702.1" y="229" width="1.3" height="15.0" fill="rgb(218,61,14)" rx="2" ry="2" />
+<text  x="705.09" y="239.5" ></text>
 </g>
 <g >
-<title>65 (22,823,704,427 ns, 0.83%)</title><rect x="1322.7" y="149" width="11.5" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="1325.66" y="159.5" ></text>
+<title>google.golang.org/grpc/internal/transport.NewServerTransport.func3 (69,583,961,240 ns, 2.54%)</title><rect x="1282.8" y="293" width="35.1" height="15.0" fill="rgb(247,196,46)" rx="2" ry="2" />
+<text  x="1285.84" y="303.5" >go..</text>
 </g>
 <g >
-<title>29 (153,356,112,679 ns, 5.60%)</title><rect x="619.9" y="277" width="77.2" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="622.88" y="287.5" >29</text>
+<title>runtime.selectgo (448,914,882,047 ns, 16.39%)</title><rect x="475.9" y="261" width="226.1" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="478.90" y="271.5" >runtime.selectgo</text>
 </g>
 <g >
-<title>95 (2,662,605,344 ns, 0.10%)</title><rect x="1388.7" y="261" width="1.3" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
-<text  x="1391.66" y="271.5" ></text>
+<title>sync.(*Mutex).Lock (687,879,314 ns, 0.03%)</title><rect x="1280.3" y="149" width="0.3" height="15.0" fill="rgb(231,119,28)" rx="2" ry="2" />
+<text  x="1283.28" y="159.5" ></text>
 </g>
 <g >
-<title>83 (4,350,488,422 ns, 0.16%)</title><rect x="143.1" y="149" width="2.2" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="146.11" y="159.5" ></text>
+<title>github.com/nats-io/nats%2ego.(*Conn).Publish (689,772,604 ns, 0.03%)</title><rect x="1280.3" y="181" width="0.3" height="15.0" fill="rgb(246,192,45)" rx="2" ry="2" />
+<text  x="1283.28" y="191.5" ></text>
 </g>
 <g >
-<title>1 (43,514,305,729 ns, 1.59%)</title><rect x="1355.2" y="229" width="21.9" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="1358.17" y="239.5" >1</text>
+<title>github.com/nats-io/nats%2ego.(*Conn).publish (689,772,604 ns, 0.03%)</title><rect x="1280.3" y="165" width="0.3" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
+<text  x="1283.28" y="175.5" ></text>
 </g>
 <g >
-<title>51 (70,930,103,311 ns, 2.59%)</title><rect x="1298.4" y="197" width="35.8" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
-<text  x="1301.43" y="207.5" >51</text>
+<title>google.golang.org/grpc.(*GenericServerStream[github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1.LogBatch,github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1.Ack]).Recv (4,368,381,040 ns, 0.16%)</title><rect x="1280.6" y="213" width="2.2" height="15.0" fill="rgb(254,226,54)" rx="2" ry="2" />
+<text  x="1283.63" y="223.5" ></text>
 </g>
 <g >
-<title>113 (205,930,362 ns, 0.01%)</title><rect x="288.1" y="245" width="0.1" height="15.0" fill="rgb(251,211,50)" rx="2" ry="2" />
-<text  x="291.10" y="255.5" ></text>
+<title>github.com/hashicorp/memberlist.(*Memberlist).schedule.gowrap4 (167,488,384,903 ns, 6.11%)</title><rect x="170.5" y="293" width="84.3" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
+<text  x="173.46" y="303.5" >github.co..</text>
 </g>
 <g >
-<title>103 (665,874,650 ns, 0.02%)</title><rect x="10.0" y="277" width="0.3" height="15.0" fill="rgb(207,11,2)" rx="2" ry="2" />
-<text  x="13.00" y="287.5" ></text>
+<title>github.com/jackc/pgx/v5/pgxpool.(*Tx).CopyFrom (73,615,822,856 ns, 2.69%)</title><rect x="786.1" y="213" width="37.1" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
+<text  x="789.13" y="223.5" >git..</text>
 </g>
 <g >
-<title>86 (4,368,381,040 ns, 0.16%)</title><rect x="143.1" y="197" width="2.2" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
-<text  x="146.10" y="207.5" ></text>
+<title>github.com/nats-io/nats%2ego.(*Conn).processConnectInit.gowrap3 (164,752,367,626 ns, 6.01%)</title><rect x="842.8" y="293" width="83.0" height="15.0" fill="rgb(251,215,51)" rx="2" ry="2" />
+<text  x="845.84" y="303.5" >github.co..</text>
 </g>
 <g >
-<title>68 (2,793,915,767 ns, 0.10%)</title><rect x="1377.1" y="245" width="1.4" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
-<text  x="1380.09" y="255.5" ></text>
+<title>io.(*pipe).write (1,113,079,114 ns, 0.04%)</title><rect x="1356.0" y="277" width="0.5" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="1358.98" y="287.5" ></text>
 </g>
 <g >
-<title>51 (2,685,719,545 ns, 0.10%)</title><rect x="1353.8" y="197" width="1.3" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
-<text  x="1356.79" y="207.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1._LogService_Stream_Handler (267,264,318,370 ns, 9.76%)</title><rect x="1148.2" y="245" width="134.6" height="15.0" fill="rgb(207,13,3)" rx="2" ry="2" />
+<text  x="1151.21" y="255.5" >github.com/jamesp..</text>
 </g>
 <g >
-<title>1 (262,190,508,441 ns, 9.57%)</title><rect x="11.0" y="165" width="132.1" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="14.02" y="175.5" >1</text>
+<title>github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).flush (73,723,860,367 ns, 2.69%)</title><rect x="786.1" y="261" width="37.1" height="15.0" fill="rgb(229,112,26)" rx="2" ry="2" />
+<text  x="789.07" y="271.5" >git..</text>
 </g>
 <g >
-<title>12 (10,700,262,157 ns, 0.39%)</title><rect x="697.1" y="213" width="5.4" height="15.0" fill="rgb(224,87,20)" rx="2" ry="2" />
-<text  x="700.13" y="223.5" ></text>
+<title>net/http/pprof.Profile (20,024,665,553 ns, 0.73%)</title><rect x="1356.6" y="213" width="10.0" height="15.0" fill="rgb(235,141,33)" rx="2" ry="2" />
+<text  x="1359.55" y="223.5" ></text>
 </g>
 <g >
-<title>64 (2,302,071,145 ns, 0.08%)</title><rect x="1354.0" y="133" width="1.1" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="1356.99" y="143.5" ></text>
+<title>github.com/nats-io/nats%2ego.(*Conn).requestWithContext (2,662,605,344 ns, 0.10%)</title><rect x="702.1" y="197" width="1.3" height="15.0" fill="rgb(225,94,22)" rx="2" ry="2" />
+<text  x="705.09" y="207.5" ></text>
 </g>
 <g >
-<title>73 (10,700,262,157 ns, 0.39%)</title><rect x="697.1" y="229" width="5.4" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="700.13" y="239.5" ></text>
+<title>runtime.selectgo (83,249,519,853 ns, 3.04%)</title><rect x="925.9" y="181" width="41.9" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="928.88" y="191.5" >run..</text>
 </g>
 <g >
-<title>1 (38,889,977,656 ns, 1.42%)</title><rect x="1334.2" y="261" width="19.5" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="1337.16" y="271.5" ></text>
+<title>github.com/nats-io/nats.go/jetstream.(*jetStream).PublishMsg (258,799,598,880 ns, 9.45%)</title><rect x="345.5" y="229" width="130.4" height="15.0" fill="rgb(235,141,33)" rx="2" ry="2" />
+<text  x="348.54" y="239.5" >github.com/nats-..</text>
 </g>
 <g >
-<title>63 (22,823,704,427 ns, 0.83%)</title><rect x="1322.7" y="117" width="11.5" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="1325.66" y="127.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).handle (262,880,381,044 ns, 9.60%)</title><rect x="1148.2" y="213" width="132.4" height="15.0" fill="rgb(243,175,42)" rx="2" ry="2" />
+<text  x="1151.21" y="223.5" >github.com/james..</text>
 </g>
 <g >
-<title>60 (43,562,840,799 ns, 1.59%)</title><rect x="1355.1" y="277" width="22.0" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
-<text  x="1358.15" y="287.5" >60</text>
+<title>sync.(*Mutex).Lock (25,125,775,572 ns, 0.92%)</title><rect x="786.1" y="117" width="12.7" height="15.0" fill="rgb(231,119,28)" rx="2" ry="2" />
+<text  x="789.13" y="127.5" ></text>
 </g>
 <g >
-<title>1 (258,457,858,127 ns, 9.43%)</title><rect x="838.7" y="181" width="130.2" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="841.70" y="191.5" >1</text>
-</g>
-<g >
-<title>101 (689,772,604 ns, 0.03%)</title><rect x="10.7" y="181" width="0.3" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
-<text  x="13.68" y="191.5" ></text>
-</g>
-<g >
-<title>77 (4,181,625,964 ns, 0.15%)</title><rect x="143.2" y="53" width="2.1" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
-<text  x="146.19" y="63.5" ></text>
-</g>
-<g >
-<title>26 (164,752,367,626 ns, 6.01%)</title><rect x="457.3" y="293" width="83.0" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="460.26" y="303.5" >26</text>
-</g>
-<g >
-<title>13 (258,799,598,880 ns, 9.45%)</title><rect x="838.5" y="213" width="130.4" height="15.0" fill="rgb(217,57,13)" rx="2" ry="2" />
-<text  x="841.53" y="223.5" >13</text>
-</g>
-<g >
-<title>25 (164,445,907,845 ns, 6.00%)</title><rect x="457.4" y="277" width="82.9" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="460.42" y="287.5" >25</text>
-</g>
-<g >
-<title>1 (10,700,262,157 ns, 0.39%)</title><rect x="697.1" y="197" width="5.4" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="700.13" y="207.5" ></text>
-</g>
-<g >
-<title>1 (153,356,112,679 ns, 5.60%)</title><rect x="619.9" y="261" width="77.2" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="622.88" y="271.5" >1</text>
-</g>
-<g >
-<title>104 (1,113,079,114 ns, 0.04%)</title><rect x="10.0" y="293" width="0.6" height="15.0" fill="rgb(251,211,50)" rx="2" ry="2" />
-<text  x="13.00" y="303.5" ></text>
-</g>
-<g >
-<title>59 (43,562,840,799 ns, 1.59%)</title><rect x="1355.1" y="261" width="22.0" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
-<text  x="1358.15" y="271.5" >59</text>
-</g>
-<g >
-<title>49 (70,930,103,311 ns, 2.59%)</title><rect x="1298.4" y="165" width="35.8" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="1301.43" y="175.5" >49</text>
-</g>
-<g >
-<title>49 (2,685,719,545 ns, 0.10%)</title><rect x="1353.8" y="165" width="1.3" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="1356.79" y="175.5" ></text>
-</g>
-<g >
-<title>1 (665,874,650 ns, 0.02%)</title><rect x="10.0" y="261" width="0.3" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="13.00" y="271.5" ></text>
-</g>
-<g >
-<title>4 (262,190,508,441 ns, 9.57%)</title><rect x="11.0" y="181" width="132.1" height="15.0" fill="rgb(227,104,24)" rx="2" ry="2" />
-<text  x="14.02" y="191.5" >4</text>
-</g>
-<g >
-<title>1 (150,005,831,268 ns, 5.48%)</title><rect x="702.5" y="261" width="75.6" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="705.52" y="271.5" >1</text>
-</g>
-<g >
-<title>1 (48,099,930,636 ns, 1.76%)</title><rect x="1298.4" y="133" width="24.3" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="1301.43" y="143.5" >1</text>
-</g>
-<g >
-<title>1 (158,060,448,453 ns, 5.77%)</title><rect x="540.3" y="261" width="79.6" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="543.26" y="271.5" >1</text>
-</g>
-<g >
-<title>78 (4,181,625,964 ns, 0.15%)</title><rect x="143.2" y="69" width="2.1" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
-<text  x="146.19" y="79.5" ></text>
-</g>
-<g >
-<title>94 (2,662,605,344 ns, 0.10%)</title><rect x="1388.7" y="245" width="1.3" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="1391.66" y="255.5" ></text>
-</g>
-<g >
-<title>44 (69,575,090,827 ns, 2.54%)</title><rect x="1233.1" y="277" width="35.1" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="1236.11" y="287.5" >44</text>
-</g>
-<g >
-<title>68 (2,793,915,767 ns, 0.10%)</title><rect x="1377.1" y="165" width="1.4" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
-<text  x="1380.09" y="175.5" ></text>
-</g>
-<g >
-<title>23 (167,488,384,903 ns, 6.11%)</title><rect x="372.9" y="293" width="84.4" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
-<text  x="375.89" y="303.5" >23</text>
-</g>
-<g >
-<title>74 (2,662,605,344 ns, 0.10%)</title><rect x="1388.7" y="229" width="1.3" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="1391.66" y="239.5" ></text>
-</g>
-<g >
-<title>56 (71,006,771,581 ns, 2.59%)</title><rect x="1298.4" y="277" width="35.8" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="1301.39" y="287.5" >56</text>
-</g>
-<g >
-<title>20 (283,290,297,459 ns, 10.34%)</title><rect x="145.4" y="293" width="142.7" height="15.0" fill="rgb(230,117,28)" rx="2" ry="2" />
-<text  x="148.40" y="303.5" >20</text>
-</g>
-<g >
-<title>68 (20,054,382,545 ns, 0.73%)</title><rect x="1378.5" y="229" width="10.1" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
-<text  x="1381.50" y="239.5" ></text>
-</g>
-<g >
-<title>90 (2,793,915,767 ns, 0.10%)</title><rect x="1377.1" y="133" width="1.4" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="1380.09" y="143.5" ></text>
-</g>
-<g >
-<title>81 (4,191,562,044 ns, 0.15%)</title><rect x="143.2" y="117" width="2.1" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="146.19" y="127.5" ></text>
-</g>
-<g >
-<title>1 (120,002,666,406 ns, 4.38%)</title><rect x="778.1" y="261" width="60.4" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="781.08" y="271.5" >1</text>
-</g>
-<g >
-<title>1 (83,249,519,853 ns, 3.04%)</title><rect x="246.2" y="181" width="41.9" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="249.16" y="191.5" >1</text>
-</g>
-<g >
-<title>37 (83,249,519,853 ns, 3.04%)</title><rect x="246.2" y="229" width="41.9" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="249.16" y="239.5" >37</text>
-</g>
-<g >
-<title>36 (83,249,519,853 ns, 3.04%)</title><rect x="246.2" y="213" width="41.9" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="249.16" y="223.5" >36</text>
-</g>
-<g >
-<title>68 (2,793,915,767 ns, 0.10%)</title><rect x="1377.1" y="213" width="1.4" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
-<text  x="1380.09" y="223.5" ></text>
-</g>
-<g >
-<title>85 (4,368,381,040 ns, 0.16%)</title><rect x="143.1" y="181" width="2.2" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="146.10" y="191.5" ></text>
-</g>
-<g >
-<title>1 (448,914,882,047 ns, 16.39%)</title><rect x="968.9" y="261" width="226.1" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="971.90" y="271.5" >1</text>
-</g>
-<g >
-<title>40 (83,341,559,153 ns, 3.04%)</title><rect x="246.1" y="277" width="42.0" height="15.0" fill="rgb(217,57,13)" rx="2" ry="2" />
-<text  x="249.12" y="287.5" >40</text>
-</g>
-<g >
-<title>48 (383,648,400 ns, 0.01%)</title><rect x="1353.8" y="149" width="0.2" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
-<text  x="1356.79" y="159.5" ></text>
-</g>
-<g >
-<title>1 (4,181,625,964 ns, 0.15%)</title><rect x="143.2" y="37" width="2.1" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="146.19" y="47.5" ></text>
-</g>
-<g >
-<title>1 (2,662,605,344 ns, 0.10%)</title><rect x="1388.7" y="181" width="1.3" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="1391.66" y="191.5" ></text>
-</g>
-<g >
-<title>1 (167,480,983,196 ns, 6.11%)</title><rect x="372.9" y="261" width="84.4" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="375.90" y="271.5" >1</text>
-</g>
-<g >
-<title>110 (213,804,486 ns, 0.01%)</title><rect x="10.6" y="293" width="0.1" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
-<text  x="13.56" y="303.5" ></text>
-</g>
-<g >
-<title>61 (43,562,840,799 ns, 1.59%)</title><rect x="1355.1" y="293" width="22.0" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="1358.15" y="303.5" >61</text>
-</g>
-<g >
-<title>19 (199,948,738,306 ns, 7.30%)</title><rect x="145.4" y="277" width="100.7" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="148.40" y="287.5" >19</text>
-</g>
-<g >
-<title>47 (59,991,626,185 ns, 2.19%)</title><rect x="1268.2" y="293" width="30.2" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="1271.16" y="303.5" >47</text>
-</g>
-<g >
-<title>1 (383,648,400 ns, 0.01%)</title><rect x="1353.8" y="133" width="0.2" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="1356.79" y="143.5" ></text>
-</g>
-<g >
-<title>107 (306,459,781 ns, 0.01%)</title><rect x="457.3" y="277" width="0.1" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="460.26" y="287.5" ></text>
-</g>
-<g >
-<title>1 (75,604,621,642 ns, 2.76%)</title><rect x="1195.0" y="261" width="38.1" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="1198.03" y="271.5" >1</text>
-</g>
-<g >
-<title>112 (205,930,362 ns, 0.01%)</title><rect x="288.1" y="229" width="0.1" height="15.0" fill="rgb(207,11,2)" rx="2" ry="2" />
-<text  x="291.10" y="239.5" ></text>
-</g>
-<g >
-<title>9 (267,264,318,370 ns, 9.76%)</title><rect x="10.7" y="261" width="134.6" height="15.0" fill="rgb(245,185,44)" rx="2" ry="2" />
-<text  x="13.67" y="271.5" >9</text>
-</g>
-<g >
-<title>45 (69,582,873,282 ns, 2.54%)</title><rect x="1233.1" y="293" width="35.1" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="1236.11" y="303.5" >45</text>
-</g>
-<g >
-<title>70 (22,848,298,312 ns, 0.83%)</title><rect x="1377.1" y="261" width="11.5" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="1380.09" y="271.5" ></text>
-</g>
-<g >
-<title>76 (10,700,262,157 ns, 0.39%)</title><rect x="697.1" y="277" width="5.4" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="700.13" y="287.5" ></text>
-</g>
-<g >
-<title>114 (205,930,362 ns, 0.01%)</title><rect x="288.1" y="261" width="0.1" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="291.10" y="271.5" ></text>
-</g>
-<g >
-<title>74 (10,700,262,157 ns, 0.39%)</title><rect x="697.1" y="245" width="5.4" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="700.13" y="255.5" ></text>
-</g>
-<g >
-<title>71 (22,848,298,312 ns, 0.83%)</title><rect x="1377.1" y="277" width="11.5" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="1380.09" y="287.5" ></text>
-</g>
-<g >
-<title>16 (258,801,421,630 ns, 9.45%)</title><rect x="838.5" y="261" width="130.4" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="841.53" y="271.5" >16</text>
-</g>
-<g >
-<title>17 (258,801,421,630 ns, 9.45%)</title><rect x="838.5" y="277" width="130.4" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="841.53" y="287.5" >17</text>
-</g>
-<g >
-<title>39 (83,249,519,853 ns, 3.04%)</title><rect x="246.2" y="261" width="41.9" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
-<text  x="249.16" y="271.5" >39</text>
-</g>
-<g >
-<title>92 (2,793,915,767 ns, 0.10%)</title><rect x="1377.1" y="197" width="1.4" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="1380.09" y="207.5" ></text>
-</g>
-<g >
-<title>18 (199,948,738,306 ns, 7.30%)</title><rect x="145.4" y="261" width="100.7" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="148.40" y="271.5" >18</text>
-</g>
-<g >
-<title>32 (150,005,831,268 ns, 5.48%)</title><rect x="702.5" y="293" width="75.6" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
-<text  x="705.52" y="303.5" >32</text>
-</g>
-<g >
-<title>22 (168,330,771,850 ns, 6.14%)</title><rect x="288.1" y="293" width="84.8" height="15.0" fill="rgb(217,57,13)" rx="2" ry="2" />
-<text  x="291.10" y="303.5" >22</text>
-</g>
-<g >
-<title>1 (168,124,841,488 ns, 6.14%)</title><rect x="288.2" y="261" width="84.7" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="291.20" y="271.5" >1</text>
-</g>
-<g >
-<title>105 (447,204,464 ns, 0.02%)</title><rect x="10.3" y="261" width="0.3" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="13.34" y="271.5" ></text>
-</g>
-<g >
-<title>108 (216,166,943 ns, 0.01%)</title><rect x="838.5" y="181" width="0.1" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="841.53" y="191.5" ></text>
-</g>
-<g >
-<title>42 (75,604,621,642 ns, 2.76%)</title><rect x="1195.0" y="293" width="38.1" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
-<text  x="1198.03" y="303.5" >42</text>
-</g>
-<g >
-<title>111 (205,930,362 ns, 0.01%)</title><rect x="288.1" y="213" width="0.1" height="15.0" fill="rgb(213,41,9)" rx="2" ry="2" />
-<text  x="291.10" y="223.5" ></text>
-</g>
-<g >
-<title>62 (38,889,977,656 ns, 1.42%)</title><rect x="1334.2" y="277" width="19.5" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="1337.16" y="287.5" ></text>
-</g>
-<g >
-<title>109 (216,166,943 ns, 0.01%)</title><rect x="838.5" y="197" width="0.1" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="841.53" y="207.5" ></text>
-</g>
-<g >
-<title>7 (262,880,381,044 ns, 9.60%)</title><rect x="10.7" y="229" width="132.4" height="15.0" fill="rgb(208,14,3)" rx="2" ry="2" />
-<text  x="13.68" y="239.5" >7</text>
-</g>
-<g >
-<title>5 (262,190,508,441 ns, 9.57%)</title><rect x="11.0" y="197" width="132.1" height="15.0" fill="rgb(221,74,17)" rx="2" ry="2" />
-<text  x="14.02" y="207.5" >5</text>
-</g>
-<g >
-<title>73 (2,662,605,344 ns, 0.10%)</title><rect x="1388.7" y="213" width="1.3" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="1391.66" y="223.5" ></text>
-</g>
-<g >
-<title>69 (2,793,915,767 ns, 0.10%)</title><rect x="1377.1" y="181" width="1.4" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
-<text  x="1380.09" y="191.5" ></text>
-</g>
-<g >
-<title>88 (4,368,381,040 ns, 0.16%)</title><rect x="143.1" y="229" width="2.2" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
-<text  x="146.10" y="239.5" ></text>
-</g>
-<g >
-<title>43 (69,549,710,126 ns, 2.54%)</title><rect x="1233.1" y="261" width="35.1" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="1236.13" y="271.5" >43</text>
-</g>
-<g >
-<title>106 (447,204,464 ns, 0.02%)</title><rect x="10.3" y="277" width="0.3" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="13.34" y="287.5" ></text>
-</g>
-<g >
-<title>11 (267,264,318,370 ns, 9.76%)</title><rect x="10.7" y="293" width="134.6" height="15.0" fill="rgb(230,117,28)" rx="2" ry="2" />
-<text  x="13.67" y="303.5" >11</text>
-</g>
-<g >
-<title>12 (2,662,605,344 ns, 0.10%)</title><rect x="1388.7" y="197" width="1.3" height="15.0" fill="rgb(224,87,20)" rx="2" ry="2" />
-<text  x="1391.66" y="207.5" ></text>
-</g>
-<g >
-<title>93 (2,793,915,767 ns, 0.10%)</title><rect x="1377.1" y="229" width="1.4" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
-<text  x="1380.09" y="239.5" ></text>
-</g>
-<g >
-<title>54 (2,685,719,545 ns, 0.10%)</title><rect x="1353.8" y="245" width="1.3" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="1356.79" y="255.5" ></text>
-</g>
-<g >
-<title>1 (213,804,486 ns, 0.01%)</title><rect x="10.6" y="277" width="0.1" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="13.56" y="287.5" ></text>
-</g>
-<g >
-<title>54 (70,946,379,847 ns, 2.59%)</title><rect x="1298.4" y="245" width="35.8" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="1301.42" y="255.5" >54</text>
-</g>
-<g >
-<title>38 (83,249,519,853 ns, 3.04%)</title><rect x="246.2" y="245" width="41.9" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="249.16" y="255.5" >38</text>
-</g>
-<g >
-<title>34 (120,002,666,406 ns, 4.38%)</title><rect x="778.1" y="293" width="60.4" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="781.08" y="303.5" >34</text>
-</g>
-<g >
-<title>30 (164,056,374,836 ns, 5.99%)</title><rect x="619.9" y="293" width="82.6" height="15.0" fill="rgb(224,87,20)" rx="2" ry="2" />
-<text  x="622.88" y="303.5" >30</text>
-</g>
-<g >
-<title>82 (4,191,562,044 ns, 0.15%)</title><rect x="143.2" y="133" width="2.1" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="146.19" y="143.5" ></text>
-</g>
-<g >
-<title>96 (2,778,804,688 ns, 0.10%)</title><rect x="1388.6" y="277" width="1.4" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
-<text  x="1391.60" y="287.5" ></text>
-</g>
-<g >
-<title>100 (689,772,604 ns, 0.03%)</title><rect x="10.7" y="165" width="0.3" height="15.0" fill="rgb(226,100,24)" rx="2" ry="2" />
-<text  x="13.68" y="175.5" ></text>
-</g>
-<g >
-<title>24 (164,445,907,845 ns, 6.00%)</title><rect x="457.4" y="261" width="82.9" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
-<text  x="460.42" y="271.5" >24</text>
-</g>
-<g >
-<title>99 (284,252,875 ns, 0.01%)</title><rect x="457.3" y="261" width="0.1" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
-<text  x="460.27" y="271.5" ></text>
-</g>
-<g >
-<title>3 (707,716,303,677 ns, 25.83%)</title><rect x="838.5" y="293" width="356.5" height="15.0" fill="rgb(234,133,31)" rx="2" ry="2" />
-<text  x="841.53" y="303.5" >3</text>
-</g>
-<g >
-<title>65 (2,302,071,145 ns, 0.08%)</title><rect x="1354.0" y="149" width="1.1" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="1356.99" y="159.5" ></text>
-</g>
-<g >
-<title>89 (2,793,915,767 ns, 0.10%)</title><rect x="1377.1" y="117" width="1.4" height="15.0" fill="rgb(233,131,31)" rx="2" ry="2" />
-<text  x="1380.09" y="127.5" ></text>
-</g>
-<g >
-<title>8 (267,264,318,370 ns, 9.76%)</title><rect x="10.7" y="245" width="134.6" height="15.0" fill="rgb(251,215,51)" rx="2" ry="2" />
-<text  x="13.67" y="255.5" >8</text>
-</g>
-<g >
-<title>91 (2,793,915,767 ns, 0.10%)</title><rect x="1377.1" y="149" width="1.4" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="1380.09" y="159.5" ></text>
-</g>
-<g >
-<title>75 (10,700,262,157 ns, 0.39%)</title><rect x="697.1" y="261" width="5.4" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
-<text  x="700.13" y="271.5" ></text>
-</g>
-<g >
-<title>14 (258,799,598,880 ns, 9.45%)</title><rect x="838.5" y="229" width="130.4" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
-<text  x="841.53" y="239.5" >14</text>
+<title>io.(*pipe).read (43,562,840,799 ns, 1.59%)</title><rect x="1368.1" y="245" width="21.9" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
+<text  x="1371.06" y="255.5" >i..</text>
 </g>
 <g >
 <title>all (2,739,578,999,704 ns, 100%)</title><rect x="10.0" y="309" width="1380.0" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
 <text  x="13.00" y="319.5" ></text>
 </g>
 <g >
-<title>27 (158,060,448,453 ns, 5.77%)</title><rect x="540.3" y="277" width="79.6" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="543.26" y="287.5" >27</text>
+<title>github.com/hashicorp/memberlist.(*Memberlist).schedule.gowrap3 (150,005,831,268 ns, 5.48%)</title><rect x="94.9" y="293" width="75.6" height="15.0" fill="rgb(230,115,27)" rx="2" ry="2" />
+<text  x="97.90" y="303.5" >github.c..</text>
 </g>
 <g >
-<title>28 (158,076,594,948 ns, 5.77%)</title><rect x="540.3" y="293" width="79.6" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="543.25" y="303.5" >28</text>
+<title>runtime.selectgo (150,005,831,268 ns, 5.48%)</title><rect x="94.9" y="261" width="75.6" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="97.90" y="271.5" >runtime...</text>
 </g>
 <g >
-<title>46 (59,991,626,185 ns, 2.19%)</title><rect x="1268.2" y="277" width="30.2" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="1271.16" y="287.5" >46</text>
+<title>google.golang.org/grpc/internal/transport.(*controlBuffer).get (69,549,710,126 ns, 2.54%)</title><rect x="1282.8" y="261" width="35.1" height="15.0" fill="rgb(210,25,5)" rx="2" ry="2" />
+<text  x="1285.84" y="271.5" >go..</text>
 </g>
 <g >
-<title>6 (262,880,381,044 ns, 9.60%)</title><rect x="10.7" y="213" width="132.4" height="15.0" fill="rgb(214,44,10)" rx="2" ry="2" />
-<text  x="13.68" y="223.5" >6</text>
+<title>github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).process (262,880,381,044 ns, 9.60%)</title><rect x="1148.2" y="197" width="132.4" height="15.0" fill="rgb(243,177,42)" rx="2" ry="2" />
+<text  x="1151.21" y="207.5" >github.com/james..</text>
 </g>
 <g >
-<title>52 (2,685,719,545 ns, 0.10%)</title><rect x="1353.8" y="213" width="1.3" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="1356.79" y="223.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/queue.(*Conn).Consume.gowrap1 (164,056,374,836 ns, 5.99%)</title><rect x="703.4" y="293" width="82.7" height="15.0" fill="rgb(226,100,24)" rx="2" ry="2" />
+<text  x="706.43" y="303.5" >github.co..</text>
 </g>
 <g >
-<title>84 (4,350,488,422 ns, 0.16%)</title><rect x="143.1" y="165" width="2.2" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
-<text  x="146.11" y="175.5" ></text>
+<title>github.com/hashicorp/memberlist.(*Memberlist).resetNodes (205,930,362 ns, 0.01%)</title><rect x="10.1" y="229" width="0.1" height="15.0" fill="rgb(207,9,2)" rx="2" ry="2" />
+<text  x="13.11" y="239.5" ></text>
 </g>
 <g >
-<title>52 (70,930,103,311 ns, 2.59%)</title><rect x="1298.4" y="213" width="35.8" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="1301.43" y="223.5" >52</text>
+<title>google.golang.org/grpc/internal/transport.(*recvBufferReader).read (4,181,625,964 ns, 0.15%)</title><rect x="1280.6" y="53" width="2.1" height="15.0" fill="rgb(249,204,48)" rx="2" ry="2" />
+<text  x="1283.64" y="63.5" ></text>
 </g>
 <g >
-<title>41 (75,604,621,642 ns, 2.76%)</title><rect x="1195.0" y="277" width="38.1" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
-<text  x="1198.03" y="287.5" >41</text>
+<title>runtime.selectgo (75,604,621,642 ns, 2.76%)</title><rect x="1317.9" y="261" width="38.1" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="1320.89" y="271.5" >run..</text>
 </g>
 <g >
-<title>55 (70,946,379,847 ns, 2.59%)</title><rect x="1298.4" y="261" width="35.8" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="1301.42" y="271.5" >55</text>
+<title>runtime.chanrecv2 (164,445,907,845 ns, 6.00%)</title><rect x="842.8" y="261" width="82.9" height="15.0" fill="rgb(217,55,13)" rx="2" ry="2" />
+<text  x="845.84" y="271.5" >runtime.c..</text>
 </g>
 <g >
-<title>55 (2,777,480,520 ns, 0.10%)</title><rect x="1353.7" y="261" width="1.4" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="1356.75" y="271.5" ></text>
+<title>google.golang.org/grpc.(*serverStream).RecvMsg (4,368,381,040 ns, 0.16%)</title><rect x="1280.6" y="181" width="2.2" height="15.0" fill="rgb(217,58,14)" rx="2" ry="2" />
+<text  x="1283.63" y="191.5" ></text>
 </g>
 <g >
-<title>10 (267,264,318,370 ns, 9.76%)</title><rect x="10.7" y="277" width="134.6" height="15.0" fill="rgb(236,146,35)" rx="2" ry="2" />
-<text  x="13.67" y="287.5" >10</text>
+<title>runtime.selectgo (4,181,625,964 ns, 0.15%)</title><rect x="1280.6" y="37" width="2.1" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="1283.64" y="47.5" ></text>
 </g>
 <g >
-<title>2 (448,914,882,047 ns, 16.39%)</title><rect x="968.9" y="277" width="226.1" height="15.0" fill="rgb(240,163,39)" rx="2" ry="2" />
-<text  x="971.90" y="287.5" >2</text>
+<title>github.com/hashicorp/memberlist.(*Memberlist).checkBroadcastQueueDepth (120,002,666,406 ns, 4.38%)</title><rect x="254.8" y="277" width="60.5" height="15.0" fill="rgb(221,75,18)" rx="2" ry="2" />
+<text  x="257.83" y="287.5" >github..</text>
 </g>
 <g >
-<title>69 (20,054,382,545 ns, 0.73%)</title><rect x="1378.5" y="245" width="10.1" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
-<text  x="1381.50" y="255.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/httpapi.requestLog.func1.func1 (2,793,915,767 ns, 0.10%)</title><rect x="1366.6" y="197" width="1.4" height="15.0" fill="rgb(231,119,28)" rx="2" ry="2" />
+<text  x="1369.64" y="207.5" ></text>
 </g>
 <g >
-<title>115 (205,930,362 ns, 0.01%)</title><rect x="288.1" y="277" width="0.1" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="291.10" y="287.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/observability.(*Health).Check.func1 (2,778,804,688 ns, 0.10%)</title><rect x="702.0" y="277" width="1.4" height="15.0" fill="rgb(243,175,41)" rx="2" ry="2" />
+<text  x="705.04" y="287.5" ></text>
 </g>
 <g >
-<title>21 (168,124,841,488 ns, 6.14%)</title><rect x="288.2" y="277" width="84.7" height="15.0" fill="rgb(224,87,20)" rx="2" ry="2" />
-<text  x="291.20" y="287.5" >21</text>
+<title>net/http.(*ServeMux).ServeHTTP (20,054,382,545 ns, 0.73%)</title><rect x="1356.5" y="245" width="10.1" height="15.0" fill="rgb(239,158,38)" rx="2" ry="2" />
+<text  x="1359.54" y="255.5" ></text>
 </g>
 <g >
-<title>35 (83,249,519,853 ns, 3.04%)</title><rect x="246.2" y="197" width="41.9" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="249.16" y="207.5" >35</text>
+<title>github.com/jackc/pgx/v5/pgconn.(*PgConn).receiveMessage (25,125,775,572 ns, 0.92%)</title><rect x="786.1" y="133" width="12.7" height="15.0" fill="rgb(224,90,21)" rx="2" ry="2" />
+<text  x="789.13" y="143.5" ></text>
 </g>
 <g >
-<title>48 (48,099,930,636 ns, 1.76%)</title><rect x="1298.4" y="149" width="24.3" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
-<text  x="1301.43" y="159.5" >48</text>
+<title>runtime.selectgo (10,700,262,157 ns, 0.39%)</title><rect x="703.4" y="197" width="5.4" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="706.43" y="207.5" ></text>
 </g>
 <g >
-<title>33 (120,002,666,406 ns, 4.38%)</title><rect x="778.1" y="277" width="60.4" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
-<text  x="781.08" y="287.5" >33</text>
+<title>github.com/nats-io/nats%2ego.(*Conn).requestWithContext (258,799,598,880 ns, 9.45%)</title><rect x="345.5" y="197" width="130.4" height="15.0" fill="rgb(225,94,22)" rx="2" ry="2" />
+<text  x="348.54" y="207.5" >github.com/nats-..</text>
 </g>
 <g >
-<title>12 (258,457,858,127 ns, 9.43%)</title><rect x="838.7" y="197" width="130.2" height="15.0" fill="rgb(224,87,20)" rx="2" ry="2" />
-<text  x="841.70" y="207.5" >12</text>
+<title>google.golang.org/grpc.(*GenericServerStream[go.shape.df332d41e0445eac035bb936a81b75f313b1ea6d5d891dfafdcd141893cca286,go.shape.7f4381d32bf8dc7c9368ff0cacb85265b27b3c540d7a7893709a7af11959fade]).Recv (4,368,381,040 ns, 0.16%)</title><rect x="1280.6" y="197" width="2.2" height="15.0" fill="rgb(223,83,20)" rx="2" ry="2" />
+<text  x="1283.63" y="207.5" ></text>
 </g>
 <g >
-<title>31 (150,005,831,268 ns, 5.48%)</title><rect x="702.5" y="277" width="75.6" height="15.0" fill="rgb(217,57,13)" rx="2" ry="2" />
-<text  x="705.52" y="287.5" >31</text>
+<title>io.(*PipeReader).Read (43,562,840,799 ns, 1.59%)</title><rect x="1368.1" y="261" width="21.9" height="15.0" fill="rgb(209,22,5)" rx="2" ry="2" />
+<text  x="1371.06" y="271.5" >i..</text>
 </g>
 <g >
-<title>63 (2,302,071,145 ns, 0.08%)</title><rect x="1354.0" y="117" width="1.1" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="1356.99" y="127.5" ></text>
+<title>google.golang.org/grpc/internal/transport.(*http2Server).keepalive (75,604,621,642 ns, 2.76%)</title><rect x="1317.9" y="277" width="38.1" height="15.0" fill="rgb(254,225,53)" rx="2" ry="2" />
+<text  x="1320.89" y="287.5" >goo..</text>
 </g>
 <g >
-<title>15 (258,801,421,630 ns, 9.45%)</title><rect x="838.5" y="245" width="130.4" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
-<text  x="841.53" y="255.5" >15</text>
+<title>runtime.selectgo (153,356,112,679 ns, 5.60%)</title><rect x="708.8" y="261" width="77.3" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="711.82" y="271.5" >runtime...</text>
 </g>
 <g >
-<title>66 (20,000,763,852 ns, 0.73%)</title><rect x="1378.5" y="197" width="10.1" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
-<text  x="1381.53" y="207.5" ></text>
+<title>google.golang.org/grpc/internal/transport.(*recvBufferReader).Read (4,181,625,964 ns, 0.15%)</title><rect x="1280.6" y="69" width="2.1" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="1283.64" y="79.5" ></text>
 </g>
 <g >
-<title>1 (69,549,710,126 ns, 2.54%)</title><rect x="1233.1" y="245" width="35.1" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="1236.13" y="255.5" >1</text>
+<title>github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).Start.gowrap1 (112,691,584,626 ns, 4.11%)</title><rect x="786.1" y="293" width="56.7" height="15.0" fill="rgb(207,10,2)" rx="2" ry="2" />
+<text  x="789.07" y="303.5" >github..</text>
 </g>
 <g >
-<title>64 (22,823,704,427 ns, 0.83%)</title><rect x="1322.7" y="133" width="11.5" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="1325.66" y="143.5" ></text>
+<title>github.com/nats-io/nats.go/jetstream.(*pullConsumer).Consume.func1 (83,249,519,853 ns, 3.04%)</title><rect x="925.9" y="261" width="41.9" height="15.0" fill="rgb(208,15,3)" rx="2" ry="2" />
+<text  x="928.88" y="271.5" >git..</text>
 </g>
 <g >
-<title>67 (20,000,763,852 ns, 0.73%)</title><rect x="1378.5" y="213" width="10.1" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="1381.53" y="223.5" ></text>
+<title>runtime.selectgo (59,991,626,185 ns, 2.19%)</title><rect x="315.3" y="261" width="30.2" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="318.28" y="271.5" >ru..</text>
 </g>
 <g >
-<title>1 (59,991,626,185 ns, 2.19%)</title><rect x="1268.2" y="261" width="30.2" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
-<text  x="1271.16" y="271.5" >1</text>
+<title>github.com/hashicorp/memberlist.(*Memberlist).pushPullTrigger (150,005,831,268 ns, 5.48%)</title><rect x="94.9" y="277" width="75.6" height="15.0" fill="rgb(214,41,9)" rx="2" ry="2" />
+<text  x="97.90" y="287.5" >github.c..</text>
 </g>
 <g >
-<title>72 (22,848,889,770 ns, 0.83%)</title><rect x="1377.1" y="293" width="11.5" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="1380.09" y="303.5" ></text>
+<title>github.com/nats-io/nats%2ego.(*Conn).RequestMsgWithContext (258,799,598,880 ns, 9.45%)</title><rect x="345.5" y="213" width="130.4" height="15.0" fill="rgb(226,99,23)" rx="2" ry="2" />
+<text  x="348.54" y="223.5" >github.com/nats-..</text>
 </g>
 <g >
-<title>57 (112,691,584,626 ns, 4.11%)</title><rect x="1298.4" y="293" width="56.7" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
-<text  x="1301.38" y="303.5" >57</text>
+<title>sync.(*Mutex).Lock (284,252,875 ns, 0.01%)</title><rect x="925.7" y="261" width="0.1" height="15.0" fill="rgb(231,119,28)" rx="2" ry="2" />
+<text  x="928.68" y="271.5" ></text>
+</g>
+<g >
+<title>runtime.selectgo (43,514,305,729 ns, 1.59%)</title><rect x="1368.1" y="229" width="21.9" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="1371.08" y="239.5" >r..</text>
+</g>
+<g >
+<title>github.com/hashicorp/memberlist.(*Memberlist).probe (205,930,362 ns, 0.01%)</title><rect x="10.1" y="245" width="0.1" height="15.0" fill="rgb(240,163,39)" rx="2" ry="2" />
+<text  x="13.11" y="255.5" ></text>
+</g>
+<g >
+<title>net/http.(*Server).Serve.gowrap3 (22,848,889,770 ns, 0.83%)</title><rect x="1356.5" y="293" width="11.5" height="15.0" fill="rgb(234,135,32)" rx="2" ry="2" />
+<text  x="1359.54" y="303.5" ></text>
+</g>
+<g >
+<title>sync.(*WaitGroup).Go.func1 (43,562,840,799 ns, 1.59%)</title><rect x="1368.1" y="293" width="21.9" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
+<text  x="1371.06" y="303.5" >s..</text>
+</g>
+<g >
+<title>runtime.selectgo (120,002,666,406 ns, 4.38%)</title><rect x="254.8" y="261" width="60.5" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="257.83" y="271.5" >runtim..</text>
+</g>
+<g >
+<title>google.golang.org/grpc.(*Server).serveStreams.func2.1 (267,264,318,370 ns, 9.76%)</title><rect x="1148.2" y="293" width="134.6" height="15.0" fill="rgb(226,97,23)" rx="2" ry="2" />
+<text  x="1151.21" y="303.5" >google.golang.org..</text>
+</g>
+<g >
+<title>github.com/nats-io/nats.go/jetstream.(*pullConsumer).Consume.gowrap1 (158,076,594,948 ns, 5.77%)</title><rect x="1068.5" y="293" width="79.7" height="15.0" fill="rgb(235,140,33)" rx="2" ry="2" />
+<text  x="1071.53" y="303.5" >github.co..</text>
+</g>
+<g >
+<title>github.com/nats-io/nats%2ego.(*Conn).subscribeLocked.gowrap1 (283,290,297,459 ns, 10.34%)</title><rect x="925.8" y="293" width="142.7" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
+<text  x="928.83" y="303.5" >github.com/nats-io..</text>
+</g>
+<g >
+<title>github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).work (112,691,584,626 ns, 4.11%)</title><rect x="786.1" y="277" width="56.7" height="15.0" fill="rgb(243,174,41)" rx="2" ry="2" />
+<text  x="789.07" y="287.5" >github..</text>
+</g>
+<g >
+<title>github.com/hashicorp/memberlist.(*Memberlist).triggerFunc (168,330,771,850 ns, 6.14%)</title><rect x="10.1" y="277" width="84.8" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
+<text  x="13.11" y="287.5" >github.co..</text>
+</g>
+<g >
+<title>github.com/jamespolk/go-log-aggregator/internal/ingest.(*Consumer).Start.func1 (83,249,519,853 ns, 3.04%)</title><rect x="925.9" y="229" width="41.9" height="15.0" fill="rgb(234,133,31)" rx="2" ry="2" />
+<text  x="928.88" y="239.5" >git..</text>
+</g>
+<g >
+<title>runtime.selectgo (48,483,579,036 ns, 1.77%)</title><rect x="798.8" y="133" width="24.4" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="801.79" y="143.5" >r..</text>
+</g>
+<g >
+<title>runtime.selectgo (213,804,486 ns, 0.01%)</title><rect x="10.0" y="277" width="0.1" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="13.00" y="287.5" ></text>
+</g>
+<g >
+<title>github.com/jackc/pgx/v5/pgxpool.(*Pool).backgroundHealthCheck (59,991,626,185 ns, 2.19%)</title><rect x="315.3" y="277" width="30.2" height="15.0" fill="rgb(207,13,3)" rx="2" ry="2" />
+<text  x="318.28" y="287.5" >gi..</text>
+</g>
+<g >
+<title>github.com/hashicorp/memberlist.(*Memberlist).probe-fm (205,930,362 ns, 0.01%)</title><rect x="10.1" y="261" width="0.1" height="15.0" fill="rgb(236,146,34)" rx="2" ry="2" />
+<text  x="13.11" y="271.5" ></text>
+</g>
+<g >
+<title>github.com/jamespolk/go-log-aggregator/internal/ingest.(*Consumer).handle (83,249,519,853 ns, 3.04%)</title><rect x="925.9" y="213" width="41.9" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="928.88" y="223.5" >git..</text>
+</g>
+<g >
+<title>runtime.selectgo (38,889,977,656 ns, 1.42%)</title><rect x="823.3" y="261" width="19.5" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="826.25" y="271.5" ></text>
+</g>
+<g >
+<title>github.com/jamespolk/go-log-aggregator/internal/observability.(*Health).Check (2,793,915,767 ns, 0.10%)</title><rect x="1366.6" y="133" width="1.4" height="15.0" fill="rgb(221,76,18)" rx="2" ry="2" />
+<text  x="1369.64" y="143.5" ></text>
+</g>
+<g >
+<title>github.com/jamespolk/go-log-aggregator/internal/ingest.(*pipeline).run (258,801,421,630 ns, 9.45%)</title><rect x="345.5" y="261" width="130.4" height="15.0" fill="rgb(243,174,41)" rx="2" ry="2" />
+<text  x="348.54" y="271.5" >github.com/james..</text>
+</g>
+<g >
+<title>net/http.(*conn).serve (22,848,889,770 ns, 0.83%)</title><rect x="1356.5" y="277" width="11.5" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="1359.54" y="287.5" ></text>
+</g>
+<g >
+<title>runtime.selectgo (69,549,710,126 ns, 2.54%)</title><rect x="1282.8" y="245" width="35.1" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="1285.84" y="255.5" >ru..</text>
+</g>
+<g >
+<title>github.com/nats-io/nats.go/jetstream.(*pullSubscription).pullMessages (158,076,594,948 ns, 5.77%)</title><rect x="1068.5" y="277" width="79.7" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="1071.53" y="287.5" >github.co..</text>
+</g>
+<g >
+<title>github.com/nats-io/nats%2ego.(*Conn).RequestWithContext (10,700,262,157 ns, 0.39%)</title><rect x="703.4" y="229" width="5.4" height="15.0" fill="rgb(232,125,29)" rx="2" ry="2" />
+<text  x="706.43" y="239.5" ></text>
+</g>
+<g >
+<title>net/http.HandlerFunc.ServeHTTP (2,793,915,767 ns, 0.10%)</title><rect x="1366.6" y="165" width="1.4" height="15.0" fill="rgb(209,19,4)" rx="2" ry="2" />
+<text  x="1369.64" y="175.5" ></text>
+</g>
+<g >
+<title>github.com/jackc/pgx/v5.(*dbTx).CopyFrom (73,615,822,856 ns, 2.69%)</title><rect x="786.1" y="197" width="37.1" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="789.13" y="207.5" >git..</text>
+</g>
+<g >
+<title>runtime.selectgo (168,124,841,488 ns, 6.14%)</title><rect x="10.2" y="261" width="84.7" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="13.21" y="271.5" >runtime.s..</text>
+</g>
+<g >
+<title>runtime.selectgo (167,480,983,196 ns, 6.11%)</title><rect x="170.5" y="261" width="84.3" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="173.47" y="271.5" >runtime.s..</text>
+</g>
+<g >
+<title>github.com/jamespolk/go-log-aggregator/internal/queue.HealthCheck.func1 (2,662,605,344 ns, 0.10%)</title><rect x="702.1" y="261" width="1.3" height="15.0" fill="rgb(227,103,24)" rx="2" ry="2" />
+<text  x="705.09" y="271.5" ></text>
+</g>
+<g >
+<title>net/http/pprof.sleep (20,000,763,852 ns, 0.73%)</title><rect x="1356.6" y="197" width="10.0" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
+<text  x="1359.55" y="207.5" ></text>
+</g>
+<g >
+<title>github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).Submit (83,249,519,853 ns, 3.04%)</title><rect x="925.9" y="197" width="41.9" height="15.0" fill="rgb(249,205,49)" rx="2" ry="2" />
+<text  x="928.88" y="207.5" >git..</text>
+</g>
+<g >
+<title>github.com/hashicorp/memberlist.newMemberlist.gowrap4 (120,002,666,406 ns, 4.38%)</title><rect x="254.8" y="293" width="60.5" height="15.0" fill="rgb(242,171,40)" rx="2" ry="2" />
+<text  x="257.83" y="303.5" >github..</text>
+</g>
+<g >
+<title>runtime.selectgo (158,060,448,453 ns, 5.77%)</title><rect x="1068.5" y="261" width="79.7" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="1071.54" y="271.5" >runtime.s..</text>
+</g>
+<g >
+<title>github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).commitRecords (73,629,814,684 ns, 2.69%)</title><rect x="786.1" y="229" width="37.1" height="15.0" fill="rgb(249,206,49)" rx="2" ry="2" />
+<text  x="789.12" y="239.5" >git..</text>
+</g>
+<g >
+<title>google.golang.org/grpc/internal/transport.(*transportReader).Read (4,191,562,044 ns, 0.15%)</title><rect x="1280.6" y="85" width="2.1" height="15.0" fill="rgb(243,177,42)" rx="2" ry="2" />
+<text  x="1283.63" y="95.5" ></text>
+</g>
+<g >
+<title>google.golang.org/grpc/internal/transport.(*loopyWriter).run (69,582,873,282 ns, 2.54%)</title><rect x="1282.8" y="277" width="35.1" height="15.0" fill="rgb(229,112,26)" rx="2" ry="2" />
+<text  x="1285.84" y="287.5" >go..</text>
+</g>
+<g >
+<title>runtime.selectgo (258,457,858,127 ns, 9.43%)</title><rect x="345.6" y="181" width="130.2" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="348.60" y="191.5" >runtime.selectgo</text>
+</g>
+<g >
+<title>github.com/nats-io/nats.go/jetstream.(*jetStream).apiRequestJSON (10,700,262,157 ns, 0.39%)</title><rect x="703.4" y="245" width="5.4" height="15.0" fill="rgb(218,61,14)" rx="2" ry="2" />
+<text  x="706.43" y="255.5" ></text>
+</g>
+<g >
+<title>net/http.serverHandler.ServeHTTP (22,848,298,312 ns, 0.83%)</title><rect x="1356.5" y="261" width="11.5" height="15.0" fill="rgb(234,135,32)" rx="2" ry="2" />
+<text  x="1359.54" y="271.5" ></text>
+</g>
+<g >
+<title>runtime.selectgo (20,000,763,852 ns, 0.73%)</title><rect x="1356.6" y="181" width="10.0" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="1359.55" y="191.5" ></text>
+</g>
+<g >
+<title>github.com/jamespolk/go-log-aggregator/internal/httpapi.recoverPanic.func1.func1 (2,793,915,767 ns, 0.10%)</title><rect x="1366.6" y="229" width="1.4" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="1369.64" y="239.5" ></text>
+</g>
+<g >
+<title>github.com/hashicorp/memberlist.(*Memberlist).schedule.gowrap2 (168,330,771,850 ns, 6.14%)</title><rect x="10.1" y="293" width="84.8" height="15.0" fill="rgb(236,145,34)" rx="2" ry="2" />
+<text  x="13.11" y="303.5" >github.co..</text>
+</g>
+<g >
+<title>github.com/jamespolk/go-log-aggregator/internal/queue.(*Conn).pollPending (164,056,374,836 ns, 5.99%)</title><rect x="703.4" y="277" width="82.7" height="15.0" fill="rgb(228,106,25)" rx="2" ry="2" />
+<text  x="706.43" y="287.5" >github.co..</text>
+</g>
+<g >
+<title>github.com/jamespolk/go-log-aggregator/internal/queue.(*Conn).Consume.func1 (83,249,519,853 ns, 3.04%)</title><rect x="925.9" y="245" width="41.9" height="15.0" fill="rgb(249,206,49)" rx="2" ry="2" />
+<text  x="928.88" y="255.5" >git..</text>
+</g>
+<g >
+<title>github.com/jamespolk/go-log-aggregator/internal/ingest.(*pipeline).start.gowrap1 (707,716,303,677 ns, 25.83%)</title><rect x="345.5" y="293" width="356.5" height="15.0" fill="rgb(239,160,38)" rx="2" ry="2" />
+<text  x="348.54" y="303.5" >github.com/jamespolk/go-log-aggregator/internal/..</text>
+</g>
+<g >
+<title>net/http.HandlerFunc.ServeHTTP (2,793,915,767 ns, 0.10%)</title><rect x="1366.6" y="245" width="1.4" height="15.0" fill="rgb(209,19,4)" rx="2" ry="2" />
+<text  x="1369.64" y="255.5" ></text>
+</g>
+<g >
+<title>net/http.(*ServeMux).ServeHTTP (2,793,915,767 ns, 0.10%)</title><rect x="1366.6" y="181" width="1.4" height="15.0" fill="rgb(239,158,38)" rx="2" ry="2" />
+<text  x="1369.64" y="191.5" ></text>
+</g>
+<g >
+<title>sync.(*RWMutex).RLock (216,166,943 ns, 0.01%)</title><rect x="475.8" y="181" width="0.1" height="15.0" fill="rgb(209,21,5)" rx="2" ry="2" />
+<text  x="478.80" y="191.5" ></text>
+</g>
+<g >
+<title>sync.(*Cond).Wait (199,948,738,306 ns, 7.30%)</title><rect x="967.8" y="261" width="100.7" height="15.0" fill="rgb(227,102,24)" rx="2" ry="2" />
+<text  x="970.81" y="271.5" >sync.(*Cond)..</text>
+</g>
+<g >
+<title>github.com/hashicorp/memberlist.(*Memberlist).triggerFunc (167,488,384,903 ns, 6.11%)</title><rect x="170.5" y="277" width="84.3" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
+<text  x="173.46" y="287.5" >github.co..</text>
+</g>
+<g >
+<title>google.golang.org/grpc.(*Server).processStreamingRPC (267,264,318,370 ns, 9.76%)</title><rect x="1148.2" y="261" width="134.6" height="15.0" fill="rgb(225,96,22)" rx="2" ry="2" />
+<text  x="1151.21" y="271.5" >google.golang.org..</text>
+</g>
+<g >
+<title>google.golang.org/grpc.(*parser).recvMsg (4,350,488,422 ns, 0.16%)</title><rect x="1280.6" y="133" width="2.2" height="15.0" fill="rgb(230,118,28)" rx="2" ry="2" />
+<text  x="1283.63" y="143.5" ></text>
+</g>
+<g >
+<title>google.golang.org/grpc/internal/transport.(*ServerStream).Read (4,191,562,044 ns, 0.15%)</title><rect x="1280.6" y="117" width="2.1" height="15.0" fill="rgb(248,197,47)" rx="2" ry="2" />
+<text  x="1283.63" y="127.5" ></text>
+</g>
+<g >
+<title>github.com/jackc/pgx/v5.(*Conn).CopyFrom (73,615,822,856 ns, 2.69%)</title><rect x="786.1" y="181" width="37.1" height="15.0" fill="rgb(216,51,12)" rx="2" ry="2" />
+<text  x="789.13" y="191.5" >git..</text>
+</g>
+<g >
+<title>github.com/jackc/pgx/v5/pgconn.(*PgConn).CopyFrom.func1 (43,562,840,799 ns, 1.59%)</title><rect x="1368.1" y="277" width="21.9" height="15.0" fill="rgb(235,138,33)" rx="2" ry="2" />
+<text  x="1371.06" y="287.5" >g..</text>
+</g>
+<g >
+<title>github.com/nats-io/nats.go/jetstream.(*jetStream).AccountInfo (2,662,605,344 ns, 0.10%)</title><rect x="702.1" y="245" width="1.3" height="15.0" fill="rgb(247,197,47)" rx="2" ry="2" />
+<text  x="705.09" y="255.5" ></text>
+</g>
+<g >
+<title>google.golang.org/grpc.recvAndDecompress (4,350,488,422 ns, 0.16%)</title><rect x="1280.6" y="149" width="2.2" height="15.0" fill="rgb(219,66,15)" rx="2" ry="2" />
+<text  x="1283.63" y="159.5" ></text>
+</g>
+<g >
+<title>github.com/jackc/pgx/v5/pgconn.(*PgConn).CopyFrom (73,615,822,856 ns, 2.69%)</title><rect x="786.1" y="149" width="37.1" height="15.0" fill="rgb(213,40,9)" rx="2" ry="2" />
+<text  x="789.13" y="159.5" >git..</text>
+</g>
+<g >
+<title>sync.(*WaitGroup).Wait (2,793,915,767 ns, 0.10%)</title><rect x="1366.6" y="117" width="1.4" height="15.0" fill="rgb(226,96,23)" rx="2" ry="2" />
+<text  x="1369.64" y="127.5" ></text>
+</g>
+<g >
+<title>github.com/nats-io/nats%2ego.(*Conn).flusher (164,752,367,626 ns, 6.01%)</title><rect x="842.8" y="277" width="83.0" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="845.84" y="287.5" >github.co..</text>
+</g>
+<g >
+<title>google.golang.org/grpc/internal/transport.(*Stream).read (4,191,562,044 ns, 0.15%)</title><rect x="1280.6" y="101" width="2.1" height="15.0" fill="rgb(217,57,13)" rx="2" ry="2" />
+<text  x="1283.63" y="111.5" ></text>
+</g>
+<g >
+<title>context.(*cancelCtx).propagateCancel.func2 (213,804,486 ns, 0.01%)</title><rect x="10.0" y="293" width="0.1" height="15.0" fill="rgb(241,170,40)" rx="2" ry="2" />
+<text  x="13.00" y="303.5" ></text>
+</g>
+<g >
+<title>runtime.selectgo (665,874,650 ns, 0.02%)</title><rect x="1356.2" y="261" width="0.3" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="1359.20" y="271.5" ></text>
+</g>
+<g >
+<title>runtime.chanrecv1 (447,204,464 ns, 0.02%)</title><rect x="1356.0" y="261" width="0.2" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
+<text  x="1358.98" y="271.5" ></text>
+</g>
+<g >
+<title>github.com/jackc/pgx/v5/pgxpool.NewWithConfig.func5 (59,991,626,185 ns, 2.19%)</title><rect x="315.3" y="293" width="30.2" height="15.0" fill="rgb(216,54,13)" rx="2" ry="2" />
+<text  x="318.28" y="303.5" >gi..</text>
+</g>
+<g >
+<title>runtime.selectgo (262,190,508,441 ns, 9.57%)</title><rect x="1148.2" y="165" width="132.1" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="1151.21" y="175.5" >runtime.selectgo</text>
+</g>
+<g >
+<title>google.golang.org/grpc/internal/transport.NewServerTransport.gowrap1 (75,604,621,642 ns, 2.76%)</title><rect x="1317.9" y="293" width="38.1" height="15.0" fill="rgb(237,150,36)" rx="2" ry="2" />
+<text  x="1320.89" y="303.5" >goo..</text>
+</g>
+<g >
+<title>github.com/jackc/pgx/v5.(*copyFrom).run (73,615,822,856 ns, 2.69%)</title><rect x="786.1" y="165" width="37.1" height="15.0" fill="rgb(227,103,24)" rx="2" ry="2" />
+<text  x="789.13" y="175.5" >git..</text>
+</g>
+<g >
+<title>net/http.HandlerFunc.ServeHTTP (20,054,382,545 ns, 0.73%)</title><rect x="1356.5" y="229" width="10.1" height="15.0" fill="rgb(209,19,4)" rx="2" ry="2" />
+<text  x="1359.54" y="239.5" ></text>
+</g>
+<g >
+<title>runtime.selectgo (2,662,605,344 ns, 0.10%)</title><rect x="702.1" y="181" width="1.3" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="705.09" y="191.5" ></text>
+</g>
+<g >
+<title>github.com/nats-io/nats%2ego.(*Conn).requestWithContext (10,700,262,157 ns, 0.39%)</title><rect x="703.4" y="213" width="5.4" height="15.0" fill="rgb(225,94,22)" rx="2" ry="2" />
+<text  x="706.43" y="223.5" ></text>
+</g>
+<g >
+<title>github.com/jamespolk/go-log-aggregator/internal/queue.(*Conn).Publish (258,801,421,630 ns, 9.45%)</title><rect x="345.5" y="245" width="130.4" height="15.0" fill="rgb(247,196,46)" rx="2" ry="2" />
+<text  x="348.54" y="255.5" >github.com/james..</text>
+</g>
+<g >
+<title>github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).writeOnce (73,723,860,367 ns, 2.69%)</title><rect x="786.1" y="245" width="37.1" height="15.0" fill="rgb(208,15,3)" rx="2" ry="2" />
+<text  x="789.07" y="255.5" >git..</text>
 </g>
 </g>
 </svg>

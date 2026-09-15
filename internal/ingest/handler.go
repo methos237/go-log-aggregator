@@ -153,6 +153,7 @@ func (s *service) process(ctx context.Context, batch *logaggv1.LogBatch) *logagg
 	})
 	*buf = payload
 	if err != nil {
+		payloadPool.Put(buf)
 		s.log.Error("encoding batch failed",
 			slog.String("batch_id", id),
 			slog.Int64("stream_id", int64(streamID)),
@@ -168,10 +169,14 @@ func (s *service) process(ctx context.Context, batch *logaggv1.LogBatch) *logagg
 		payload: payload,
 		records: len(valid),
 	}); err != nil {
-		// Not recycled: on a client hang-up the publisher still owns the job and
-		// may be writing the payload. Every other failure is finished with it, but
-		// a leaked buffer is just garbage while a reused live one is corruption,
-		// so the rare error path takes the safe side.
+		// Shed and closed mean the job never entered the pipeline, so nothing
+		// else holds the buffer and shedding under sustained overload must not
+		// turn into allocation churn. Any other error -- above all a client
+		// hang-up -- leaves the publisher owning a job it may still be writing,
+		// and a leaked buffer is garbage while a reused live one is corruption.
+		if errors.Is(err, errShed) || errors.Is(err, errPipelineClosed) {
+			payloadPool.Put(buf)
+		}
 		return s.publishFailed(id, subject, streamID, received, len(valid), err)
 	}
 	defer payloadPool.Put(buf)

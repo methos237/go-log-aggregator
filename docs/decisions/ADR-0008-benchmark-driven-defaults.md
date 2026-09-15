@@ -38,9 +38,16 @@ integration suite runs the full-replay and partial-replay tests in both modes โ€
 and the cost moved to where it belongs: a replay pays for two passes, a normal
 batch pays for one.
 
-`staging` remains selectable, and is the mode a `config.Writer` built as a bare
-struct literal gets, for a deployment where redelivery is routine rather than
-exceptional. In that regime the fallback counter will say so.
+The staging insert's `ORDER BY stream_id, seq, time` was also the cluster-wide
+lock order that keeps two writers from deadlocking on the dedup index
+(ADR-0002 ยง3). COPY has no `ORDER BY`, so the writer now sorts each batch by that
+key before either path runs; both get the same order and the index locality
+that comes with it.
+
+`staging` remains selectable for a deployment where redelivery is routine rather
+than exceptional; in that regime the fallback counter will say so. The mode is
+required, not defaulted, in `config.Writer`, so the shipped default lives in one
+place.
 
 Rejected: keeping staging as the default because it is "safer". Both modes give
 the same rows; the fallback is the safety, and the counter makes its cost

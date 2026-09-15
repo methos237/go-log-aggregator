@@ -519,9 +519,13 @@ func (t *tally) summarize(opt *options, took time.Duration) summary {
 	t.mu.Unlock()
 
 	accepted := t.accepted.Load()
+	records := opt.records
+	if opt.duration > 0 {
+		records = 0 // -records is ignored under -duration; do not report a bound that was not applied
+	}
 	return summary{
 		Addr:        opt.addr,
-		Records:     opt.records,
+		Records:     records,
 		BatchSize:   opt.batchSize,
 		Streams:     opt.streams,
 		Senders:     opt.senders,

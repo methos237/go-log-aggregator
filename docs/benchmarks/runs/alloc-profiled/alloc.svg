@@ -430,1580 +430,1384 @@
 <text id="matched" x="1290.00" y="421" > </text>
 <g id="frames">
 <g >
-<title>102 (9,048,836 bytes, 0.32%)</title><rect x="1383.6" y="325" width="4.4" height="15.0" fill="rgb(213,41,9)" rx="2" ry="2" />
-<text  x="1386.57" y="335.5" ></text>
+<title>google.golang.org/grpc/internal/transport.(*bufWriter).Write (540,842 bytes, 0.02%)</title><rect x="1383.7" y="309" width="0.3" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
+<text  x="1386.69" y="319.5" ></text>
 </g>
 <g >
-<title>233 (524,344 bytes, 0.02%)</title><rect x="260.6" y="309" width="0.3" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="263.65" y="319.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/model.LabelSet.ID (524,304 bytes, 0.02%)</title><rect x="779.1" y="293" width="0.3" height="15.0" fill="rgb(239,157,37)" rx="2" ry="2" />
+<text  x="782.11" y="303.5" ></text>
 </g>
 <g >
-<title>209 (524,992 bytes, 0.02%)</title><rect x="256.3" y="357" width="0.2" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="259.26" y="367.5" ></text>
+<title>github.com/hashicorp/memberlist.(*Memberlist).handleConn (562,015 bytes, 0.02%)</title><rect x="10.3" y="373" width="0.2" height="15.0" fill="rgb(226,100,23)" rx="2" ry="2" />
+<text  x="13.25" y="383.5" ></text>
 </g>
 <g >
-<title>155 (524,352 bytes, 0.02%)</title><rect x="1378.0" y="293" width="0.2" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="1380.96" y="303.5" ></text>
+<title>github.com/jackc/pgx/v5/pgtype.(*Map).Encode (229,842,643 bytes, 8.07%)</title><rect x="10.8" y="325" width="111.4" height="15.0" fill="rgb(243,177,42)" rx="2" ry="2" />
+<text  x="13.78" y="335.5" >github.com/ja..</text>
 </g>
 <g >
-<title>144 (1,048,688 bytes, 0.04%)</title><rect x="12.0" y="357" width="0.5" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="15.03" y="367.5" ></text>
+<title>reflect.packEface (104,335,192 bytes, 3.66%)</title><rect x="71.6" y="293" width="50.6" height="15.0" fill="rgb(225,94,22)" rx="2" ry="2" />
+<text  x="74.60" y="303.5" >refle..</text>
 </g>
 <g >
-<title>13 (1,736,992 bytes, 0.06%)</title><rect x="253.8" y="341" width="0.9" height="15.0" fill="rgb(217,57,13)" rx="2" ry="2" />
-<text  x="256.82" y="351.5" ></text>
+<title>google.golang.org/grpc/internal/transport.(*framer).readFrame (9,589,678 bytes, 0.34%)</title><rect x="782.4" y="325" width="4.7" height="15.0" fill="rgb(235,142,33)" rx="2" ry="2" />
+<text  x="785.42" y="335.5" ></text>
 </g>
 <g >
-<title>126 (1,572,952 bytes, 0.06%)</title><rect x="1378.2" y="261" width="0.8" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="1381.21" y="271.5" ></text>
+<title>runtime.mallocgc (524,528 bytes, 0.02%)</title><rect x="1387.9" y="293" width="0.3" height="15.0" fill="rgb(241,169,40)" rx="2" ry="2" />
+<text  x="1390.90" y="303.5" ></text>
 </g>
 <g >
-<title>42 (524,304 bytes, 0.02%)</title><rect x="300.7" y="261" width="0.2" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
-<text  x="303.67" y="271.5" ></text>
+<title>encoding/gob.getType (570,634 bytes, 0.02%)</title><rect x="1385.3" y="213" width="0.3" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="1388.30" y="223.5" ></text>
 </g>
 <g >
-<title>23 (1,572,976 bytes, 0.06%)</title><rect x="259.9" y="325" width="0.7" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
-<text  x="262.89" y="335.5" ></text>
+<title>net.(*Resolver).lookupHost (1,115,476 bytes, 0.04%)</title><rect x="1386.3" y="149" width="0.6" height="15.0" fill="rgb(244,182,43)" rx="2" ry="2" />
+<text  x="1389.34" y="159.5" ></text>
 </g>
 <g >
-<title>293 (1,115,476 bytes, 0.04%)</title><rect x="258.1" y="197" width="0.5" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
-<text  x="261.06" y="207.5" ></text>
+<title>encoding/gob.init (570,634 bytes, 0.02%)</title><rect x="1385.3" y="341" width="0.3" height="15.0" fill="rgb(210,27,6)" rx="2" ry="2" />
+<text  x="1388.30" y="351.5" ></text>
 </g>
 <g >
-<title>206 (524,992 bytes, 0.02%)</title><rect x="256.3" y="309" width="0.2" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="259.26" y="319.5" ></text>
+<title>runtime/pprof.(*profileBuilder).build (1,048,744 bytes, 0.04%)</title><rect x="1388.4" y="357" width="0.5" height="15.0" fill="rgb(206,7,1)" rx="2" ry="2" />
+<text  x="1391.41" y="367.5" ></text>
 </g>
 <g >
-<title>284 (538,038 bytes, 0.02%)</title><rect x="261.2" y="357" width="0.2" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
-<text  x="264.16" y="367.5" ></text>
+<title>github.com/jackc/pgx/v5/pgxpool.(*Tx).CopyFrom (524,344 bytes, 0.02%)</title><rect x="127.8" y="277" width="0.2" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
+<text  x="130.78" y="287.5" ></text>
 </g>
 <g >
-<title>172 (524,320 bytes, 0.02%)</title><rect x="259.9" y="293" width="0.2" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="262.89" y="303.5" ></text>
+<title>google.golang.org/protobuf/internal/impl.consumeStringValidateUTF8 (645,526,560 bytes, 22.67%)</title><rect x="827.6" y="101" width="312.8" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="830.62" y="111.5" >google.golang.org/protobuf/internal/impl.c..</text>
 </g>
 <g >
-<title>183 (540,842 bytes, 0.02%)</title><rect x="256.0" y="309" width="0.3" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="259.00" y="319.5" ></text>
+<title>google.golang.org/grpc/internal/transport.(*framer).readDataFrame (8,507,994 bytes, 0.30%)</title><rect x="782.7" y="309" width="4.1" height="15.0" fill="rgb(244,179,42)" rx="2" ry="2" />
+<text  x="785.68" y="319.5" ></text>
 </g>
 <g >
-<title>52 (645,526,560 bytes, 22.67%)</title><rect x="1034.8" y="117" width="312.8" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="1037.82" y="127.5" >52</text>
+<title>go.opentelemetry.io/otel/internal/global.(*tracer).Start (524,336 bytes, 0.02%)</title><rect x="126.8" y="341" width="0.2" height="15.0" fill="rgb(207,12,2)" rx="2" ry="2" />
+<text  x="129.77" y="351.5" ></text>
 </g>
 <g >
-<title>84 (3,675,681 bytes, 0.13%)</title><rect x="1388.2" y="341" width="1.8" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
-<text  x="1391.22" y="351.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/storage.withMigrator (1,115,476 bytes, 0.04%)</title><rect x="1386.3" y="325" width="0.6" height="15.0" fill="rgb(238,151,36)" rx="2" ry="2" />
+<text  x="1389.34" y="335.5" ></text>
 </g>
 <g >
-<title>201 (524,296 bytes, 0.02%)</title><rect x="254.4" y="261" width="0.3" height="15.0" fill="rgb(213,41,9)" rx="2" ry="2" />
-<text  x="257.41" y="271.5" ></text>
+<title>google.golang.org/protobuf/proto.MarshalOptions.Marshal (524,300 bytes, 0.02%)</title><rect x="1383.4" y="213" width="0.3" height="15.0" fill="rgb(235,141,33)" rx="2" ry="2" />
+<text  x="1386.44" y="223.5" ></text>
 </g>
 <g >
-<title>58 (524,296 bytes, 0.02%)</title><rect x="670.5" y="213" width="0.2" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="673.46" y="223.5" ></text>
+<title>google.golang.org/grpc/internal/transport.(*Stream).read (1,573,032 bytes, 0.06%)</title><rect x="793.4" y="197" width="0.8" height="15.0" fill="rgb(217,57,13)" rx="2" ry="2" />
+<text  x="796.44" y="207.5" ></text>
 </g>
 <g >
-<title>272 (524,344 bytes, 0.02%)</title><rect x="260.6" y="357" width="0.3" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="263.65" y="367.5" ></text>
+<title>google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshalPointerEager (438,916,109 bytes, 15.41%)</title><rect x="410.3" y="181" width="212.7" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="413.34" y="191.5" >google.golang.org/protobuf/i..</text>
 </g>
 <g >
-<title>137 (1,048,768 bytes, 0.04%)</title><rect x="263.0" y="325" width="0.5" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="265.97" y="335.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).copyViaStaging (1,048,664 bytes, 0.04%)</title><rect x="127.5" y="309" width="0.5" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="130.53" y="319.5" ></text>
 </g>
 <g >
-<title>53 (1,147,525,852 bytes, 40.29%)</title><rect x="821.1" y="181" width="556.1" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="824.12" y="191.5" >53</text>
+<title>reflect.New (1,573,008 bytes, 0.06%)</title><rect x="409.6" y="197" width="0.7" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
+<text  x="412.58" y="207.5" ></text>
 </g>
 <g >
-<title>133 (501,584,358 bytes, 17.61%)</title><rect x="10.8" y="373" width="243.0" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="13.76" y="383.5" >133</text>
+<title>runtime.schedule (1,050,624 bytes, 0.04%)</title><rect x="1387.4" y="325" width="0.5" height="15.0" fill="rgb(220,72,17)" rx="2" ry="2" />
+<text  x="1390.39" y="335.5" ></text>
 </g>
 <g >
-<title>282 (538,038 bytes, 0.02%)</title><rect x="261.2" y="325" width="0.2" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="264.16" y="335.5" ></text>
+<title>runtime.malg (524,528 bytes, 0.02%)</title><rect x="1387.9" y="325" width="0.3" height="15.0" fill="rgb(235,140,33)" rx="2" ry="2" />
+<text  x="1390.90" y="335.5" ></text>
 </g>
 <g >
-<title>232 (525,312 bytes, 0.02%)</title><rect x="256.5" y="213" width="0.3" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="259.52" y="223.5" ></text>
+<title>runtime.newm (525,312 bytes, 0.02%)</title><rect x="1387.1" y="277" width="0.3" height="15.0" fill="rgb(243,176,42)" rx="2" ry="2" />
+<text  x="1390.14" y="287.5" ></text>
 </g>
 <g >
-<title>292 (1,115,476 bytes, 0.04%)</title><rect x="258.1" y="181" width="0.5" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="261.06" y="191.5" ></text>
+<title>io.ReadFull (540,842 bytes, 0.02%)</title><rect x="782.4" y="293" width="0.3" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="785.42" y="303.5" ></text>
 </g>
 <g >
-<title>53 (438,916,109 bytes, 15.41%)</title><rect x="438.6" y="197" width="212.7" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="441.65" y="207.5" >53</text>
+<title>google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshalPointerEager (524,296 bytes, 0.02%)</title><rect x="827.1" y="117" width="0.3" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="830.11" y="127.5" ></text>
 </g>
 <g >
-<title>140 (1,048,688 bytes, 0.04%)</title><rect x="783.4" y="277" width="0.5" height="15.0" fill="rgb(251,211,50)" rx="2" ry="2" />
-<text  x="786.36" y="287.5" ></text>
+<title>reflect.unsafe_New (1,573,008 bytes, 0.06%)</title><rect x="409.6" y="181" width="0.7" height="15.0" fill="rgb(243,177,42)" rx="2" ry="2" />
+<text  x="412.58" y="191.5" ></text>
 </g>
 <g >
-<title>149 (524,300 bytes, 0.02%)</title><rect x="786.9" y="229" width="0.3" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
-<text  x="789.94" y="239.5" ></text>
+<title>reflect.unsafe_New (524,336 bytes, 0.02%)</title><rect x="827.4" y="117" width="0.2" height="15.0" fill="rgb(243,177,42)" rx="2" ry="2" />
+<text  x="830.37" y="127.5" ></text>
 </g>
 <g >
-<title>141 (1,048,688 bytes, 0.04%)</title><rect x="783.4" y="293" width="0.5" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="786.36" y="303.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/queue.Subject (1,573,080 bytes, 0.06%)</title><rect x="789.9" y="245" width="0.7" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
+<text  x="792.86" y="255.5" ></text>
 </g>
 <g >
-<title>53 (762,572,297 bytes, 26.78%)</title><rect x="301.2" y="245" width="369.5" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="304.18" y="255.5" >53</text>
+<title>net/http.serverHandler.ServeHTTP (1,736,992 bytes, 0.06%)</title><rect x="1384.5" y="357" width="0.8" height="15.0" fill="rgb(234,135,32)" rx="2" ry="2" />
+<text  x="1387.46" y="367.5" ></text>
 </g>
 <g >
-<title>235 (525,312 bytes, 0.02%)</title><rect x="256.5" y="261" width="0.3" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="259.52" y="271.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).Submit (1,048,624 bytes, 0.04%)</title><rect x="373.4" y="293" width="0.5" height="15.0" fill="rgb(249,205,49)" rx="2" ry="2" />
+<text  x="376.40" y="303.5" ></text>
 </g>
 <g >
-<title>312 (525,312 bytes, 0.02%)</title><rect x="261.9" y="357" width="0.3" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="264.93" y="367.5" ></text>
+<title>google.golang.org/grpc/internal/mem.(*SimpleBufferPool).Get (540,842 bytes, 0.02%)</title><rect x="786.8" y="197" width="0.3" height="15.0" fill="rgb(225,94,22)" rx="2" ry="2" />
+<text  x="789.80" y="207.5" ></text>
 </g>
 <g >
-<title>168 (524,320 bytes, 0.02%)</title><rect x="259.9" y="229" width="0.2" height="15.0" fill="rgb(236,144,34)" rx="2" ry="2" />
-<text  x="262.89" y="239.5" ></text>
+<title>github.com/prometheus/client_golang/prometheus/promhttp.HandlerForTransactional.func1 (524,296 bytes, 0.02%)</title><rect x="1384.5" y="309" width="0.2" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="1387.46" y="319.5" ></text>
 </g>
 <g >
-<title>96 (540,842 bytes, 0.02%)</title><rect x="1383.6" y="229" width="0.2" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
-<text  x="1386.57" y="239.5" ></text>
+<title>strings.(*Builder).WriteString (524,304 bytes, 0.02%)</title><rect x="125.5" y="261" width="0.3" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="128.50" y="271.5" ></text>
 </g>
 <g >
-<title>330 (570,634 bytes, 0.02%)</title><rect x="262.7" y="261" width="0.3" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="265.69" y="271.5" ></text>
+<title>context.(*cancelCtx).Done (524,344 bytes, 0.02%)</title><rect x="124.2" y="277" width="0.3" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
+<text  x="127.20" y="287.5" ></text>
 </g>
 <g >
-<title>134 (1,573,008 bytes, 0.06%)</title><rect x="301.2" y="197" width="0.7" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="304.18" y="207.5" ></text>
+<title>github.com/jackc/pgx/v5.(*Conn).CopyFrom (524,344 bytes, 0.02%)</title><rect x="127.8" y="245" width="0.2" height="15.0" fill="rgb(216,51,12)" rx="2" ry="2" />
+<text  x="130.78" y="255.5" ></text>
 </g>
 <g >
-<title>267 (1,640,916 bytes, 0.06%)</title><rect x="257.8" y="357" width="0.8" height="15.0" fill="rgb(236,144,34)" rx="2" ry="2" />
-<text  x="260.81" y="367.5" ></text>
+<title>github.com/jackc/pgx/v5.connect (1,115,476 bytes, 0.04%)</title><rect x="1386.3" y="213" width="0.6" height="15.0" fill="rgb(224,90,21)" rx="2" ry="2" />
+<text  x="1389.34" y="223.5" ></text>
 </g>
 <g >
-<title>167 (524,320 bytes, 0.02%)</title><rect x="259.9" y="213" width="0.2" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
-<text  x="262.89" y="223.5" ></text>
+<title>google.golang.org/grpc/internal/transport/readyreader.NewNonBlocking.func1 (540,842 bytes, 0.02%)</title><rect x="786.8" y="213" width="0.3" height="15.0" fill="rgb(217,58,13)" rx="2" ry="2" />
+<text  x="789.80" y="223.5" ></text>
 </g>
 <g >
-<title>233 (525,312 bytes, 0.02%)</title><rect x="256.5" y="229" width="0.3" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="259.52" y="239.5" ></text>
+<title>encoding/gob.buildTypeInfo (570,634 bytes, 0.02%)</title><rect x="1385.3" y="293" width="0.3" height="15.0" fill="rgb(208,15,3)" rx="2" ry="2" />
+<text  x="1388.30" y="303.5" ></text>
 </g>
 <g >
-<title>43 (1,048,624 bytes, 0.04%)</title><rect x="300.4" y="277" width="0.5" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="303.42" y="287.5" ></text>
+<title>net.dnsReadConfig (557,738 bytes, 0.02%)</title><rect x="1386.6" y="53" width="0.3" height="15.0" fill="rgb(236,146,34)" rx="2" ry="2" />
+<text  x="1389.61" y="63.5" ></text>
 </g>
 <g >
-<title>118 (524,296 bytes, 0.02%)</title><rect x="821.1" y="149" width="0.3" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="824.12" y="159.5" ></text>
+<title>google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshalPointer (438,916,109 bytes, 15.41%)</title><rect x="410.3" y="197" width="212.7" height="15.0" fill="rgb(224,90,21)" rx="2" ry="2" />
+<text  x="413.34" y="207.5" >google.golang.org/protobuf/i..</text>
 </g>
 <g >
-<title>181 (526,338 bytes, 0.02%)</title><rect x="255.7" y="357" width="0.3" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="258.75" y="367.5" ></text>
+<title>reflect.packEfaceData (104,335,192 bytes, 3.66%)</title><rect x="71.6" y="277" width="50.6" height="15.0" fill="rgb(233,132,31)" rx="2" ry="2" />
+<text  x="74.60" y="287.5" >refle..</text>
 </g>
 <g >
-<title>150 (524,300 bytes, 0.02%)</title><rect x="786.9" y="245" width="0.3" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="789.94" y="255.5" ></text>
+<title>regexp/syntax.(*Regexp).Simplify (524,344 bytes, 0.02%)</title><rect x="1385.8" y="245" width="0.3" height="15.0" fill="rgb(222,78,18)" rx="2" ry="2" />
+<text  x="1388.83" y="255.5" ></text>
 </g>
 <g >
-<title>115 (528,394 bytes, 0.02%)</title><rect x="10.5" y="341" width="0.3" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="13.51" y="351.5" ></text>
+<title>github.com/jackc/pgx/v5.(*copyFrom).run (524,344 bytes, 0.02%)</title><rect x="127.8" y="229" width="0.2" height="15.0" fill="rgb(227,103,24)" rx="2" ry="2" />
+<text  x="130.78" y="239.5" ></text>
 </g>
 <g >
-<title>311 (524,344 bytes, 0.02%)</title><rect x="261.7" y="373" width="0.2" height="15.0" fill="rgb(251,211,50)" rx="2" ry="2" />
-<text  x="264.67" y="383.5" ></text>
+<title>sync.(*WaitGroup).Go.func1 (2,230,953 bytes, 0.08%)</title><rect x="1388.9" y="373" width="1.1" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
+<text  x="1391.92" y="383.5" ></text>
 </g>
 <g >
-<title>185 (540,842 bytes, 0.02%)</title><rect x="256.0" y="341" width="0.3" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
-<text  x="259.00" y="351.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/ingest.(*Consumer).handle (838,815,385 bytes, 29.45%)</title><rect x="372.6" y="309" width="406.5" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="375.64" y="319.5" >github.com/jamespolk/go-log-aggregator/internal/ingest...</text>
 </g>
 <g >
-<title>81 (1,231,222,204 bytes, 43.23%)</title><rect x="786.9" y="373" width="596.7" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="789.94" y="383.5" >81</text>
+<title>google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshalPointerEager (645,526,560 bytes, 22.67%)</title><rect x="827.6" y="117" width="312.8" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="830.62" y="127.5" >google.golang.org/protobuf/internal/impl.(..</text>
 </g>
 <g >
-<title>260 (525,440 bytes, 0.02%)</title><rect x="257.8" y="245" width="0.3" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="260.81" y="255.5" ></text>
+<title>database/sql.(*DB).PingContext (1,115,476 bytes, 0.04%)</title><rect x="1386.3" y="309" width="0.6" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
+<text  x="1389.34" y="319.5" ></text>
 </g>
 <g >
-<title>215 (524,864 bytes, 0.02%)</title><rect x="788.0" y="261" width="0.2" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="790.96" y="271.5" ></text>
+<title>google.golang.org/grpc.recv (1,217,534,760 bytes, 42.75%)</title><rect x="793.4" y="261" width="590.0" height="15.0" fill="rgb(246,191,45)" rx="2" ry="2" />
+<text  x="796.44" y="271.5" >google.golang.org/grpc.recv</text>
 </g>
 <g >
-<title>129 (524,304 bytes, 0.02%)</title><rect x="782.1" y="357" width="0.2" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="785.09" y="367.5" ></text>
+<title>runtime.allocm (525,312 bytes, 0.02%)</title><rect x="1387.6" y="261" width="0.3" height="15.0" fill="rgb(246,191,45)" rx="2" ry="2" />
+<text  x="1390.65" y="271.5" ></text>
 </g>
 <g >
-<title>224 (583,721 bytes, 0.02%)</title><rect x="786.4" y="245" width="0.3" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="789.41" y="255.5" ></text>
+<title>github.com/prometheus/client_golang/prometheus.(*wrappingMetric).Write (524,296 bytes, 0.02%)</title><rect x="1384.5" y="245" width="0.2" height="15.0" fill="rgb(251,213,50)" rx="2" ry="2" />
+<text  x="1387.46" y="255.5" ></text>
 </g>
 <g >
-<title>329 (570,634 bytes, 0.02%)</title><rect x="262.7" y="197" width="0.3" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
-<text  x="265.69" y="207.5" ></text>
+<title>google.golang.org/grpc/internal/mem.(*SimpleBufferPool).Get (540,842 bytes, 0.02%)</title><rect x="782.4" y="181" width="0.3" height="15.0" fill="rgb(225,94,22)" rx="2" ry="2" />
+<text  x="785.42" y="191.5" ></text>
 </g>
 <g >
-<title>290 (557,738 bytes, 0.02%)</title><rect x="258.1" y="149" width="0.2" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="261.06" y="159.5" ></text>
+<title>github.com/nats-io/nats.go/jetstream.(*jetStreamMsg).Metadata (2,097,456 bytes, 0.07%)</title><rect x="779.4" y="325" width="1.0" height="15.0" fill="rgb(207,12,2)" rx="2" ry="2" />
+<text  x="782.36" y="335.5" ></text>
 </g>
 <g >
-<title>195 (67,911,012 bytes, 2.38%)</title><rect x="788.2" y="213" width="32.9" height="15.0" fill="rgb(236,144,34)" rx="2" ry="2" />
-<text  x="791.22" y="223.5" >195</text>
+<title>bytes.(*Buffer).ReadBytes (524,320 bytes, 0.02%)</title><rect x="127.5" y="149" width="0.3" height="15.0" fill="rgb(218,64,15)" rx="2" ry="2" />
+<text  x="130.53" y="159.5" ></text>
 </g>
 <g >
-<title>132 (2,621,656 bytes, 0.09%)</title><rect x="10.8" y="357" width="1.2" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="13.76" y="367.5" ></text>
+<title>log/slog/internal/buffer.New (524,300 bytes, 0.02%)</title><rect x="128.0" y="309" width="0.3" height="15.0" fill="rgb(219,68,16)" rx="2" ry="2" />
+<text  x="131.04" y="319.5" ></text>
 </g>
 <g >
-<title>190 (2,680,985 bytes, 0.09%)</title><rect x="785.4" y="293" width="1.3" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="788.39" y="303.5" ></text>
+<title>sync.(*Once).Do (557,738 bytes, 0.02%)</title><rect x="1386.6" y="101" width="0.3" height="15.0" fill="rgb(230,118,28)" rx="2" ry="2" />
+<text  x="1389.61" y="111.5" ></text>
 </g>
 <g >
-<title>65 (524,312 bytes, 0.02%)</title><rect x="260.4" y="293" width="0.2" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="263.40" y="303.5" ></text>
+<title>github.com/prometheus/client_golang/prometheus.(*Registry).Gather (524,296 bytes, 0.02%)</title><rect x="1384.5" y="277" width="0.2" height="15.0" fill="rgb(234,137,32)" rx="2" ry="2" />
+<text  x="1387.46" y="287.5" ></text>
 </g>
 <g >
-<title>92 (524,336 bytes, 0.02%)</title><rect x="1383.3" y="277" width="0.3" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="1386.32" y="287.5" ></text>
+<title>runtime.semacquire1 (524,344 bytes, 0.02%)</title><rect x="1386.1" y="341" width="0.2" height="15.0" fill="rgb(244,180,43)" rx="2" ry="2" />
+<text  x="1389.09" y="351.5" ></text>
 </g>
 <g >
-<title>234 (525,312 bytes, 0.02%)</title><rect x="256.8" y="261" width="0.2" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="259.77" y="271.5" ></text>
+<title>go.opentelemetry.io/otel/internal/global.(*tracer).Start (524,336 bytes, 0.02%)</title><rect x="793.2" y="277" width="0.2" height="15.0" fill="rgb(207,12,2)" rx="2" ry="2" />
+<text  x="796.19" y="287.5" ></text>
 </g>
 <g >
-<title>32 (841,437,145 bytes, 29.55%)</title><rect x="263.0" y="357" width="407.7" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
-<text  x="265.97" y="367.5" >32</text>
+<title>github.com/nats-io/nats%2ego.(*Conn).parse (501,584,358 bytes, 17.61%)</title><rect x="129.6" y="357" width="243.0" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
+<text  x="132.58" y="367.5" >github.com/nats-io/nats%2ego.(*C..</text>
 </g>
 <g >
-<title>40 (229,842,643 bytes, 8.07%)</title><rect x="670.7" y="357" width="111.4" height="15.0" fill="rgb(217,57,13)" rx="2" ry="2" />
-<text  x="673.71" y="367.5" >40</text>
+<title>strings.(*Builder).grow (1,573,080 bytes, 0.06%)</title><rect x="789.9" y="213" width="0.7" height="15.0" fill="rgb(218,61,14)" rx="2" ry="2" />
+<text  x="792.86" y="223.5" ></text>
 </g>
 <g >
-<title>130 (524,312 bytes, 0.02%)</title><rect x="264.0" y="309" width="0.2" height="15.0" fill="rgb(207,11,2)" rx="2" ry="2" />
-<text  x="266.98" y="319.5" ></text>
+<title>sync.(*Pool).Get (2,230,953 bytes, 0.08%)</title><rect x="1388.9" y="325" width="1.1" height="15.0" fill="rgb(241,165,39)" rx="2" ry="2" />
+<text  x="1391.92" y="335.5" ></text>
 </g>
 <g >
-<title>309 (524,344 bytes, 0.02%)</title><rect x="261.4" y="373" width="0.3" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="264.42" y="383.5" ></text>
+<title>google.golang.org/grpc/internal/transport/readyreader.(*nonBlockingReader).ReadOnReady (540,842 bytes, 0.02%)</title><rect x="786.8" y="261" width="0.3" height="15.0" fill="rgb(217,55,13)" rx="2" ry="2" />
+<text  x="789.80" y="271.5" ></text>
 </g>
 <g >
-<title>128 (1,573,032 bytes, 0.06%)</title><rect x="783.9" y="341" width="0.7" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="786.87" y="351.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/cluster.New (525,440 bytes, 0.02%)</title><rect x="1386.9" y="325" width="0.2" height="15.0" fill="rgb(254,225,54)" rx="2" ry="2" />
+<text  x="1389.88" y="335.5" ></text>
 </g>
 <g >
-<title>106 (1,573,032 bytes, 0.06%)</title><rect x="787.2" y="229" width="0.8" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="790.20" y="239.5" ></text>
+<title>github.com/nats-io/nats%2ego.(*natsWriter).appendBufs (583,721 bytes, 0.02%)</title><rect x="125.2" y="245" width="0.3" height="15.0" fill="rgb(253,221,52)" rx="2" ry="2" />
+<text  x="128.21" y="255.5" ></text>
 </g>
 <g >
-<title>29 (524,344 bytes, 0.02%)</title><rect x="260.1" y="229" width="0.3" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="263.14" y="239.5" ></text>
+<title>github.com/hashicorp/memberlist.(*Memberlist).setAlive (525,440 bytes, 0.02%)</title><rect x="1386.9" y="293" width="0.2" height="15.0" fill="rgb(247,196,46)" rx="2" ry="2" />
+<text  x="1389.88" y="303.5" ></text>
 </g>
 <g >
-<title>35 (104,335,192 bytes, 3.66%)</title><rect x="670.7" y="277" width="50.6" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="673.71" y="287.5" >35</text>
+<title>runtime.systemstack (524,528 bytes, 0.02%)</title><rect x="1387.9" y="373" width="0.3" height="15.0" fill="rgb(206,6,1)" rx="2" ry="2" />
+<text  x="1390.90" y="383.5" ></text>
 </g>
 <g >
-<title>165 (524,320 bytes, 0.02%)</title><rect x="259.9" y="181" width="0.2" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="262.89" y="191.5" ></text>
+<title>sync.(*Pool).Get (557,738 bytes, 0.02%)</title><rect x="792.9" y="261" width="0.3" height="15.0" fill="rgb(241,165,39)" rx="2" ry="2" />
+<text  x="795.92" y="271.5" ></text>
 </g>
 <g >
-<title>94 (540,842 bytes, 0.02%)</title><rect x="1383.6" y="197" width="0.2" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="1386.57" y="207.5" ></text>
+<title>github.com/jackc/puddle/v2.(*Pool[go.shape.*uint8]).CreateResource (538,038 bytes, 0.02%)</title><rect x="122.2" y="357" width="0.2" height="15.0" fill="rgb(229,111,26)" rx="2" ry="2" />
+<text  x="125.16" y="367.5" ></text>
 </g>
 <g >
-<title>173 (524,320 bytes, 0.02%)</title><rect x="259.9" y="309" width="0.2" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="262.89" y="319.5" ></text>
+<title>github.com/jackc/pgx/v5/pgtype.(*derefPointerEncodePlan).Encode (125,507,451 bytes, 4.41%)</title><rect x="10.8" y="309" width="60.8" height="15.0" fill="rgb(221,73,17)" rx="2" ry="2" />
+<text  x="13.78" y="319.5" >github..</text>
 </g>
 <g >
-<title>95 (540,842 bytes, 0.02%)</title><rect x="1388.0" y="197" width="0.2" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
-<text  x="1390.96" y="207.5" ></text>
+<title>context.WithDeadlineCause (1,573,032 bytes, 0.06%)</title><rect x="122.7" y="309" width="0.7" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text  x="125.67" y="319.5" ></text>
 </g>
 <g >
-<title>237 (525,312 bytes, 0.02%)</title><rect x="256.8" y="309" width="0.2" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="259.77" y="319.5" ></text>
+<title>reflect.unsafe_New (104,335,192 bytes, 3.66%)</title><rect x="71.6" y="261" width="50.6" height="15.0" fill="rgb(243,177,42)" rx="2" ry="2" />
+<text  x="74.60" y="271.5" >refle..</text>
 </g>
 <g >
-<title>147 (524,300 bytes, 0.02%)</title><rect x="786.9" y="197" width="0.3" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="789.94" y="207.5" ></text>
+<title>github.com/jackc/pgx/v5.encodeCopyValue (229,842,643 bytes, 8.07%)</title><rect x="10.8" y="341" width="111.4" height="15.0" fill="rgb(232,126,30)" rx="2" ry="2" />
+<text  x="13.78" y="351.5" >github.com/ja..</text>
 </g>
 <g >
-<title>14 (1,736,992 bytes, 0.06%)</title><rect x="253.8" y="357" width="0.9" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
-<text  x="256.82" y="367.5" ></text>
+<title>net.(*rawConn).Read (540,842 bytes, 0.02%)</title><rect x="782.4" y="229" width="0.3" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
+<text  x="785.42" y="239.5" ></text>
 </g>
 <g >
-<title>111 (1,048,744 bytes, 0.04%)</title><rect x="10.0" y="357" width="0.5" height="15.0" fill="rgb(213,41,9)" rx="2" ry="2" />
-<text  x="13.00" y="367.5" ></text>
+<title>runtime.newproc1 (524,528 bytes, 0.02%)</title><rect x="1387.9" y="341" width="0.3" height="15.0" fill="rgb(214,43,10)" rx="2" ry="2" />
+<text  x="1390.90" y="351.5" ></text>
 </g>
 <g >
-<title>145 (524,320 bytes, 0.02%)</title><rect x="300.4" y="261" width="0.3" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="303.42" y="271.5" ></text>
+<title>encoding/gob.mustGetTypeInfo (570,634 bytes, 0.02%)</title><rect x="1385.3" y="325" width="0.3" height="15.0" fill="rgb(206,6,1)" rx="2" ry="2" />
+<text  x="1388.30" y="335.5" ></text>
 </g>
 <g >
-<title>134 (282,105,681 bytes, 9.91%)</title><rect x="301.9" y="197" width="136.7" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="304.94" y="207.5" >134</text>
+<title>log/slog.(*commonHandler).withAttrs (524,300 bytes, 0.02%)</title><rect x="128.0" y="325" width="0.3" height="15.0" fill="rgb(224,90,21)" rx="2" ry="2" />
+<text  x="131.04" y="335.5" ></text>
 </g>
 <g >
-<title>61 (524,328 bytes, 0.02%)</title><rect x="782.6" y="357" width="0.3" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="785.60" y="367.5" ></text>
+<title>regexp/syntax.(*Regexp).Simplify (524,344 bytes, 0.02%)</title><rect x="1385.8" y="277" width="0.3" height="15.0" fill="rgb(222,78,18)" rx="2" ry="2" />
+<text  x="1388.83" y="287.5" ></text>
 </g>
 <g >
-<title>85 (13,265,359 bytes, 0.47%)</title><rect x="1383.6" y="357" width="6.4" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="1386.57" y="367.5" ></text>
+<title>encoding/gob.getType (570,634 bytes, 0.02%)</title><rect x="1385.3" y="261" width="0.3" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="1388.30" y="271.5" ></text>
 </g>
 <g >
-<title>249 (524,304 bytes, 0.02%)</title><rect x="257.3" y="373" width="0.3" height="15.0" fill="rgb(236,144,34)" rx="2" ry="2" />
-<text  x="260.30" y="383.5" ></text>
+<title>github.com/jackc/pgx/v5.(*copyFrom).run.func1 (229,842,643 bytes, 8.07%)</title><rect x="10.8" y="373" width="111.4" height="15.0" fill="rgb(249,202,48)" rx="2" ry="2" />
+<text  x="13.78" y="383.5" >github.com/ja..</text>
 </g>
 <g >
-<title>283 (538,038 bytes, 0.02%)</title><rect x="261.2" y="341" width="0.2" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="264.16" y="351.5" ></text>
+<title>google.golang.org/grpc/internal/transport.(*loopyWriter).processData (540,842 bytes, 0.02%)</title><rect x="1383.7" y="341" width="0.3" height="15.0" fill="rgb(235,141,33)" rx="2" ry="2" />
+<text  x="1386.69" y="351.5" ></text>
 </g>
 <g >
-<title>218 (282,105,681 bytes, 9.91%)</title><rect x="301.9" y="213" width="136.7" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="304.94" y="223.5" >218</text>
+<title>encoding/gob.getBaseType (570,634 bytes, 0.02%)</title><rect x="1385.3" y="277" width="0.3" height="15.0" fill="rgb(211,31,7)" rx="2" ry="2" />
+<text  x="1388.30" y="287.5" ></text>
 </g>
 <g >
-<title>51 (61,012,618 bytes, 2.14%)</title><rect x="1347.6" y="149" width="29.6" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
-<text  x="1350.63" y="159.5" >51</text>
+<title>google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshalPointer (762,572,297 bytes, 26.78%)</title><rect x="409.6" y="245" width="369.5" height="15.0" fill="rgb(224,90,21)" rx="2" ry="2" />
+<text  x="412.58" y="255.5" >google.golang.org/protobuf/internal/impl.(*Message..</text>
 </g>
 <g >
-<title>237 (525,312 bytes, 0.02%)</title><rect x="261.9" y="309" width="0.3" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="264.93" y="319.5" ></text>
+<title>encoding/gob.getBaseType (570,634 bytes, 0.02%)</title><rect x="1385.3" y="229" width="0.3" height="15.0" fill="rgb(211,31,7)" rx="2" ry="2" />
+<text  x="1388.30" y="239.5" ></text>
 </g>
 <g >
-<title>37 (104,335,192 bytes, 3.66%)</title><rect x="670.7" y="309" width="50.6" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="673.71" y="319.5" >37</text>
+<title>github.com/nats-io/nats%2ego.(*Conn).readLoop (501,584,358 bytes, 17.61%)</title><rect x="129.6" y="373" width="243.0" height="15.0" fill="rgb(233,129,30)" rx="2" ry="2" />
+<text  x="132.58" y="383.5" >github.com/nats-io/nats%2ego.(*C..</text>
 </g>
 <g >
-<title>36 (104,335,192 bytes, 3.66%)</title><rect x="670.7" y="293" width="50.6" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="673.71" y="303.5" >36</text>
+<title>github.com/hashicorp/memberlist.(*Memberlist).rawSendMsgStream (562,015 bytes, 0.02%)</title><rect x="10.3" y="341" width="0.2" height="15.0" fill="rgb(215,47,11)" rx="2" ry="2" />
+<text  x="13.25" y="351.5" ></text>
 </g>
 <g >
-<title>303 (557,738 bytes, 0.02%)</title><rect x="258.3" y="69" width="0.3" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="261.33" y="79.5" ></text>
+<title>go.opentelemetry.io/otel/trace.ContextWithSpanContext (524,328 bytes, 0.02%)</title><rect x="127.0" y="357" width="0.3" height="15.0" fill="rgb(254,229,54)" rx="2" ry="2" />
+<text  x="130.02" y="367.5" ></text>
 </g>
 <g >
-<title>95 (540,842 bytes, 0.02%)</title><rect x="1383.6" y="213" width="0.2" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
-<text  x="1386.57" y="223.5" ></text>
+<title>google.golang.org/grpc.(*Server).handleRawConn.func1 (13,265,359 bytes, 0.47%)</title><rect x="780.6" y="373" width="6.5" height="15.0" fill="rgb(239,158,38)" rx="2" ry="2" />
+<text  x="783.63" y="383.5" ></text>
 </g>
 <g >
-<title>22 (524,344 bytes, 0.02%)</title><rect x="260.1" y="309" width="0.3" height="15.0" fill="rgb(217,57,13)" rx="2" ry="2" />
-<text  x="263.14" y="319.5" ></text>
+<title>main.run (525,440 bytes, 0.02%)</title><rect x="1386.9" y="341" width="0.2" height="15.0" fill="rgb(243,179,42)" rx="2" ry="2" />
+<text  x="1389.88" y="351.5" ></text>
 </g>
 <g >
-<title>69 (3,205,329 bytes, 0.11%)</title><rect x="785.4" y="309" width="1.5" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
-<text  x="788.39" y="319.5" ></text>
+<title>database/sql.(*DB).conn (1,115,476 bytes, 0.04%)</title><rect x="1386.3" y="261" width="0.6" height="15.0" fill="rgb(253,223,53)" rx="2" ry="2" />
+<text  x="1389.34" y="271.5" ></text>
 </g>
 <g >
-<title>229 (540,842 bytes, 0.02%)</title><rect x="1388.0" y="293" width="0.2" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="1390.96" y="303.5" ></text>
+<title>github.com/jackc/pgx/v5.ConnectConfig (538,038 bytes, 0.02%)</title><rect x="122.2" y="325" width="0.2" height="15.0" fill="rgb(218,61,14)" rx="2" ry="2" />
+<text  x="125.16" y="335.5" ></text>
 </g>
 <g >
-<title>123 (524,304 bytes, 0.02%)</title><rect x="785.1" y="325" width="0.3" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="788.14" y="335.5" ></text>
+<title>google.golang.org/grpc/internal/transport/readyreader.(*bufReadyReader).Read (540,842 bytes, 0.02%)</title><rect x="786.8" y="277" width="0.3" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="789.80" y="287.5" ></text>
 </g>
 <g >
-<title>143 (1,573,032 bytes, 0.06%)</title><rect x="11.3" y="341" width="0.7" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="14.27" y="351.5" ></text>
+<title>runtime.newobject (525,312 bytes, 0.02%)</title><rect x="1387.6" y="245" width="0.3" height="15.0" fill="rgb(221,75,18)" rx="2" ry="2" />
+<text  x="1390.65" y="255.5" ></text>
 </g>
 <g >
-<title>228 (4,740,414 bytes, 0.17%)</title><rect x="1380.5" y="277" width="2.3" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="1383.51" y="287.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/storage.NewRecords (73,621,480 bytes, 2.59%)</title><rect x="373.9" y="293" width="35.7" height="15.0" fill="rgb(224,87,20)" rx="2" ry="2" />
+<text  x="376.91" y="303.5" >git..</text>
 </g>
 <g >
-<title>219 (73,621,480 bytes, 2.59%)</title><rect x="264.7" y="261" width="35.7" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="267.74" y="271.5" >219</text>
+<title>runtime.allocm (525,312 bytes, 0.02%)</title><rect x="1387.1" y="261" width="0.3" height="15.0" fill="rgb(246,191,45)" rx="2" ry="2" />
+<text  x="1390.14" y="271.5" ></text>
 </g>
 <g >
-<title>234 (525,312 bytes, 0.02%)</title><rect x="261.9" y="261" width="0.3" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="264.93" y="271.5" ></text>
+<title>google.golang.org/protobuf/internal/impl.consumeMessageInfo (1,573,008 bytes, 0.06%)</title><rect x="409.6" y="213" width="0.7" height="15.0" fill="rgb(227,103,24)" rx="2" ry="2" />
+<text  x="412.58" y="223.5" ></text>
 </g>
 <g >
-<title>295 (1,115,476 bytes, 0.04%)</title><rect x="258.1" y="245" width="0.5" height="15.0" fill="rgb(229,114,27)" rx="2" ry="2" />
-<text  x="261.06" y="255.5" ></text>
+<title>log/slog/internal/buffer.init.func1 (524,300 bytes, 0.02%)</title><rect x="128.0" y="277" width="0.3" height="15.0" fill="rgb(249,206,49)" rx="2" ry="2" />
+<text  x="131.04" y="287.5" ></text>
 </g>
 <g >
-<title>127 (1,572,952 bytes, 0.06%)</title><rect x="1378.2" y="277" width="0.8" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="1381.21" y="287.5" ></text>
+<title>context.WithDeadline (1,573,032 bytes, 0.06%)</title><rect x="122.7" y="325" width="0.7" height="15.0" fill="rgb(208,14,3)" rx="2" ry="2" />
+<text  x="125.67" y="335.5" ></text>
 </g>
 <g >
-<title>143 (1,048,688 bytes, 0.04%)</title><rect x="12.0" y="341" width="0.5" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="15.03" y="351.5" ></text>
-</g>
-<g >
-<title>254 (524,528 bytes, 0.02%)</title><rect x="257.6" y="373" width="0.2" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="260.55" y="383.5" ></text>
-</g>
-<g >
-<title>34 (104,335,192 bytes, 3.66%)</title><rect x="670.7" y="261" width="50.6" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="673.71" y="271.5" >34</text>
-</g>
-<g >
-<title>302 (557,738 bytes, 0.02%)</title><rect x="258.3" y="53" width="0.3" height="15.0" fill="rgb(251,211,50)" rx="2" ry="2" />
-<text  x="261.33" y="63.5" ></text>
-</g>
-<g >
-<title>325 (570,634 bytes, 0.02%)</title><rect x="262.7" y="133" width="0.3" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="265.69" y="143.5" ></text>
-</g>
-<g >
-<title>192 (524,336 bytes, 0.02%)</title><rect x="782.3" y="325" width="0.3" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="785.34" y="335.5" ></text>
-</g>
-<g >
-<title>334 (570,634 bytes, 0.02%)</title><rect x="262.7" y="309" width="0.3" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="265.69" y="319.5" ></text>
-</g>
-<g >
-<title>50 (524,304 bytes, 0.02%)</title><rect x="300.9" y="309" width="0.3" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
-<text  x="303.93" y="319.5" ></text>
-</g>
-<g >
-<title>120 (524,344 bytes, 0.02%)</title><rect x="783.1" y="309" width="0.3" height="15.0" fill="rgb(213,41,9)" rx="2" ry="2" />
-<text  x="786.10" y="319.5" ></text>
-</g>
-<g >
-<title>79 (1,231,222,204 bytes, 43.23%)</title><rect x="786.9" y="341" width="596.7" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
-<text  x="789.94" y="351.5" >79</text>
-</g>
-<g >
-<title>96 (540,842 bytes, 0.02%)</title><rect x="1388.0" y="213" width="0.2" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
-<text  x="1390.96" y="223.5" ></text>
-</g>
-<g >
-<title>100 (540,842 bytes, 0.02%)</title><rect x="1388.0" y="277" width="0.2" height="15.0" fill="rgb(226,100,24)" rx="2" ry="2" />
-<text  x="1390.96" y="287.5" ></text>
-</g>
-<g >
-<title>250 (524,344 bytes, 0.02%)</title><rect x="260.6" y="293" width="0.3" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="263.65" y="303.5" ></text>
-</g>
-<g >
-<title>72 (8,448,793 bytes, 0.30%)</title><rect x="782.9" y="357" width="4.0" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="785.85" y="367.5" ></text>
-</g>
-<g >
-<title>176 (2,230,953 bytes, 0.08%)</title><rect x="254.7" y="341" width="1.0" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
-<text  x="257.66" y="351.5" ></text>
-</g>
-<g >
-<title>93 (524,336 bytes, 0.02%)</title><rect x="1383.3" y="293" width="0.3" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
-<text  x="1386.32" y="303.5" ></text>
-</g>
-<g >
-<title>52 (524,296 bytes, 0.02%)</title><rect x="821.1" y="117" width="0.3" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="824.12" y="127.5" ></text>
-</g>
-<g >
-<title>246 (562,015 bytes, 0.02%)</title><rect x="257.0" y="341" width="0.3" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="260.03" y="351.5" ></text>
-</g>
-<g >
-<title>136 (1,048,768 bytes, 0.04%)</title><rect x="263.0" y="309" width="0.5" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="265.97" y="319.5" ></text>
-</g>
-<g >
-<title>103 (9,589,678 bytes, 0.34%)</title><rect x="1383.6" y="341" width="4.6" height="15.0" fill="rgb(207,11,2)" rx="2" ry="2" />
-<text  x="1386.57" y="351.5" ></text>
-</g>
-<g >
-<title>316 (524,344 bytes, 0.02%)</title><rect x="262.2" y="325" width="0.2" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="265.18" y="335.5" ></text>
-</g>
-<g >
-<title>156 (1,573,080 bytes, 0.06%)</title><rect x="1379.0" y="197" width="0.7" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="1381.97" y="207.5" ></text>
-</g>
-<g >
-<title>217 (557,738 bytes, 0.02%)</title><rect x="1380.2" y="277" width="0.3" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="1383.24" y="287.5" ></text>
-</g>
-<g >
-<title>261 (525,440 bytes, 0.02%)</title><rect x="257.8" y="261" width="0.3" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="260.81" y="271.5" ></text>
-</g>
-<g >
-<title>64 (524,312 bytes, 0.02%)</title><rect x="260.4" y="277" width="0.2" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="263.40" y="287.5" ></text>
-</g>
-<g >
-<title>231 (540,842 bytes, 0.02%)</title><rect x="1388.0" y="325" width="0.2" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="1390.96" y="335.5" ></text>
+<title>github.com/jackc/pgx/v5/stdlib.(*driverConnector).Connect (1,115,476 bytes, 0.04%)</title><rect x="1386.3" y="245" width="0.6" height="15.0" fill="rgb(211,27,6)" rx="2" ry="2" />
+<text  x="1389.34" y="255.5" ></text>
 </g>
 <g >
 <title>all (2,847,819,715 bytes, 100%)</title><rect x="10.0" y="389" width="1380.0" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
 <text  x="13.00" y="399.5" ></text>
 </g>
 <g >
-<title>285 (538,038 bytes, 0.02%)</title><rect x="261.2" y="373" width="0.2" height="15.0" fill="rgb(236,144,34)" rx="2" ry="2" />
-<text  x="264.16" y="383.5" ></text>
+<title>sync.(*Once).doSlow (557,738 bytes, 0.02%)</title><rect x="1386.6" y="85" width="0.3" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="1389.61" y="95.5" ></text>
 </g>
 <g >
-<title>55 (762,572,297 bytes, 26.78%)</title><rect x="301.2" y="277" width="369.5" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="304.18" y="287.5" >55</text>
+<title>net/http.(*conn).serve (2,788,322 bytes, 0.10%)</title><rect x="1384.0" y="373" width="1.3" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="1386.95" y="383.5" ></text>
 </g>
 <g >
-<title>148 (524,300 bytes, 0.02%)</title><rect x="786.9" y="213" width="0.3" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="789.94" y="223.5" ></text>
+<title>github.com/nats-io/nats.go/jetstream.(*pullConsumer).Consume.func1 (841,437,145 bytes, 29.55%)</title><rect x="372.6" y="357" width="407.8" height="15.0" fill="rgb(208,15,3)" rx="2" ry="2" />
+<text  x="375.64" y="367.5" >github.com/nats-io/nats.go/jetstream.(*pullConsumer).Co..</text>
 </g>
 <g >
-<title>63 (524,312 bytes, 0.02%)</title><rect x="260.4" y="261" width="0.2" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="263.40" y="271.5" ></text>
+<title>reflect.unsafe_New (439,938,042 bytes, 15.45%)</title><rect x="1140.4" y="117" width="213.2" height="15.0" fill="rgb(243,177,42)" rx="2" ry="2" />
+<text  x="1143.43" y="127.5" >reflect.unsafe_New</text>
 </g>
 <g >
-<title>306 (557,738 bytes, 0.02%)</title><rect x="258.3" y="117" width="0.3" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="261.33" y="127.5" ></text>
+<title>golang.org/x/net/http2.(*Framer).ReadFrameHeader (540,842 bytes, 0.02%)</title><rect x="782.4" y="309" width="0.3" height="15.0" fill="rgb(246,192,45)" rx="2" ry="2" />
+<text  x="785.42" y="319.5" ></text>
 </g>
 <g >
-<title>41 (229,842,643 bytes, 8.07%)</title><rect x="670.7" y="373" width="111.4" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
-<text  x="673.71" y="383.5" >41</text>
+<title>reflect.unsafe_New (282,105,681 bytes, 9.91%)</title><rect x="623.0" y="181" width="136.7" height="15.0" fill="rgb(243,177,42)" rx="2" ry="2" />
+<text  x="626.03" y="191.5" >reflect.unsafe_New</text>
 </g>
 <g >
-<title>179 (1,048,688 bytes, 0.04%)</title><rect x="263.5" y="325" width="0.5" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
-<text  x="266.47" y="335.5" ></text>
+<title>google.golang.org/protobuf/proto.MarshalOptions.marshal (4,740,414 bytes, 0.17%)</title><rect x="790.6" y="245" width="2.3" height="15.0" fill="rgb(229,111,26)" rx="2" ry="2" />
+<text  x="793.62" y="255.5" ></text>
 </g>
 <g >
-<title>207 (524,992 bytes, 0.02%)</title><rect x="256.3" y="325" width="0.2" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="259.26" y="335.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/storage.Migrate (1,115,476 bytes, 0.04%)</title><rect x="1386.3" y="341" width="0.6" height="15.0" fill="rgb(207,10,2)" rx="2" ry="2" />
+<text  x="1389.34" y="351.5" ></text>
 </g>
 <g >
-<title>34 (282,105,681 bytes, 9.91%)</title><rect x="301.9" y="181" width="136.7" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="304.94" y="191.5" >34</text>
+<title>google.golang.org/protobuf/proto.MarshalOptions.marshal (524,300 bytes, 0.02%)</title><rect x="1383.4" y="197" width="0.3" height="15.0" fill="rgb(229,111,26)" rx="2" ry="2" />
+<text  x="1386.44" y="207.5" ></text>
 </g>
 <g >
-<title>157 (524,360 bytes, 0.02%)</title><rect x="1378.7" y="213" width="0.3" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="1381.72" y="223.5" ></text>
+<title>runtime/pprof.allFrames (524,408 bytes, 0.02%)</title><rect x="1388.7" y="325" width="0.2" height="15.0" fill="rgb(229,113,27)" rx="2" ry="2" />
+<text  x="1391.66" y="335.5" ></text>
 </g>
 <g >
-<title>67 (524,344 bytes, 0.02%)</title><rect x="261.4" y="357" width="0.3" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="264.42" y="367.5" ></text>
+<title>github.com/jackc/pgx/v5/pgproto3.(*Frontend).Receive (524,320 bytes, 0.02%)</title><rect x="127.5" y="181" width="0.3" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="130.53" y="191.5" ></text>
 </g>
 <g >
-<title>146 (1,572,960 bytes, 0.06%)</title><rect x="1377.2" y="293" width="0.8" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="1380.19" y="303.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/queue.(*Conn).TailSubject (1,573,080 bytes, 0.06%)</title><rect x="789.9" y="261" width="0.7" height="15.0" fill="rgb(247,196,46)" rx="2" ry="2" />
+<text  x="792.86" y="271.5" ></text>
 </g>
 <g >
-<title>26 (1,572,976 bytes, 0.06%)</title><rect x="259.9" y="373" width="0.7" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="262.89" y="383.5" ></text>
+<title>runtime.park_m (525,312 bytes, 0.02%)</title><rect x="1387.1" y="357" width="0.3" height="15.0" fill="rgb(233,132,31)" rx="2" ry="2" />
+<text  x="1390.14" y="367.5" ></text>
 </g>
 <g >
-<title>134 (524,336 bytes, 0.02%)</title><rect x="821.4" y="133" width="0.2" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="824.38" y="143.5" ></text>
+<title>net.getSystemDNSConfigNamed (557,738 bytes, 0.02%)</title><rect x="1386.6" y="117" width="0.3" height="15.0" fill="rgb(244,183,43)" rx="2" ry="2" />
+<text  x="1389.61" y="127.5" ></text>
 </g>
 <g >
-<title>277 (524,300 bytes, 0.02%)</title><rect x="260.9" y="341" width="0.3" height="15.0" fill="rgb(229,114,27)" rx="2" ry="2" />
-<text  x="263.90" y="351.5" ></text>
+<title>net.(*resolverConfig).init (557,738 bytes, 0.02%)</title><rect x="1386.6" y="69" width="0.3" height="15.0" fill="rgb(235,138,33)" rx="2" ry="2" />
+<text  x="1389.61" y="79.5" ></text>
 </g>
 <g >
-<title>220 (73,621,480 bytes, 2.59%)</title><rect x="264.7" y="293" width="35.7" height="15.0" fill="rgb(207,11,2)" rx="2" ry="2" />
-<text  x="267.74" y="303.5" >220</text>
+<title>google.golang.org/grpc.(*serverStream).SendMsg (524,300 bytes, 0.02%)</title><rect x="1383.4" y="277" width="0.3" height="15.0" fill="rgb(206,7,1)" rx="2" ry="2" />
+<text  x="1386.44" y="287.5" ></text>
 </g>
 <g >
-<title>248 (562,015 bytes, 0.02%)</title><rect x="257.0" y="373" width="0.3" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
-<text  x="260.03" y="383.5" ></text>
+<title>github.com/jackc/pgx/v5.(*Conn).BeginTx (524,312 bytes, 0.02%)</title><rect x="127.3" y="261" width="0.2" height="15.0" fill="rgb(230,115,27)" rx="2" ry="2" />
+<text  x="130.28" y="271.5" ></text>
 </g>
 <g >
-<title>57 (762,572,297 bytes, 26.78%)</title><rect x="301.2" y="309" width="369.5" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
-<text  x="304.18" y="319.5" >57</text>
+<title>github.com/jamespolk/go-log-aggregator/internal/queue.(*Conn).Subject (1,572,952 bytes, 0.06%)</title><rect x="789.1" y="261" width="0.8" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
+<text  x="792.10" y="271.5" ></text>
 </g>
 <g >
-<title>21 (524,344 bytes, 0.02%)</title><rect x="260.1" y="293" width="0.3" height="15.0" fill="rgb(224,87,20)" rx="2" ry="2" />
-<text  x="263.14" y="303.5" ></text>
+<title>google.golang.org/grpc/internal/transport.(*Stream).write (3,675,681 bytes, 0.13%)</title><rect x="780.6" y="325" width="1.8" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="783.63" y="335.5" ></text>
 </g>
 <g >
-<title>56 (762,572,297 bytes, 26.78%)</title><rect x="301.2" y="293" width="369.5" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="304.18" y="303.5" >56</text>
+<title>runtime.mstart (1,050,624 bytes, 0.04%)</title><rect x="1387.4" y="373" width="0.5" height="15.0" fill="rgb(220,71,17)" rx="2" ry="2" />
+<text  x="1390.39" y="383.5" ></text>
 </g>
 <g >
-<title>178 (2,230,953 bytes, 0.08%)</title><rect x="254.7" y="373" width="1.0" height="15.0" fill="rgb(229,114,27)" rx="2" ry="2" />
-<text  x="257.66" y="383.5" ></text>
+<title>reflect.New (282,105,681 bytes, 9.91%)</title><rect x="623.0" y="197" width="136.7" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
+<text  x="626.03" y="207.5" >reflect.New</text>
 </g>
 <g >
-<title>34 (1,573,008 bytes, 0.06%)</title><rect x="301.2" y="181" width="0.7" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="304.18" y="191.5" ></text>
+<title>sync.(*poolChain).pushHead (524,864 bytes, 0.02%)</title><rect x="1383.2" y="197" width="0.2" height="15.0" fill="rgb(240,163,38)" rx="2" ry="2" />
+<text  x="1386.18" y="207.5" ></text>
 </g>
 <g >
-<title>291 (1,115,476 bytes, 0.04%)</title><rect x="258.1" y="165" width="0.5" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="261.06" y="175.5" ></text>
+<title>runtime.newobject (524,528 bytes, 0.02%)</title><rect x="1387.9" y="309" width="0.3" height="15.0" fill="rgb(221,75,18)" rx="2" ry="2" />
+<text  x="1390.90" y="319.5" ></text>
 </g>
 <g >
-<title>114 (524,408 bytes, 0.02%)</title><rect x="10.0" y="341" width="0.3" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="13.00" y="351.5" ></text>
+<title>github.com/jackc/pgx/v5/pgconn.(*PgConn).signalMessage (524,344 bytes, 0.02%)</title><rect x="127.8" y="197" width="0.2" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="130.78" y="207.5" ></text>
 </g>
 <g >
-<title>242 (1,050,624 bytes, 0.04%)</title><rect x="256.5" y="373" width="0.5" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="259.52" y="383.5" ></text>
+<title>runtime.mcall (525,312 bytes, 0.02%)</title><rect x="1387.1" y="373" width="0.3" height="15.0" fill="rgb(213,40,9)" rx="2" ry="2" />
+<text  x="1390.14" y="383.5" ></text>
 </g>
 <g >
-<title>158 (524,360 bytes, 0.02%)</title><rect x="1378.7" y="229" width="0.3" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
-<text  x="1381.72" y="239.5" ></text>
+<title>runtime.wakep (525,312 bytes, 0.02%)</title><rect x="1387.1" y="309" width="0.3" height="15.0" fill="rgb(216,54,13)" rx="2" ry="2" />
+<text  x="1390.14" y="319.5" ></text>
 </g>
 <g >
-<title>54 (762,572,297 bytes, 26.78%)</title><rect x="301.2" y="261" width="369.5" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="304.18" y="271.5" >54</text>
+<title>main.main (1,640,916 bytes, 0.06%)</title><rect x="1386.3" y="357" width="0.8" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="1389.34" y="367.5" ></text>
 </g>
 <g >
-<title>315 (524,344 bytes, 0.02%)</title><rect x="262.2" y="309" width="0.2" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="265.18" y="319.5" ></text>
+<title>runtime.mallocgc (525,312 bytes, 0.02%)</title><rect x="1387.4" y="213" width="0.2" height="15.0" fill="rgb(241,169,40)" rx="2" ry="2" />
+<text  x="1390.39" y="223.5" ></text>
 </g>
 <g >
-<title>221 (73,621,480 bytes, 2.59%)</title><rect x="264.7" y="309" width="35.7" height="15.0" fill="rgb(251,211,50)" rx="2" ry="2" />
-<text  x="267.74" y="319.5" >221</text>
+<title>github.com/jackc/pgx/v5/pgtype.encodePlanTextCodecString.Encode (88,282,151 bytes, 3.10%)</title><rect x="28.8" y="293" width="42.8" height="15.0" fill="rgb(232,126,30)" rx="2" ry="2" />
+<text  x="31.82" y="303.5" >gith..</text>
 </g>
 <g >
-<title>239 (525,312 bytes, 0.02%)</title><rect x="256.5" y="325" width="0.3" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
-<text  x="259.52" y="335.5" ></text>
+<title>github.com/nats-io/nats.go/jetstream.(*jetStream).PublishMsg (4,778,417 bytes, 0.17%)</title><rect x="123.4" y="325" width="2.4" height="15.0" fill="rgb(235,141,33)" rx="2" ry="2" />
+<text  x="126.43" y="335.5" ></text>
 </g>
 <g >
-<title>200 (524,296 bytes, 0.02%)</title><rect x="254.4" y="245" width="0.3" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
-<text  x="257.41" y="255.5" ></text>
+<title>github.com/jackc/pgx/v5.(*Conn).execSimpleProtocol (524,320 bytes, 0.02%)</title><rect x="127.5" y="229" width="0.3" height="15.0" fill="rgb(228,106,25)" rx="2" ry="2" />
+<text  x="130.53" y="239.5" ></text>
 </g>
 <g >
-<title>243 (67,911,012 bytes, 2.38%)</title><rect x="788.2" y="229" width="32.9" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="791.22" y="239.5" >243</text>
+<title>github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).Stream (1,231,222,204 bytes, 43.23%)</title><rect x="787.1" y="309" width="596.6" height="15.0" fill="rgb(243,175,42)" rx="2" ry="2" />
+<text  x="790.06" y="319.5" >github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).Stream</text>
 </g>
 <g >
-<title>113 (524,408 bytes, 0.02%)</title><rect x="10.0" y="325" width="0.3" height="15.0" fill="rgb(251,211,50)" rx="2" ry="2" />
-<text  x="13.00" y="335.5" ></text>
+<title>github.com/jackc/pgx/v5/pgtype.(*wrapTimeEncodePlan).Encode (37,225,300 bytes, 1.31%)</title><rect x="10.8" y="293" width="18.0" height="15.0" fill="rgb(245,185,44)" rx="2" ry="2" />
+<text  x="13.78" y="303.5" ></text>
 </g>
 <g >
-<title>321 (524,344 bytes, 0.02%)</title><rect x="262.4" y="293" width="0.3" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="265.44" y="303.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).handle (13,163,144 bytes, 0.46%)</title><rect x="787.1" y="293" width="6.3" height="15.0" fill="rgb(243,175,42)" rx="2" ry="2" />
+<text  x="790.06" y="303.5" ></text>
 </g>
 <g >
-<title>236 (525,312 bytes, 0.02%)</title><rect x="256.5" y="277" width="0.3" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="259.52" y="287.5" ></text>
+<title>runtime.schedule (525,312 bytes, 0.02%)</title><rect x="1387.1" y="341" width="0.3" height="15.0" fill="rgb(220,72,17)" rx="2" ry="2" />
+<text  x="1390.14" y="351.5" ></text>
 </g>
 <g >
-<title>44 (1,048,624 bytes, 0.04%)</title><rect x="300.4" y="293" width="0.5" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="303.42" y="303.5" ></text>
+<title>github.com/nats-io/nats%2ego.(*Conn).processMsg (3,670,344 bytes, 0.13%)</title><rect x="370.9" y="341" width="1.7" height="15.0" fill="rgb(232,127,30)" rx="2" ry="2" />
+<text  x="373.86" y="351.5" ></text>
 </g>
 <g >
-<title>233 (525,312 bytes, 0.02%)</title><rect x="261.9" y="245" width="0.3" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="264.93" y="255.5" ></text>
+<title>runtime.wakep (525,312 bytes, 0.02%)</title><rect x="1387.4" y="293" width="0.2" height="15.0" fill="rgb(216,54,13)" rx="2" ry="2" />
+<text  x="1390.39" y="303.5" ></text>
 </g>
 <g >
-<title>232 (525,312 bytes, 0.02%)</title><rect x="256.8" y="229" width="0.2" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="259.77" y="239.5" ></text>
+<title>runtime.doInit (1,619,322 bytes, 0.06%)</title><rect x="1385.3" y="373" width="0.8" height="15.0" fill="rgb(206,7,1)" rx="2" ry="2" />
+<text  x="1388.30" y="383.5" ></text>
 </g>
 <g >
-<title>328 (570,634 bytes, 0.02%)</title><rect x="262.7" y="181" width="0.3" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="265.69" y="191.5" ></text>
+<title>regexp/syntax.(*Regexp).Simplify (524,344 bytes, 0.02%)</title><rect x="1385.6" y="293" width="0.2" height="15.0" fill="rgb(222,78,18)" rx="2" ry="2" />
+<text  x="1388.58" y="303.5" ></text>
 </g>
 <g >
-<title>335 (570,634 bytes, 0.02%)</title><rect x="262.7" y="325" width="0.3" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="265.69" y="335.5" ></text>
+<title>google.golang.org/protobuf/internal/impl.consumeMessageInfo (1,048,632 bytes, 0.04%)</title><rect x="827.1" y="149" width="0.5" height="15.0" fill="rgb(227,103,24)" rx="2" ry="2" />
+<text  x="830.11" y="159.5" ></text>
 </g>
 <g >
-<title>160 (1,573,080 bytes, 0.06%)</title><rect x="1379.0" y="261" width="0.7" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="1381.97" y="271.5" ></text>
+<title>context.(*cancelCtx).Done (524,344 bytes, 0.02%)</title><rect x="10.0" y="357" width="0.3" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
+<text  x="13.00" y="367.5" ></text>
 </g>
 <g >
-<title>38 (229,842,643 bytes, 8.07%)</title><rect x="670.7" y="325" width="111.4" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="673.71" y="335.5" >38</text>
+<title>google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshalPointer (1,147,525,852 bytes, 40.29%)</title><rect x="827.1" y="181" width="556.1" height="15.0" fill="rgb(224,90,21)" rx="2" ry="2" />
+<text  x="830.11" y="191.5" >google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshalPointer</text>
 </g>
 <g >
-<title>235 (525,312 bytes, 0.02%)</title><rect x="256.8" y="277" width="0.2" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="259.77" y="287.5" ></text>
+<title>strings.(*Builder).WriteByte (1,048,592 bytes, 0.04%)</title><rect x="789.3" y="229" width="0.6" height="15.0" fill="rgb(217,57,13)" rx="2" ry="2" />
+<text  x="792.35" y="239.5" ></text>
 </g>
 <g >
-<title>142 (1,048,688 bytes, 0.04%)</title><rect x="783.4" y="309" width="0.5" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="786.36" y="319.5" ></text>
+<title>io.ReadAtLeast (540,842 bytes, 0.02%)</title><rect x="786.8" y="293" width="0.3" height="15.0" fill="rgb(234,137,32)" rx="2" ry="2" />
+<text  x="789.80" y="303.5" ></text>
 </g>
 <g >
-<title>151 (524,300 bytes, 0.02%)</title><rect x="786.9" y="261" width="0.3" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="789.94" y="271.5" ></text>
+<title>google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshalPointer (645,526,560 bytes, 22.67%)</title><rect x="827.6" y="133" width="312.8" height="15.0" fill="rgb(224,90,21)" rx="2" ry="2" />
+<text  x="830.62" y="143.5" >google.golang.org/protobuf/internal/impl.(..</text>
 </g>
 <g >
-<title>195 (8,507,994 bytes, 0.30%)</title><rect x="1383.8" y="293" width="4.2" height="15.0" fill="rgb(236,144,34)" rx="2" ry="2" />
-<text  x="1386.83" y="303.5" ></text>
+<title>runtime.newm (525,312 bytes, 0.02%)</title><rect x="1387.6" y="277" width="0.3" height="15.0" fill="rgb(243,176,42)" rx="2" ry="2" />
+<text  x="1390.65" y="287.5" ></text>
 </g>
 <g >
-<title>139 (1,048,672 bytes, 0.04%)</title><rect x="264.2" y="309" width="0.5" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="267.24" y="319.5" ></text>
+<title>github.com/jackc/pgx/v5.(*dbTx).CopyFrom (524,344 bytes, 0.02%)</title><rect x="127.8" y="261" width="0.2" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="130.78" y="271.5" ></text>
 </g>
 <g >
-<title>119 (524,312 bytes, 0.02%)</title><rect x="782.9" y="341" width="0.2" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="785.85" y="351.5" ></text>
+<title>github.com/jackc/pgx/v5/internal/iobufpool.Get (2,230,953 bytes, 0.08%)</title><rect x="1388.9" y="341" width="1.1" height="15.0" fill="rgb(215,48,11)" rx="2" ry="2" />
+<text  x="1391.92" y="351.5" ></text>
 </g>
 <g >
-<title>256 (525,440 bytes, 0.02%)</title><rect x="257.8" y="181" width="0.3" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="260.81" y="191.5" ></text>
+<title>github.com/jackc/pgx/v5/internal/iobufpool.init.0.func1 (2,230,953 bytes, 0.08%)</title><rect x="1388.9" y="309" width="1.1" height="15.0" fill="rgb(223,86,20)" rx="2" ry="2" />
+<text  x="1391.92" y="319.5" ></text>
 </g>
 <g >
-<title>208 (524,992 bytes, 0.02%)</title><rect x="256.3" y="341" width="0.2" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="259.26" y="351.5" ></text>
+<title>runtime.newobject (525,312 bytes, 0.02%)</title><rect x="1387.1" y="245" width="0.3" height="15.0" fill="rgb(221,75,18)" rx="2" ry="2" />
+<text  x="1390.14" y="255.5" ></text>
 </g>
 <g >
-<title>188 (524,304 bytes, 0.02%)</title><rect x="785.4" y="261" width="0.2" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
-<text  x="788.39" y="271.5" ></text>
+<title>google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshalPointerEager (1,147,525,852 bytes, 40.29%)</title><rect x="827.1" y="165" width="556.1" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="830.11" y="175.5" >google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshalPointerEager</text>
 </g>
 <g >
-<title>278 (524,300 bytes, 0.02%)</title><rect x="260.9" y="357" width="0.3" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
-<text  x="263.90" y="367.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/storage.copyRecords (524,344 bytes, 0.02%)</title><rect x="127.8" y="293" width="0.2" height="15.0" fill="rgb(237,148,35)" rx="2" ry="2" />
+<text  x="130.78" y="303.5" ></text>
 </g>
 <g >
-<title>318 (1,619,322 bytes, 0.06%)</title><rect x="262.2" y="357" width="0.8" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="265.18" y="367.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/ingest.(*Consumer).Start.func1 (839,339,689 bytes, 29.47%)</title><rect x="372.6" y="325" width="406.8" height="15.0" fill="rgb(234,133,31)" rx="2" ry="2" />
+<text  x="375.64" y="335.5" >github.com/jamespolk/go-log-aggregator/internal/ingest...</text>
 </g>
 <g >
-<title>235 (525,312 bytes, 0.02%)</title><rect x="261.9" y="277" width="0.3" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="264.93" y="287.5" ></text>
+<title>github.com/hashicorp/go-sockaddr.GetPrivateInterfaces (525,440 bytes, 0.02%)</title><rect x="1386.9" y="229" width="0.2" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text  x="1389.88" y="239.5" ></text>
 </g>
 <g >
-<title>294 (1,115,476 bytes, 0.04%)</title><rect x="258.1" y="213" width="0.5" height="15.0" fill="rgb(236,144,34)" rx="2" ry="2" />
-<text  x="261.06" y="223.5" ></text>
+<title>github.com/nats-io/nats%2ego.(*Conn).requestWithContext (3,205,329 bytes, 0.11%)</title><rect x="124.2" y="293" width="1.6" height="15.0" fill="rgb(225,94,22)" rx="2" ry="2" />
+<text  x="127.20" y="303.5" ></text>
 </g>
 <g >
-<title>271 (524,344 bytes, 0.02%)</title><rect x="260.6" y="341" width="0.3" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="263.65" y="351.5" ></text>
+<title>google.golang.org/protobuf/internal/impl.consumeMessageSliceInfo (721,021,790 bytes, 25.32%)</title><rect x="410.3" y="213" width="349.4" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="413.34" y="223.5" >google.golang.org/protobuf/internal/impl.consum..</text>
 </g>
 <g >
-<title>80 (1,231,222,204 bytes, 43.23%)</title><rect x="786.9" y="357" width="596.7" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="789.94" y="367.5" >80</text>
+<title>runtime/pprof.(*profileBuilder).appendLocsForStack (1,048,744 bytes, 0.04%)</title><rect x="1388.4" y="341" width="0.5" height="15.0" fill="rgb(245,187,44)" rx="2" ry="2" />
+<text  x="1391.41" y="351.5" ></text>
 </g>
 <g >
-<title>233 (525,312 bytes, 0.02%)</title><rect x="256.8" y="245" width="0.2" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="259.77" y="255.5" ></text>
+<title>net/http.newBufioWriterSize (524,992 bytes, 0.02%)</title><rect x="1384.2" y="341" width="0.3" height="15.0" fill="rgb(218,60,14)" rx="2" ry="2" />
+<text  x="1387.21" y="351.5" ></text>
 </g>
 <g >
-<title>327 (570,634 bytes, 0.02%)</title><rect x="262.7" y="165" width="0.3" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="265.69" y="175.5" ></text>
+<title>syscall.ParseNetlinkRouteAttr (525,440 bytes, 0.02%)</title><rect x="1386.9" y="165" width="0.2" height="15.0" fill="rgb(219,66,15)" rx="2" ry="2" />
+<text  x="1389.88" y="175.5" ></text>
 </g>
 <g >
-<title>333 (570,634 bytes, 0.02%)</title><rect x="262.7" y="293" width="0.3" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="265.69" y="303.5" ></text>
+<title>google.golang.org/protobuf/internal/impl.pointer.AppendPointerSlice (61,012,618 bytes, 2.14%)</title><rect x="1353.6" y="149" width="29.6" height="15.0" fill="rgb(232,125,30)" rx="2" ry="2" />
+<text  x="1356.62" y="159.5" >go..</text>
 </g>
 <g >
-<title>171 (524,320 bytes, 0.02%)</title><rect x="259.9" y="277" width="0.2" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="262.89" y="287.5" ></text>
+<title>google.golang.org/grpc/mem.(*buffer).Free (524,864 bytes, 0.02%)</title><rect x="1383.2" y="229" width="0.2" height="15.0" fill="rgb(242,170,40)" rx="2" ry="2" />
+<text  x="1386.18" y="239.5" ></text>
 </g>
 <g >
-<title>191 (1,572,960 bytes, 0.06%)</title><rect x="785.6" y="277" width="0.8" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="788.65" y="287.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/storage.newWriteBatch (2,653,623 bytes, 0.09%)</title><rect x="128.3" y="373" width="1.3" height="15.0" fill="rgb(239,157,37)" rx="2" ry="2" />
+<text  x="131.29" y="383.5" ></text>
 </g>
 <g >
-<title>270 (524,344 bytes, 0.02%)</title><rect x="260.6" y="325" width="0.3" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="263.65" y="335.5" ></text>
+<title>regexp.compile (524,344 bytes, 0.02%)</title><rect x="1385.6" y="309" width="0.2" height="15.0" fill="rgb(248,199,47)" rx="2" ry="2" />
+<text  x="1388.58" y="319.5" ></text>
 </g>
 <g >
-<title>104 (1,573,032 bytes, 0.06%)</title><rect x="787.2" y="197" width="0.8" height="15.0" fill="rgb(251,211,50)" rx="2" ry="2" />
-<text  x="790.20" y="207.5" ></text>
+<title>runtime.startm (525,312 bytes, 0.02%)</title><rect x="1387.4" y="277" width="0.2" height="15.0" fill="rgb(220,71,17)" rx="2" ry="2" />
+<text  x="1390.39" y="287.5" ></text>
 </g>
 <g >
-<title>266 (525,440 bytes, 0.02%)</title><rect x="257.8" y="341" width="0.3" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
-<text  x="260.81" y="351.5" ></text>
+<title>google.golang.org/grpc/internal/mem.(*BinaryTieredBufferPool).Get (8,507,994 bytes, 0.30%)</title><rect x="782.7" y="293" width="4.1" height="15.0" fill="rgb(249,205,49)" rx="2" ry="2" />
+<text  x="785.68" y="303.5" ></text>
 </g>
 <g >
-<title>232 (525,312 bytes, 0.02%)</title><rect x="261.9" y="229" width="0.3" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="264.93" y="239.5" ></text>
+<title>runtime/pprof.(*profMap).lookup (528,394 bytes, 0.02%)</title><rect x="1388.2" y="341" width="0.2" height="15.0" fill="rgb(238,156,37)" rx="2" ry="2" />
+<text  x="1391.15" y="351.5" ></text>
 </g>
 <g >
-<title>316 (524,344 bytes, 0.02%)</title><rect x="262.4" y="325" width="0.3" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="265.44" y="335.5" ></text>
+<title>internal/bytealg.MakeNoZero (1,573,080 bytes, 0.06%)</title><rect x="789.9" y="197" width="0.7" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
+<text  x="792.86" y="207.5" ></text>
 </g>
 <g >
-<title>5 (524,336 bytes, 0.02%)</title><rect x="10.3" y="341" width="0.2" height="15.0" fill="rgb(221,74,17)" rx="2" ry="2" />
-<text  x="13.25" y="351.5" ></text>
+<title>runtime.startm (525,312 bytes, 0.02%)</title><rect x="1387.6" y="293" width="0.3" height="15.0" fill="rgb(220,71,17)" rx="2" ry="2" />
+<text  x="1390.65" y="303.5" ></text>
 </g>
 <g >
-<title>239 (525,312 bytes, 0.02%)</title><rect x="261.9" y="341" width="0.3" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
-<text  x="264.93" y="351.5" ></text>
+<title>net.(*Resolver).LookupHost (1,115,476 bytes, 0.04%)</title><rect x="1386.3" y="165" width="0.6" height="15.0" fill="rgb(251,213,51)" rx="2" ry="2" />
+<text  x="1389.34" y="175.5" ></text>
 </g>
 <g >
-<title>51 (39,453,203 bytes, 1.39%)</title><rect x="651.3" y="213" width="19.2" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
-<text  x="654.34" y="223.5" ></text>
+<title>google.golang.org/grpc.encode (524,300 bytes, 0.02%)</title><rect x="1383.4" y="245" width="0.3" height="15.0" fill="rgb(219,65,15)" rx="2" ry="2" />
+<text  x="1386.44" y="255.5" ></text>
 </g>
 <g >
-<title>196 (8,507,994 bytes, 0.30%)</title><rect x="1383.8" y="309" width="4.2" height="15.0" fill="rgb(229,114,27)" rx="2" ry="2" />
-<text  x="1386.83" y="319.5" ></text>
+<title>github.com/nats-io/nats%2ego.(*Conn).createNewRequestAndSend (2,680,985 bytes, 0.09%)</title><rect x="124.5" y="277" width="1.3" height="15.0" fill="rgb(226,100,24)" rx="2" ry="2" />
+<text  x="127.45" y="287.5" ></text>
 </g>
 <g >
-<title>189 (524,304 bytes, 0.02%)</title><rect x="785.4" y="277" width="0.2" height="15.0" fill="rgb(217,55,13)" rx="2" ry="2" />
-<text  x="788.39" y="287.5" ></text>
+<title>github.com/jackc/pgx/v5/pgproto3.(*NoticeResponse).Decode (524,320 bytes, 0.02%)</title><rect x="127.5" y="165" width="0.3" height="15.0" fill="rgb(227,105,25)" rx="2" ry="2" />
+<text  x="130.53" y="175.5" ></text>
 </g>
 <g >
-<title>222 (645,526,560 bytes, 22.67%)</title><rect x="1034.8" y="149" width="312.8" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="1037.82" y="159.5" >222</text>
+<title>net/http/pprof.Profile (1,212,696 bytes, 0.04%)</title><rect x="1384.7" y="309" width="0.6" height="15.0" fill="rgb(235,141,33)" rx="2" ry="2" />
+<text  x="1387.72" y="319.5" ></text>
 </g>
 <g >
-<title>320 (524,344 bytes, 0.02%)</title><rect x="262.4" y="245" width="0.3" height="15.0" fill="rgb(251,211,50)" rx="2" ry="2" />
-<text  x="265.44" y="255.5" ></text>
+<title>google.golang.org/grpc.(*Server).handleStream (1,231,222,204 bytes, 43.23%)</title><rect x="787.1" y="357" width="596.6" height="15.0" fill="rgb(209,18,4)" rx="2" ry="2" />
+<text  x="790.06" y="367.5" >google.golang.org/grpc.(*Server).handleStream</text>
 </g>
 <g >
-<title>319 (1,619,322 bytes, 0.06%)</title><rect x="262.2" y="373" width="0.8" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="265.18" y="383.5" ></text>
+<title>google.golang.org/protobuf/proto.Unmarshal (1,147,525,852 bytes, 40.29%)</title><rect x="827.1" y="229" width="556.1" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="830.11" y="239.5" >google.golang.org/protobuf/proto.Unmarshal</text>
 </g>
 <g >
-<title>281 (538,038 bytes, 0.02%)</title><rect x="261.2" y="309" width="0.2" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="264.16" y="319.5" ></text>
+<title>net/http.(*ServeMux).ServeHTTP (1,736,992 bytes, 0.06%)</title><rect x="1384.5" y="341" width="0.8" height="15.0" fill="rgb(239,158,38)" rx="2" ry="2" />
+<text  x="1387.46" y="351.5" ></text>
 </g>
 <g >
-<title>305 (557,738 bytes, 0.02%)</title><rect x="258.3" y="101" width="0.3" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="261.33" y="111.5" ></text>
+<title>database/sql.(*DB).retry (1,115,476 bytes, 0.04%)</title><rect x="1386.3" y="293" width="0.6" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
+<text  x="1389.34" y="303.5" ></text>
 </g>
 <g >
-<title>274 (524,300 bytes, 0.02%)</title><rect x="260.9" y="277" width="0.3" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="263.90" y="287.5" ></text>
+<title>runtime.acquireSudog (524,344 bytes, 0.02%)</title><rect x="1386.1" y="325" width="0.2" height="15.0" fill="rgb(239,160,38)" rx="2" ry="2" />
+<text  x="1389.09" y="335.5" ></text>
 </g>
 <g >
-<title>326 (570,634 bytes, 0.02%)</title><rect x="262.7" y="149" width="0.3" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="265.69" y="159.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/model.LabelSet.ID (1,048,624 bytes, 0.04%)</title><rect x="373.4" y="277" width="0.5" height="15.0" fill="rgb(239,157,37)" rx="2" ry="2" />
+<text  x="376.40" y="287.5" ></text>
 </g>
 <g >
-<title>250 (524,528 bytes, 0.02%)</title><rect x="257.6" y="293" width="0.2" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="260.55" y="303.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/ingest.init.func1 (557,738 bytes, 0.02%)</title><rect x="792.9" y="245" width="0.3" height="15.0" fill="rgb(209,19,4)" rx="2" ry="2" />
+<text  x="795.92" y="255.5" ></text>
 </g>
 <g >
-<title>236 (525,312 bytes, 0.02%)</title><rect x="261.9" y="293" width="0.3" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="264.93" y="303.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/ingest.(*pipeline).run (9,497,433 bytes, 0.33%)</title><rect x="122.4" y="357" width="4.6" height="15.0" fill="rgb(243,174,41)" rx="2" ry="2" />
+<text  x="125.42" y="367.5" ></text>
 </g>
 <g >
-<title>109 (1,048,784 bytes, 0.04%)</title><rect x="784.6" y="325" width="0.5" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="787.63" y="335.5" ></text>
+<title>github.com/jackc/pgx/v5/pgxpool.(*Pool).Begin (524,312 bytes, 0.02%)</title><rect x="127.3" y="309" width="0.2" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text  x="130.28" y="319.5" ></text>
 </g>
 <g >
-<title>52 (438,916,109 bytes, 15.41%)</title><rect x="438.6" y="181" width="212.7" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="441.65" y="191.5" >52</text>
+<title>sync.(*Pool).Get (524,992 bytes, 0.02%)</title><rect x="1384.2" y="325" width="0.3" height="15.0" fill="rgb(241,165,39)" rx="2" ry="2" />
+<text  x="1387.21" y="335.5" ></text>
 </g>
 <g >
-<title>223 (497,914,014 bytes, 17.48%)</title><rect x="12.5" y="357" width="241.3" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="15.54" y="367.5" >223</text>
+<title>runtime/pprof.StartCPUProfile (1,212,696 bytes, 0.04%)</title><rect x="1384.7" y="293" width="0.6" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
+<text  x="1387.72" y="303.5" ></text>
 </g>
 <g >
-<title>214 (524,864 bytes, 0.02%)</title><rect x="788.0" y="245" width="0.2" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="790.96" y="255.5" ></text>
+<title>github.com/jackc/pgx/v5.(*Conn).exec (524,320 bytes, 0.02%)</title><rect x="127.5" y="245" width="0.3" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
+<text  x="130.53" y="255.5" ></text>
 </g>
 <g >
-<title>265 (525,440 bytes, 0.02%)</title><rect x="257.8" y="325" width="0.3" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="260.81" y="335.5" ></text>
+<title>net.(*Resolver).goLookupHostOrder (557,738 bytes, 0.02%)</title><rect x="1386.3" y="133" width="0.3" height="15.0" fill="rgb(237,148,35)" rx="2" ry="2" />
+<text  x="1389.34" y="143.5" ></text>
 </g>
 <g >
-<title>225 (583,721 bytes, 0.02%)</title><rect x="786.4" y="261" width="0.3" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="789.41" y="271.5" ></text>
+<title>regexp.Compile (524,344 bytes, 0.02%)</title><rect x="1385.8" y="325" width="0.3" height="15.0" fill="rgb(205,0,0)" rx="2" ry="2" />
+<text  x="1388.83" y="335.5" ></text>
 </g>
 <g >
-<title>279 (524,300 bytes, 0.02%)</title><rect x="260.9" y="373" width="0.3" height="15.0" fill="rgb(217,55,13)" rx="2" ry="2" />
-<text  x="263.90" y="383.5" ></text>
+<title>github.com/hashicorp/memberlist.Create (525,440 bytes, 0.02%)</title><rect x="1386.9" y="309" width="0.2" height="15.0" fill="rgb(238,155,37)" rx="2" ry="2" />
+<text  x="1389.88" y="319.5" ></text>
 </g>
 <g >
-<title>152 (524,300 bytes, 0.02%)</title><rect x="786.9" y="277" width="0.3" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="789.94" y="287.5" ></text>
+<title>sync.(*Pool).Get (524,300 bytes, 0.02%)</title><rect x="128.0" y="293" width="0.3" height="15.0" fill="rgb(241,165,39)" rx="2" ry="2" />
+<text  x="131.04" y="303.5" ></text>
 </g>
 <g >
-<title>199 (1,212,696 bytes, 0.04%)</title><rect x="253.8" y="309" width="0.6" height="15.0" fill="rgb(210,25,6)" rx="2" ry="2" />
-<text  x="256.82" y="319.5" ></text>
+<title>runtime.newm (525,312 bytes, 0.02%)</title><rect x="1387.4" y="261" width="0.2" height="15.0" fill="rgb(243,176,42)" rx="2" ry="2" />
+<text  x="1390.39" y="271.5" ></text>
 </g>
 <g >
-<title>55 (1,147,525,852 bytes, 40.29%)</title><rect x="821.1" y="213" width="556.1" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="824.12" y="223.5" >55</text>
+<title>github.com/jamespolk/go-log-aggregator/internal/ingest.(*pipeline).publish (10,021,761 bytes, 0.35%)</title><rect x="122.4" y="373" width="4.9" height="15.0" fill="rgb(242,173,41)" rx="2" ry="2" />
+<text  x="125.42" y="383.5" ></text>
 </g>
 <g >
-<title>253 (524,528 bytes, 0.02%)</title><rect x="257.6" y="357" width="0.2" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="260.55" y="367.5" ></text>
+<title>runtime.mstart0 (1,050,624 bytes, 0.04%)</title><rect x="1387.4" y="357" width="0.5" height="15.0" fill="rgb(210,25,6)" rx="2" ry="2" />
+<text  x="1390.39" y="367.5" ></text>
 </g>
 <g >
-<title>52 (1,147,525,852 bytes, 40.29%)</title><rect x="821.1" y="165" width="556.1" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="824.12" y="175.5" >52</text>
+<title>github.com/hashicorp/memberlist.(*NetTransport).FinalAdvertiseAddr (525,440 bytes, 0.02%)</title><rect x="1386.9" y="261" width="0.2" height="15.0" fill="rgb(252,217,52)" rx="2" ry="2" />
+<text  x="1389.88" y="271.5" ></text>
 </g>
 <g >
-<title>54 (1,147,525,852 bytes, 40.29%)</title><rect x="821.1" y="197" width="556.1" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="824.12" y="207.5" >54</text>
+<title>github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).flush (1,572,976 bytes, 0.06%)</title><rect x="127.3" y="357" width="0.7" height="15.0" fill="rgb(229,112,26)" rx="2" ry="2" />
+<text  x="130.28" y="367.5" ></text>
 </g>
 <g >
-<title>122 (1,573,032 bytes, 0.06%)</title><rect x="783.1" y="341" width="0.8" height="15.0" fill="rgb(251,211,50)" rx="2" ry="2" />
-<text  x="786.10" y="351.5" ></text>
+<title>google.golang.org/grpc/internal/transport/readyreader.(*nonBlockingReader).ReadOnReady (540,842 bytes, 0.02%)</title><rect x="782.4" y="245" width="0.3" height="15.0" fill="rgb(217,55,13)" rx="2" ry="2" />
+<text  x="785.42" y="255.5" ></text>
 </g>
 <g >
-<title>258 (525,440 bytes, 0.02%)</title><rect x="257.8" y="213" width="0.3" height="15.0" fill="rgb(236,144,34)" rx="2" ry="2" />
-<text  x="260.81" y="223.5" ></text>
+<title>net.Interfaces (525,440 bytes, 0.02%)</title><rect x="1386.9" y="197" width="0.2" height="15.0" fill="rgb(213,37,9)" rx="2" ry="2" />
+<text  x="1389.88" y="207.5" ></text>
 </g>
 <g >
-<title>46 (839,339,689 bytes, 29.47%)</title><rect x="264.0" y="325" width="406.7" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="266.98" y="335.5" >46</text>
+<title>github.com/nats-io/nats%2ego.(*Conn).publish (583,721 bytes, 0.02%)</title><rect x="125.2" y="261" width="0.3" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
+<text  x="128.21" y="271.5" ></text>
 </g>
 <g >
-<title>175 (73,621,480 bytes, 2.59%)</title><rect x="264.7" y="277" width="35.7" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="267.74" y="287.5" >175</text>
+<title>google.golang.org/grpc/internal/transport.NewServerTransport.func3 (540,842 bytes, 0.02%)</title><rect x="1383.7" y="373" width="0.3" height="15.0" fill="rgb(247,196,46)" rx="2" ry="2" />
+<text  x="1386.69" y="383.5" ></text>
 </g>
 <g >
-<title>282 (1,115,476 bytes, 0.04%)</title><rect x="258.1" y="229" width="0.5" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="261.06" y="239.5" ></text>
+<title>net.open (557,738 bytes, 0.02%)</title><rect x="1386.6" y="37" width="0.3" height="15.0" fill="rgb(250,208,49)" rx="2" ry="2" />
+<text  x="1389.61" y="47.5" ></text>
 </g>
 <g >
-<title>210 (524,992 bytes, 0.02%)</title><rect x="256.3" y="373" width="0.2" height="15.0" fill="rgb(213,41,9)" rx="2" ry="2" />
-<text  x="259.26" y="383.5" ></text>
+<title>encoding/gob.getTypeInfo (570,634 bytes, 0.02%)</title><rect x="1385.3" y="309" width="0.3" height="15.0" fill="rgb(251,215,51)" rx="2" ry="2" />
+<text  x="1388.30" y="319.5" ></text>
 </g>
 <g >
-<title>107 (1,573,032 bytes, 0.06%)</title><rect x="787.2" y="245" width="0.8" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="790.20" y="255.5" ></text>
+<title>sync.(*Pool).Get (73,621,480 bytes, 2.59%)</title><rect x="373.9" y="277" width="35.7" height="15.0" fill="rgb(241,165,39)" rx="2" ry="2" />
+<text  x="376.91" y="287.5" >syn..</text>
 </g>
 <g >
-<title>236 (525,312 bytes, 0.02%)</title><rect x="256.8" y="293" width="0.2" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="259.77" y="303.5" ></text>
+<title>io.ReadFull (540,842 bytes, 0.02%)</title><rect x="786.8" y="309" width="0.3" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="789.80" y="319.5" ></text>
 </g>
 <g >
-<title>314 (524,344 bytes, 0.02%)</title><rect x="262.2" y="293" width="0.2" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="265.18" y="303.5" ></text>
+<title>runtime.mallocgc (525,312 bytes, 0.02%)</title><rect x="1387.1" y="229" width="0.3" height="15.0" fill="rgb(241,169,40)" rx="2" ry="2" />
+<text  x="1390.14" y="239.5" ></text>
 </g>
 <g >
-<title>315 (524,344 bytes, 0.02%)</title><rect x="262.4" y="309" width="0.3" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="265.44" y="319.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1._LogService_Stream_Handler (1,231,222,204 bytes, 43.23%)</title><rect x="787.1" y="325" width="596.6" height="15.0" fill="rgb(207,13,3)" rx="2" ry="2" />
+<text  x="790.06" y="335.5" >github.com/jamespolk/go-log-aggregator/api/proto/logagg/v1._LogService_Stream_Hand..</text>
 </g>
 <g >
-<title>135 (1,573,008 bytes, 0.06%)</title><rect x="301.2" y="213" width="0.7" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="304.18" y="223.5" ></text>
+<title>github.com/prometheus/client_golang/prometheus.(*noTransactionGatherer).Gather (524,296 bytes, 0.02%)</title><rect x="1384.5" y="293" width="0.2" height="15.0" fill="rgb(228,108,25)" rx="2" ry="2" />
+<text  x="1387.46" y="303.5" ></text>
 </g>
 <g >
-<title>213 (524,864 bytes, 0.02%)</title><rect x="788.0" y="229" width="0.2" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="790.96" y="239.5" ></text>
+<title>reflect.Value.Interface (104,335,192 bytes, 3.66%)</title><rect x="71.6" y="309" width="50.6" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
+<text  x="74.60" y="319.5" >refle..</text>
 </g>
 <g >
-<title>297 (1,115,476 bytes, 0.04%)</title><rect x="258.1" y="277" width="0.5" height="15.0" fill="rgb(217,55,13)" rx="2" ry="2" />
-<text  x="261.06" y="287.5" ></text>
+<title>google.golang.org/grpc/mem.BufferSlice.MaterializeToBuffer (67,911,012 bytes, 2.38%)</title><rect x="794.2" y="229" width="32.9" height="15.0" fill="rgb(250,209,50)" rx="2" ry="2" />
+<text  x="797.20" y="239.5" >go..</text>
 </g>
 <g >
-<title>110 (524,336 bytes, 0.02%)</title><rect x="10.3" y="325" width="0.2" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<title>google.golang.org/grpc/internal/mem.(*SimpleBufferPool).Get (540,842 bytes, 0.02%)</title><rect x="1383.7" y="293" width="0.3" height="15.0" fill="rgb(225,94,22)" rx="2" ry="2" />
+<text  x="1386.69" y="303.5" ></text>
+</g>
+<g >
+<title>google.golang.org/grpc/internal/transport.(*framer).writeData (540,842 bytes, 0.02%)</title><rect x="1383.7" y="325" width="0.3" height="15.0" fill="rgb(242,170,40)" rx="2" ry="2" />
+<text  x="1386.69" y="335.5" ></text>
+</g>
+<g >
+<title>reflect.PointerTo (570,634 bytes, 0.02%)</title><rect x="1385.3" y="149" width="0.3" height="15.0" fill="rgb(208,18,4)" rx="2" ry="2" />
+<text  x="1388.30" y="159.5" ></text>
+</g>
+<g >
+<title>runtime.semacquire (524,344 bytes, 0.02%)</title><rect x="1386.1" y="357" width="0.2" height="15.0" fill="rgb(210,26,6)" rx="2" ry="2" />
+<text  x="1389.09" y="367.5" ></text>
+</g>
+<g >
+<title>compress/lzw.newWriter (562,015 bytes, 0.02%)</title><rect x="10.3" y="325" width="0.2" height="15.0" fill="rgb(252,219,52)" rx="2" ry="2" />
 <text  x="13.25" y="335.5" ></text>
 </g>
 <g >
-<title>212 (524,864 bytes, 0.02%)</title><rect x="788.0" y="213" width="0.2" height="15.0" fill="rgb(251,211,50)" rx="2" ry="2" />
-<text  x="790.96" y="223.5" ></text>
+<title>google.golang.org/grpc/encoding/proto.(*codecV2).Unmarshal (1,215,436,864 bytes, 42.68%)</title><rect x="794.2" y="245" width="589.0" height="15.0" fill="rgb(236,143,34)" rx="2" ry="2" />
+<text  x="797.20" y="255.5" >google.golang.org/grpc/encoding/proto.(*codecV2).Unmarshal</text>
 </g>
 <g >
-<title>227 (4,740,414 bytes, 0.17%)</title><rect x="1380.5" y="261" width="2.3" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="1383.51" y="271.5" ></text>
+<title>google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshal (1,147,525,852 bytes, 40.29%)</title><rect x="827.1" y="197" width="556.1" height="15.0" fill="rgb(235,140,33)" rx="2" ry="2" />
+<text  x="830.11" y="207.5" >google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshal</text>
 </g>
 <g >
-<title>310 (524,344 bytes, 0.02%)</title><rect x="261.7" y="357" width="0.2" height="15.0" fill="rgb(207,11,2)" rx="2" ry="2" />
-<text  x="264.67" y="367.5" ></text>
+<title>net.open (557,738 bytes, 0.02%)</title><rect x="1386.3" y="85" width="0.3" height="15.0" fill="rgb(250,208,49)" rx="2" ry="2" />
+<text  x="1389.34" y="95.5" ></text>
 </g>
 <g >
-<title>331 (570,634 bytes, 0.02%)</title><rect x="262.7" y="277" width="0.3" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="265.69" y="287.5" ></text>
+<title>google.golang.org/grpc.(*Server).processStreamingRPC (1,231,222,204 bytes, 43.23%)</title><rect x="787.1" y="341" width="596.6" height="15.0" fill="rgb(225,96,22)" rx="2" ry="2" />
+<text  x="790.06" y="351.5" >google.golang.org/grpc.(*Server).processStreamingRPC</text>
 </g>
 <g >
-<title>34 (524,336 bytes, 0.02%)</title><rect x="821.4" y="117" width="0.2" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="824.38" y="127.5" ></text>
+<title>google.golang.org/protobuf/proto.UnmarshalOptions.unmarshal (762,572,297 bytes, 26.78%)</title><rect x="409.6" y="277" width="369.5" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
+<text  x="412.58" y="287.5" >google.golang.org/protobuf/proto.UnmarshalOptions...</text>
 </g>
 <g >
-<title>53 (645,526,560 bytes, 22.67%)</title><rect x="1034.8" y="133" width="312.8" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="1037.82" y="143.5" >53</text>
+<title>github.com/nats-io/nats%2ego.NewMsg (2,097,344 bytes, 0.07%)</title><rect x="125.8" y="341" width="1.0" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
+<text  x="128.75" y="351.5" ></text>
 </g>
 <g >
-<title>154 (524,300 bytes, 0.02%)</title><rect x="786.9" y="309" width="0.3" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="789.94" y="319.5" ></text>
+<title>regexp/syntax.(*Regexp).Simplify (524,344 bytes, 0.02%)</title><rect x="1385.8" y="293" width="0.3" height="15.0" fill="rgb(222,78,18)" rx="2" ry="2" />
+<text  x="1388.83" y="303.5" ></text>
 </g>
 <g >
-<title>336 (570,634 bytes, 0.02%)</title><rect x="262.7" y="341" width="0.3" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="265.69" y="351.5" ></text>
+<title>database/sql.(*DB).PingContext.func1 (1,115,476 bytes, 0.04%)</title><rect x="1386.3" y="277" width="0.6" height="15.0" fill="rgb(245,184,44)" rx="2" ry="2" />
+<text  x="1389.34" y="287.5" ></text>
 </g>
 <g >
-<title>48 (524,344 bytes, 0.02%)</title><rect x="260.1" y="197" width="0.3" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
-<text  x="263.14" y="207.5" ></text>
+<title>github.com/hashicorp/go-sockaddr.init.2 (524,344 bytes, 0.02%)</title><rect x="1385.6" y="341" width="0.2" height="15.0" fill="rgb(234,134,32)" rx="2" ry="2" />
+<text  x="1388.58" y="351.5" ></text>
 </g>
 <g >
-<title>174 (2,230,953 bytes, 0.08%)</title><rect x="254.7" y="309" width="1.0" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="257.66" y="319.5" ></text>
+<title>log/slog.(*Logger).With (524,300 bytes, 0.02%)</title><rect x="128.0" y="357" width="0.3" height="15.0" fill="rgb(228,110,26)" rx="2" ry="2" />
+<text  x="131.04" y="367.5" ></text>
 </g>
 <g >
-<title>263 (525,440 bytes, 0.02%)</title><rect x="257.8" y="293" width="0.3" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="260.81" y="303.5" ></text>
+<title>github.com/jackc/pgx/v5/pgxpool.(*Tx).Exec (524,320 bytes, 0.02%)</title><rect x="127.5" y="293" width="0.3" height="15.0" fill="rgb(248,199,47)" rx="2" ry="2" />
+<text  x="130.53" y="303.5" ></text>
 </g>
 <g >
-<title>240 (1,050,624 bytes, 0.04%)</title><rect x="256.5" y="341" width="0.5" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="259.52" y="351.5" ></text>
+<title>google.golang.org/grpc/internal/transport.(*recvBuffer).put (3,675,681 bytes, 0.13%)</title><rect x="780.6" y="309" width="1.8" height="15.0" fill="rgb(225,96,23)" rx="2" ry="2" />
+<text  x="783.63" y="319.5" ></text>
 </g>
 <g >
-<title>99 (540,842 bytes, 0.02%)</title><rect x="1388.0" y="261" width="0.2" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
-<text  x="1390.96" y="271.5" ></text>
+<title>go.opentelemetry.io/otel/internal/global.(*tracer).newSpan (524,336 bytes, 0.02%)</title><rect x="126.8" y="325" width="0.2" height="15.0" fill="rgb(226,100,24)" rx="2" ry="2" />
+<text  x="129.77" y="335.5" ></text>
 </g>
 <g >
-<title>153 (524,300 bytes, 0.02%)</title><rect x="786.9" y="293" width="0.3" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="789.94" y="303.5" ></text>
+<title>github.com/jackc/pgx/v5.(*dbTx).Exec (524,320 bytes, 0.02%)</title><rect x="127.5" y="277" width="0.3" height="15.0" fill="rgb(242,170,40)" rx="2" ry="2" />
+<text  x="130.53" y="287.5" ></text>
 </g>
 <g >
-<title>244 (67,911,012 bytes, 2.38%)</title><rect x="788.2" y="245" width="32.9" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="791.22" y="255.5" >244</text>
+<title>github.com/jackc/pgx/v5.(*copyFrom).buildCopyBuf (229,842,643 bytes, 8.07%)</title><rect x="10.8" y="357" width="111.4" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
+<text  x="13.78" y="367.5" >github.com/ja..</text>
 </g>
 <g >
-<title>211 (524,864 bytes, 0.02%)</title><rect x="788.0" y="197" width="0.2" height="15.0" fill="rgb(207,11,2)" rx="2" ry="2" />
-<text  x="790.96" y="207.5" ></text>
+<title>google.golang.org/grpc.(*parser).recvMsg (1,573,032 bytes, 0.06%)</title><rect x="793.4" y="229" width="0.8" height="15.0" fill="rgb(230,118,28)" rx="2" ry="2" />
+<text  x="796.44" y="239.5" ></text>
 </g>
 <g >
-<title>163 (524,320 bytes, 0.02%)</title><rect x="259.9" y="149" width="0.2" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="262.89" y="159.5" ></text>
+<title>google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshal (762,572,297 bytes, 26.78%)</title><rect x="409.6" y="261" width="369.5" height="15.0" fill="rgb(235,140,33)" rx="2" ry="2" />
+<text  x="412.58" y="271.5" >google.golang.org/protobuf/internal/impl.(*Message..</text>
 </g>
 <g >
-<title>216 (557,738 bytes, 0.02%)</title><rect x="1380.2" y="245" width="0.3" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="1383.24" y="255.5" ></text>
+<title>runtime.gcBgMarkWorker (524,344 bytes, 0.02%)</title><rect x="1386.1" y="373" width="0.2" height="15.0" fill="rgb(235,140,33)" rx="2" ry="2" />
+<text  x="1389.09" y="383.5" ></text>
 </g>
 <g >
-<title>169 (524,320 bytes, 0.02%)</title><rect x="259.9" y="245" width="0.2" height="15.0" fill="rgb(229,114,27)" rx="2" ry="2" />
-<text  x="262.89" y="255.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).writeOnce (1,572,976 bytes, 0.06%)</title><rect x="127.3" y="341" width="0.7" height="15.0" fill="rgb(208,15,3)" rx="2" ry="2" />
+<text  x="130.28" y="351.5" ></text>
 </g>
 <g >
-<title>273 (524,344 bytes, 0.02%)</title><rect x="260.6" y="373" width="0.3" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="263.65" y="383.5" ></text>
+<title>runtime.startm (525,312 bytes, 0.02%)</title><rect x="1387.1" y="293" width="0.3" height="15.0" fill="rgb(220,71,17)" rx="2" ry="2" />
+<text  x="1390.14" y="303.5" ></text>
 </g>
 <g >
-<title>230 (540,842 bytes, 0.02%)</title><rect x="1388.0" y="309" width="0.2" height="15.0" fill="rgb(251,211,50)" rx="2" ry="2" />
-<text  x="1390.96" y="319.5" ></text>
+<title>github.com/jackc/pgx/v5/pgxpool.(*Conn).BeginTx (524,312 bytes, 0.02%)</title><rect x="127.3" y="277" width="0.2" height="15.0" fill="rgb(207,9,2)" rx="2" ry="2" />
+<text  x="130.28" y="287.5" ></text>
 </g>
 <g >
-<title>42 (524,304 bytes, 0.02%)</title><rect x="300.9" y="277" width="0.3" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
-<text  x="303.93" y="287.5" ></text>
+<title>github.com/jackc/pgx/v5/pgxpool.NewWithConfig.func3 (538,038 bytes, 0.02%)</title><rect x="122.2" y="341" width="0.2" height="15.0" fill="rgb(229,113,27)" rx="2" ry="2" />
+<text  x="125.16" y="351.5" ></text>
 </g>
 <g >
-<title>264 (525,440 bytes, 0.02%)</title><rect x="257.8" y="309" width="0.3" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="260.81" y="319.5" ></text>
+<title>google.golang.org/grpc.(*Server).serveStreams (13,265,359 bytes, 0.47%)</title><rect x="780.6" y="357" width="6.5" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
+<text  x="783.63" y="367.5" ></text>
 </g>
 <g >
-<title>52 (762,572,297 bytes, 26.78%)</title><rect x="301.2" y="229" width="369.5" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="304.18" y="239.5" >52</text>
+<title>google.golang.org/grpc.(*GenericServerStream[go.shape.df332d41e0445eac035bb936a81b75f313b1ea6d5d891dfafdcd141893cca286,go.shape.7f4381d32bf8dc7c9368ff0cacb85265b27b3c540d7a7893709a7af11959fade]).Send (524,300 bytes, 0.02%)</title><rect x="1383.4" y="293" width="0.3" height="15.0" fill="rgb(211,32,7)" rx="2" ry="2" />
+<text  x="1386.44" y="303.5" ></text>
 </g>
 <g >
-<title>58 (524,296 bytes, 0.02%)</title><rect x="821.1" y="101" width="0.3" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="824.12" y="111.5" ></text>
+<title>google.golang.org/protobuf/internal/impl.consumeStringValidateUTF8 (524,296 bytes, 0.02%)</title><rect x="759.7" y="213" width="0.3" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="762.74" y="223.5" ></text>
 </g>
 <g >
-<title>241 (1,050,624 bytes, 0.04%)</title><rect x="256.5" y="357" width="0.5" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="259.52" y="367.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/queue.Subject (1,572,952 bytes, 0.06%)</title><rect x="789.1" y="245" width="0.8" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
+<text  x="792.10" y="255.5" ></text>
 </g>
 <g >
-<title>193 (524,336 bytes, 0.02%)</title><rect x="782.3" y="357" width="0.3" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="785.34" y="367.5" ></text>
+<title>strings.(*Builder).Grow (1,573,080 bytes, 0.06%)</title><rect x="789.9" y="229" width="0.7" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
+<text  x="792.86" y="239.5" ></text>
 </g>
 <g >
-<title>296 (1,115,476 bytes, 0.04%)</title><rect x="258.1" y="261" width="0.5" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
-<text  x="261.06" y="271.5" ></text>
+<title>google.golang.org/grpc/internal/transport.(*http2Server).HandleStreams (13,265,359 bytes, 0.47%)</title><rect x="780.6" y="341" width="6.5" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
+<text  x="783.63" y="351.5" ></text>
 </g>
 <g >
-<title>86 (13,265,359 bytes, 0.47%)</title><rect x="1383.6" y="373" width="6.4" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
-<text  x="1386.57" y="383.5" ></text>
+<title>regexp.compile (524,344 bytes, 0.02%)</title><rect x="1385.8" y="309" width="0.3" height="15.0" fill="rgb(248,199,47)" rx="2" ry="2" />
+<text  x="1388.83" y="319.5" ></text>
 </g>
 <g >
-<title>252 (524,528 bytes, 0.02%)</title><rect x="257.6" y="341" width="0.2" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="260.55" y="351.5" ></text>
+<title>github.com/jackc/pgx/v5/pgxpool.(*Pool).BeginTx (524,312 bytes, 0.02%)</title><rect x="127.3" y="293" width="0.2" height="15.0" fill="rgb(229,113,27)" rx="2" ry="2" />
+<text  x="130.28" y="303.5" ></text>
 </g>
 <g >
-<title>194 (67,911,012 bytes, 2.38%)</title><rect x="788.2" y="197" width="32.9" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
-<text  x="791.22" y="207.5" >194</text>
+<title>runtime.resetspinning (525,312 bytes, 0.02%)</title><rect x="1387.4" y="309" width="0.2" height="15.0" fill="rgb(225,95,22)" rx="2" ry="2" />
+<text  x="1390.39" y="319.5" ></text>
 </g>
 <g >
-<title>56 (1,147,525,852 bytes, 40.29%)</title><rect x="821.1" y="229" width="556.1" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="824.12" y="239.5" >56</text>
+<title>net.readHosts (557,738 bytes, 0.02%)</title><rect x="1386.3" y="101" width="0.3" height="15.0" fill="rgb(225,93,22)" rx="2" ry="2" />
+<text  x="1389.34" y="111.5" ></text>
 </g>
 <g >
-<title>67 (524,344 bytes, 0.02%)</title><rect x="786.7" y="277" width="0.2" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="789.69" y="287.5" ></text>
+<title>regexp/syntax.(*Regexp).Simplify (524,344 bytes, 0.02%)</title><rect x="1385.8" y="261" width="0.3" height="15.0" fill="rgb(222,78,18)" rx="2" ry="2" />
+<text  x="1388.83" y="271.5" ></text>
 </g>
 <g >
-<title>90 (13,163,144 bytes, 0.46%)</title><rect x="1377.2" y="309" width="6.4" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="1380.19" y="319.5" ></text>
+<title>go.opentelemetry.io/otel/internal/global.(*tracer).newSpan (524,336 bytes, 0.02%)</title><rect x="793.2" y="261" width="0.2" height="15.0" fill="rgb(226,100,24)" rx="2" ry="2" />
+<text  x="796.19" y="271.5" ></text>
 </g>
 <g >
-<title>156 (524,360 bytes, 0.02%)</title><rect x="1378.7" y="197" width="0.3" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="1381.72" y="207.5" ></text>
+<title>regexp.Compile (524,344 bytes, 0.02%)</title><rect x="1385.6" y="325" width="0.2" height="15.0" fill="rgb(205,0,0)" rx="2" ry="2" />
+<text  x="1388.58" y="335.5" ></text>
 </g>
 <g >
-<title>71 (4,778,417 bytes, 0.17%)</title><rect x="784.6" y="341" width="2.3" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="787.63" y="351.5" ></text>
+<title>runtime/pprof.(*profileBuilder).addCPUData (528,394 bytes, 0.02%)</title><rect x="1388.2" y="357" width="0.2" height="15.0" fill="rgb(208,14,3)" rx="2" ry="2" />
+<text  x="1391.15" y="367.5" ></text>
 </g>
 <g >
-<title>159 (524,360 bytes, 0.02%)</title><rect x="1378.7" y="245" width="0.3" height="15.0" fill="rgb(236,144,34)" rx="2" ry="2" />
-<text  x="1381.72" y="255.5" ></text>
+<title>google.golang.org/grpc/internal/transport/readyreader.NewNonBlocking.func1 (540,842 bytes, 0.02%)</title><rect x="782.4" y="197" width="0.3" height="15.0" fill="rgb(217,58,13)" rx="2" ry="2" />
+<text  x="785.42" y="207.5" ></text>
 </g>
 <g >
-<title>268 (1,640,916 bytes, 0.06%)</title><rect x="257.8" y="373" width="0.8" height="15.0" fill="rgb(229,114,27)" rx="2" ry="2" />
-<text  x="260.81" y="383.5" ></text>
+<title>google.golang.org/protobuf/proto.UnmarshalOptions.unmarshal (1,147,525,852 bytes, 40.29%)</title><rect x="827.1" y="213" width="556.1" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
+<text  x="830.11" y="223.5" >google.golang.org/protobuf/proto.UnmarshalOptions.unmarshal</text>
 </g>
 <g >
-<title>255 (525,440 bytes, 0.02%)</title><rect x="257.8" y="165" width="0.3" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="260.81" y="175.5" ></text>
+<title>runtime.mallocgc (524,344 bytes, 0.02%)</title><rect x="1386.1" y="293" width="0.2" height="15.0" fill="rgb(241,169,40)" rx="2" ry="2" />
+<text  x="1389.09" y="303.5" ></text>
 </g>
 <g >
-<title>262 (525,440 bytes, 0.02%)</title><rect x="257.8" y="277" width="0.3" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="260.81" y="287.5" ></text>
+<title>github.com/hashicorp/memberlist.(*Memberlist).sendLocalState (562,015 bytes, 0.02%)</title><rect x="10.3" y="357" width="0.2" height="15.0" fill="rgb(215,47,11)" rx="2" ry="2" />
+<text  x="13.25" y="367.5" ></text>
 </g>
 <g >
-<title>194 (8,507,994 bytes, 0.30%)</title><rect x="1383.8" y="277" width="4.2" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
-<text  x="1386.83" y="287.5" ></text>
+<title>github.com/jackc/pgx/v5/pgconn.buildConnectOneConfigs (1,115,476 bytes, 0.04%)</title><rect x="1386.3" y="181" width="0.6" height="15.0" fill="rgb(220,73,17)" rx="2" ry="2" />
+<text  x="1389.34" y="191.5" ></text>
 </g>
 <g >
-<title>98 (540,842 bytes, 0.02%)</title><rect x="1383.6" y="261" width="0.2" height="15.0" fill="rgb(233,131,31)" rx="2" ry="2" />
-<text  x="1386.57" y="271.5" ></text>
+<title>runtime.mstart1 (1,050,624 bytes, 0.04%)</title><rect x="1387.4" y="341" width="0.5" height="15.0" fill="rgb(254,225,53)" rx="2" ry="2" />
+<text  x="1390.39" y="351.5" ></text>
 </g>
 <g >
-<title>175 (2,230,953 bytes, 0.08%)</title><rect x="254.7" y="325" width="1.0" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="257.66" y="335.5" ></text>
+<title>net.interfaceTable (525,440 bytes, 0.02%)</title><rect x="1386.9" y="181" width="0.2" height="15.0" fill="rgb(246,193,46)" rx="2" ry="2" />
+<text  x="1389.88" y="191.5" ></text>
 </g>
 <g >
-<title>157 (1,573,080 bytes, 0.06%)</title><rect x="1379.0" y="213" width="0.7" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="1381.97" y="223.5" ></text>
+<title>google.golang.org/grpc.prepareMsg (524,300 bytes, 0.02%)</title><rect x="1383.4" y="261" width="0.3" height="15.0" fill="rgb(230,115,27)" rx="2" ry="2" />
+<text  x="1386.44" y="271.5" ></text>
 </g>
 <g >
-<title>125 (1,048,592 bytes, 0.04%)</title><rect x="1378.2" y="245" width="0.5" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="1381.21" y="255.5" ></text>
+<title>github.com/nats-io/nats.go/internal/parser.GetMetadataFields (1,048,768 bytes, 0.04%)</title><rect x="779.9" y="309" width="0.5" height="15.0" fill="rgb(231,121,28)" rx="2" ry="2" />
+<text  x="782.87" y="319.5" ></text>
 </g>
 <g >
-<title>245 (562,015 bytes, 0.02%)</title><rect x="257.0" y="325" width="0.3" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="260.03" y="335.5" ></text>
+<title>google.golang.org/protobuf/proto.MarshalOptions.MarshalAppend (4,740,414 bytes, 0.17%)</title><rect x="790.6" y="261" width="2.3" height="15.0" fill="rgb(209,22,5)" rx="2" ry="2" />
+<text  x="793.62" y="271.5" ></text>
 </g>
 <g >
-<title>332 (570,634 bytes, 0.02%)</title><rect x="262.7" y="245" width="0.3" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="265.69" y="255.5" ></text>
+<title>github.com/jackc/pgx/v5.(*Conn).Exec (524,320 bytes, 0.02%)</title><rect x="127.5" y="261" width="0.3" height="15.0" fill="rgb(218,59,14)" rx="2" ry="2" />
+<text  x="130.53" y="271.5" ></text>
 </g>
 <g >
-<title>73 (1,147,525,852 bytes, 40.29%)</title><rect x="821.1" y="245" width="556.1" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="824.12" y="255.5" >73</text>
+<title>net.lookupStaticHost (557,738 bytes, 0.02%)</title><rect x="1386.3" y="117" width="0.3" height="15.0" fill="rgb(248,197,47)" rx="2" ry="2" />
+<text  x="1389.34" y="127.5" ></text>
 </g>
 <g >
-<title>175 (557,738 bytes, 0.02%)</title><rect x="1380.2" y="261" width="0.3" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="1383.24" y="271.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/queue.(*Conn).Publish (6,351,449 bytes, 0.22%)</title><rect x="122.7" y="341" width="3.1" height="15.0" fill="rgb(247,196,46)" rx="2" ry="2" />
+<text  x="125.67" y="351.5" ></text>
 </g>
 <g >
-<title>158 (1,573,080 bytes, 0.06%)</title><rect x="1379.0" y="229" width="0.7" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
-<text  x="1381.97" y="239.5" ></text>
+<title>github.com/prometheus/client_golang/prometheus.(*Registry).Register.func1 (524,344 bytes, 0.02%)</title><rect x="780.4" y="373" width="0.2" height="15.0" fill="rgb(244,182,43)" rx="2" ry="2" />
+<text  x="783.38" y="383.5" ></text>
 </g>
 <g >
-<title>308 (557,738 bytes, 0.02%)</title><rect x="258.3" y="149" width="0.3" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="261.33" y="159.5" ></text>
+<title>log/slog.(*JSONHandler).WithAttrs (524,300 bytes, 0.02%)</title><rect x="128.0" y="341" width="0.3" height="15.0" fill="rgb(245,185,44)" rx="2" ry="2" />
+<text  x="131.04" y="351.5" ></text>
 </g>
 <g >
-<title>298 (1,115,476 bytes, 0.04%)</title><rect x="258.1" y="293" width="0.5" height="15.0" fill="rgb(210,25,6)" rx="2" ry="2" />
-<text  x="261.06" y="303.5" ></text>
+<title>google.golang.org/grpc/internal/transport.(*ServerStream).Read (1,573,032 bytes, 0.06%)</title><rect x="793.4" y="213" width="0.8" height="15.0" fill="rgb(248,197,47)" rx="2" ry="2" />
+<text  x="796.44" y="223.5" ></text>
 </g>
 <g >
-<title>269 (2,653,623 bytes, 0.09%)</title><rect x="258.6" y="373" width="1.3" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
-<text  x="261.60" y="383.5" ></text>
+<title>google.golang.org/grpc/mem.BufferSlice.Free (524,864 bytes, 0.02%)</title><rect x="1383.2" y="245" width="0.2" height="15.0" fill="rgb(239,157,37)" rx="2" ry="2" />
+<text  x="1386.18" y="255.5" ></text>
 </g>
 <g >
-<title>234 (525,312 bytes, 0.02%)</title><rect x="256.5" y="245" width="0.3" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="259.52" y="255.5" ></text>
+<title>runtime.newobject (525,312 bytes, 0.02%)</title><rect x="1387.4" y="229" width="0.2" height="15.0" fill="rgb(221,75,18)" rx="2" ry="2" />
+<text  x="1390.39" y="239.5" ></text>
 </g>
 <g >
-<title>20 (524,344 bytes, 0.02%)</title><rect x="260.1" y="277" width="0.3" height="15.0" fill="rgb(230,117,28)" rx="2" ry="2" />
-<text  x="263.14" y="287.5" ></text>
+<title>github.com/hashicorp/memberlist.(*Memberlist).refreshAdvertise (525,440 bytes, 0.02%)</title><rect x="1386.9" y="277" width="0.2" height="15.0" fill="rgb(211,30,7)" rx="2" ry="2" />
+<text  x="1389.88" y="287.5" ></text>
 </g>
 <g >
-<title>98 (540,842 bytes, 0.02%)</title><rect x="1388.0" y="245" width="0.2" height="15.0" fill="rgb(233,131,31)" rx="2" ry="2" />
-<text  x="1390.96" y="255.5" ></text>
+<title>github.com/hashicorp/go-sockaddr.GetPrivateIP (525,440 bytes, 0.02%)</title><rect x="1386.9" y="245" width="0.2" height="15.0" fill="rgb(249,206,49)" rx="2" ry="2" />
+<text  x="1389.88" y="255.5" ></text>
 </g>
 <g >
-<title>289 (557,738 bytes, 0.02%)</title><rect x="258.1" y="133" width="0.2" height="15.0" fill="rgb(210,25,6)" rx="2" ry="2" />
-<text  x="261.06" y="143.5" ></text>
+<title>net/http.(*conn).readRequest (524,992 bytes, 0.02%)</title><rect x="1384.2" y="357" width="0.3" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="1387.21" y="367.5" ></text>
 </g>
 <g >
-<title>97 (540,842 bytes, 0.02%)</title><rect x="1388.0" y="229" width="0.2" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
-<text  x="1390.96" y="239.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).work (2,097,276 bytes, 0.07%)</title><rect x="127.3" y="373" width="1.0" height="15.0" fill="rgb(243,174,41)" rx="2" ry="2" />
+<text  x="130.28" y="383.5" ></text>
 </g>
 <g >
-<title>62 (10,021,761 bytes, 0.35%)</title><rect x="782.1" y="373" width="4.8" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="785.09" y="383.5" ></text>
+<title>github.com/prometheus/client_golang/prometheus.processMetric (524,296 bytes, 0.02%)</title><rect x="1384.5" y="261" width="0.2" height="15.0" fill="rgb(249,206,49)" rx="2" ry="2" />
+<text  x="1387.46" y="271.5" ></text>
 </g>
 <g >
-<title>92 (524,336 bytes, 0.02%)</title><rect x="782.3" y="341" width="0.3" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="785.34" y="351.5" ></text>
+<title>github.com/nats-io/nats%2ego.(*Conn).RequestMsgWithContext (3,205,329 bytes, 0.11%)</title><rect x="124.2" y="309" width="1.6" height="15.0" fill="rgb(226,99,23)" rx="2" ry="2" />
+<text  x="127.20" y="319.5" ></text>
 </g>
 <g >
-<title>94 (540,842 bytes, 0.02%)</title><rect x="1388.0" y="181" width="0.2" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="1390.96" y="191.5" ></text>
+<title>github.com/hashicorp/go-sockaddr.GetAllInterfaces (525,440 bytes, 0.02%)</title><rect x="1386.9" y="213" width="0.2" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="1389.88" y="223.5" ></text>
 </g>
 <g >
-<title>313 (525,312 bytes, 0.02%)</title><rect x="261.9" y="373" width="0.3" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="264.93" y="383.5" ></text>
+<title>google.golang.org/grpc/encoding/proto.(*codecV2).Marshal (524,300 bytes, 0.02%)</title><rect x="1383.4" y="229" width="0.3" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="1386.44" y="239.5" ></text>
 </g>
 <g >
-<title>286 (557,738 bytes, 0.02%)</title><rect x="258.1" y="85" width="0.2" height="15.0" fill="rgb(229,114,27)" rx="2" ry="2" />
-<text  x="261.06" y="95.5" ></text>
+<title>google.golang.org/grpc.(*GenericServerStream[go.shape.df332d41e0445eac035bb936a81b75f313b1ea6d5d891dfafdcd141893cca286,go.shape.7f4381d32bf8dc7c9368ff0cacb85265b27b3c540d7a7893709a7af11959fade]).Recv (1,217,534,760 bytes, 42.75%)</title><rect x="793.4" y="293" width="590.0" height="15.0" fill="rgb(223,83,20)" rx="2" ry="2" />
+<text  x="796.44" y="303.5" >google.golang.org/grpc.(*GenericServerStream[go.shape.df332d41e0445eac035bb936a81..</text>
 </g>
 <g >
-<title>175 (524,300 bytes, 0.02%)</title><rect x="260.9" y="293" width="0.3" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="263.90" y="303.5" ></text>
+<title>google.golang.org/grpc/internal/transport/readyreader.(*bufReadyReader).Read (540,842 bytes, 0.02%)</title><rect x="782.4" y="261" width="0.3" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="785.42" y="271.5" ></text>
 </g>
 <g >
-<title>43 (524,304 bytes, 0.02%)</title><rect x="300.9" y="293" width="0.3" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="303.93" y="303.5" ></text>
+<title>runtime.mallocgc (525,312 bytes, 0.02%)</title><rect x="1387.6" y="229" width="0.3" height="15.0" fill="rgb(241,169,40)" rx="2" ry="2" />
+<text  x="1390.65" y="239.5" ></text>
 </g>
 <g >
-<title>15 (1,736,992 bytes, 0.06%)</title><rect x="253.8" y="373" width="0.9" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
-<text  x="256.82" y="383.5" ></text>
+<title>internal/poll.(*FD).RawRead (540,842 bytes, 0.02%)</title><rect x="782.4" y="213" width="0.3" height="15.0" fill="rgb(251,215,51)" rx="2" ry="2" />
+<text  x="785.42" y="223.5" ></text>
 </g>
 <g >
-<title>49 (524,344 bytes, 0.02%)</title><rect x="260.1" y="213" width="0.3" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="263.14" y="223.5" ></text>
+<title>runtime/pprof.(*profileBuilder).emitLocation (524,336 bytes, 0.02%)</title><rect x="1388.4" y="325" width="0.3" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="1391.41" y="335.5" ></text>
 </g>
 <g >
-<title>124 (1,048,592 bytes, 0.04%)</title><rect x="1378.2" y="229" width="0.5" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="1381.21" y="239.5" ></text>
+<title>strings.(*Builder).Grow (524,360 bytes, 0.02%)</title><rect x="789.1" y="229" width="0.2" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
+<text  x="792.10" y="239.5" ></text>
 </g>
 <g >
-<title>33 (841,437,145 bytes, 29.55%)</title><rect x="263.0" y="373" width="407.7" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
-<text  x="265.97" y="383.5" >33</text>
+<title>reflect.New (439,938,042 bytes, 15.45%)</title><rect x="1140.4" y="133" width="213.2" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
+<text  x="1143.43" y="143.5" >reflect.New</text>
 </g>
 <g >
-<title>259 (525,440 bytes, 0.02%)</title><rect x="257.8" y="229" width="0.3" height="15.0" fill="rgb(229,114,27)" rx="2" ry="2" />
-<text  x="260.81" y="239.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/ingest.(*pipeline).submit (1,048,640 bytes, 0.04%)</title><rect x="788.6" y="261" width="0.5" height="15.0" fill="rgb(232,125,30)" rx="2" ry="2" />
+<text  x="791.59" y="271.5" ></text>
 </g>
 <g >
-<title>304 (557,738 bytes, 0.02%)</title><rect x="258.3" y="85" width="0.3" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="261.33" y="95.5" ></text>
+<title>github.com/jackc/pgx/v5/pgconn.(*MultiResultReader).NextResult (524,320 bytes, 0.02%)</title><rect x="127.5" y="213" width="0.3" height="15.0" fill="rgb(222,82,19)" rx="2" ry="2" />
+<text  x="130.53" y="223.5" ></text>
 </g>
 <g >
-<title>45 (1,048,624 bytes, 0.04%)</title><rect x="300.4" y="309" width="0.5" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="303.42" y="319.5" ></text>
+<title>encoding/gob.userType (570,634 bytes, 0.02%)</title><rect x="1385.3" y="181" width="0.3" height="15.0" fill="rgb(239,159,38)" rx="2" ry="2" />
+<text  x="1388.30" y="191.5" ></text>
 </g>
 <g >
-<title>131 (1,048,624 bytes, 0.04%)</title><rect x="10.8" y="341" width="0.5" height="15.0" fill="rgb(251,211,50)" rx="2" ry="2" />
-<text  x="13.76" y="351.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/storage.init.func1 (73,621,480 bytes, 2.59%)</title><rect x="373.9" y="261" width="35.7" height="15.0" fill="rgb(218,60,14)" rx="2" ry="2" />
+<text  x="376.91" y="271.5" >git..</text>
 </g>
 <g >
-<title>299 (1,115,476 bytes, 0.04%)</title><rect x="258.1" y="309" width="0.5" height="15.0" fill="rgb(254,225,54)" rx="2" ry="2" />
-<text  x="261.06" y="319.5" ></text>
+<title>internal/poll.(*FD).RawRead (540,842 bytes, 0.02%)</title><rect x="786.8" y="229" width="0.3" height="15.0" fill="rgb(251,215,51)" rx="2" ry="2" />
+<text  x="789.80" y="239.5" ></text>
 </g>
 <g >
-<title>59 (88,282,151 bytes, 3.10%)</title><rect x="739.3" y="293" width="42.8" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
-<text  x="742.31" y="303.5" >59</text>
+<title>reflect.typesByString (570,634 bytes, 0.02%)</title><rect x="1385.3" y="117" width="0.3" height="15.0" fill="rgb(245,186,44)" rx="2" ry="2" />
+<text  x="1388.30" y="127.5" ></text>
 </g>
 <g >
-<title>89 (10,541,496 bytes, 0.37%)</title><rect x="1378.2" y="293" width="5.1" height="15.0" fill="rgb(233,131,31)" rx="2" ry="2" />
-<text  x="1381.21" y="303.5" ></text>
+<title>github.com/jackc/pgx/v5/pgconn.(*PgConn).CopyFrom.func1 (2,230,953 bytes, 0.08%)</title><rect x="1388.9" y="357" width="1.1" height="15.0" fill="rgb(235,138,33)" rx="2" ry="2" />
+<text  x="1391.92" y="367.5" ></text>
 </g>
 <g >
-<title>233 (524,528 bytes, 0.02%)</title><rect x="257.6" y="309" width="0.2" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="260.55" y="319.5" ></text>
-</g>
-<g >
-<title>39 (229,842,643 bytes, 8.07%)</title><rect x="670.7" y="341" width="111.4" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
-<text  x="673.71" y="351.5" >39</text>
-</g>
-<g >
-<title>25 (1,572,976 bytes, 0.06%)</title><rect x="259.9" y="357" width="0.7" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="262.89" y="367.5" ></text>
-</g>
-<g >
-<title>134 (439,938,042 bytes, 15.45%)</title><rect x="821.6" y="133" width="213.2" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="824.63" y="143.5" >134</text>
-</g>
-<g >
-<title>34 (439,938,042 bytes, 15.45%)</title><rect x="821.6" y="117" width="213.2" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="824.63" y="127.5" >34</text>
-</g>
-<g >
-<title>70 (3,205,329 bytes, 0.11%)</title><rect x="785.4" y="325" width="1.5" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
-<text  x="788.39" y="335.5" ></text>
-</g>
-<g >
-<title>184 (540,842 bytes, 0.02%)</title><rect x="256.0" y="325" width="0.3" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="259.00" y="335.5" ></text>
-</g>
-<g >
-<title>101 (540,842 bytes, 0.02%)</title><rect x="1383.6" y="309" width="0.2" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
-<text  x="1386.57" y="319.5" ></text>
-</g>
-<g >
-<title>197 (524,336 bytes, 0.02%)</title><rect x="1380.0" y="277" width="0.2" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
-<text  x="1382.99" y="287.5" ></text>
-</g>
-<g >
-<title>218 (439,938,042 bytes, 15.45%)</title><rect x="821.6" y="149" width="213.2" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="824.63" y="159.5" >218</text>
-</g>
-<g >
-<title>331 (570,634 bytes, 0.02%)</title><rect x="262.7" y="229" width="0.3" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="265.69" y="239.5" ></text>
-</g>
-<g >
-<title>53 (524,296 bytes, 0.02%)</title><rect x="821.1" y="133" width="0.3" height="15.0" fill="rgb(241,168,40)" rx="2" ry="2" />
-<text  x="824.12" y="143.5" ></text>
-</g>
-<g >
-<title>237 (525,312 bytes, 0.02%)</title><rect x="256.5" y="293" width="0.3" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="259.52" y="303.5" ></text>
-</g>
-<g >
-<title>251 (524,528 bytes, 0.02%)</title><rect x="257.6" y="325" width="0.2" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="260.55" y="335.5" ></text>
-</g>
-<g >
-<title>164 (524,320 bytes, 0.02%)</title><rect x="259.9" y="165" width="0.2" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="262.89" y="175.5" ></text>
-</g>
-<g >
-<title>180 (524,336 bytes, 0.02%)</title><rect x="1379.7" y="277" width="0.3" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="1382.73" y="287.5" ></text>
-</g>
-<g >
-<title>280 (525,312 bytes, 0.02%)</title><rect x="256.8" y="325" width="0.2" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="259.77" y="335.5" ></text>
-</g>
-<g >
-<title>108 (1,573,032 bytes, 0.06%)</title><rect x="787.2" y="261" width="0.8" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="790.20" y="271.5" ></text>
-</g>
-<g >
-<title>323 (570,634 bytes, 0.02%)</title><rect x="262.7" y="101" width="0.3" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="265.69" y="111.5" ></text>
-</g>
-<g >
-<title>321 (524,344 bytes, 0.02%)</title><rect x="262.4" y="277" width="0.3" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="265.44" y="287.5" ></text>
-</g>
-<g >
-<title>100 (540,842 bytes, 0.02%)</title><rect x="1383.6" y="293" width="0.2" height="15.0" fill="rgb(226,100,24)" rx="2" ry="2" />
-<text  x="1386.57" y="303.5" ></text>
-</g>
-<g >
-<title>147 (4,740,414 bytes, 0.17%)</title><rect x="1380.5" y="245" width="2.3" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="1383.51" y="255.5" ></text>
-</g>
-<g >
-<title>112 (1,048,744 bytes, 0.04%)</title><rect x="10.0" y="373" width="0.5" height="15.0" fill="rgb(207,11,2)" rx="2" ry="2" />
+<title>database/sql.(*DB).connectionOpener (524,344 bytes, 0.02%)</title><rect x="10.0" y="373" width="0.3" height="15.0" fill="rgb(220,71,17)" rx="2" ry="2" />
 <text  x="13.00" y="383.5" ></text>
 </g>
 <g >
-<title>324 (570,634 bytes, 0.02%)</title><rect x="262.7" y="117" width="0.3" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="265.69" y="127.5" ></text>
+<title>google.golang.org/grpc/internal/mem.(*sizedBufferPool).Get (8,507,994 bytes, 0.30%)</title><rect x="782.7" y="277" width="4.1" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="785.68" y="287.5" ></text>
 </g>
 <g >
-<title>68 (524,344 bytes, 0.02%)</title><rect x="786.7" y="293" width="0.2" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
-<text  x="789.69" y="303.5" ></text>
+<title>google.golang.org/grpc/internal/mem.(*BinaryTieredBufferPool).Get (67,911,012 bytes, 2.38%)</title><rect x="794.2" y="213" width="32.9" height="15.0" fill="rgb(249,205,49)" rx="2" ry="2" />
+<text  x="797.20" y="223.5" >go..</text>
 </g>
 <g >
-<title>135 (524,336 bytes, 0.02%)</title><rect x="821.4" y="149" width="0.2" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="824.38" y="159.5" ></text>
+<title>google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshalPointer (524,296 bytes, 0.02%)</title><rect x="827.1" y="133" width="0.3" height="15.0" fill="rgb(224,90,21)" rx="2" ry="2" />
+<text  x="830.11" y="143.5" ></text>
 </g>
 <g >
-<title>307 (557,738 bytes, 0.02%)</title><rect x="258.3" y="133" width="0.3" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="261.33" y="143.5" ></text>
+<title>net.(*rawConn).Read (540,842 bytes, 0.02%)</title><rect x="786.8" y="245" width="0.3" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
+<text  x="789.80" y="255.5" ></text>
 </g>
 <g >
-<title>117 (528,394 bytes, 0.02%)</title><rect x="10.5" y="373" width="0.3" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="13.51" y="383.5" ></text>
+<title>runtime.newobject (524,344 bytes, 0.02%)</title><rect x="1386.1" y="309" width="0.2" height="15.0" fill="rgb(221,75,18)" rx="2" ry="2" />
+<text  x="1389.09" y="319.5" ></text>
 </g>
 <g >
-<title>187 (540,842 bytes, 0.02%)</title><rect x="256.0" y="373" width="0.3" height="15.0" fill="rgb(229,114,27)" rx="2" ry="2" />
-<text  x="259.00" y="383.5" ></text>
+<title>github.com/jackc/pgx/v5/pgconn.(*PgConn).peekMessage (524,320 bytes, 0.02%)</title><rect x="127.5" y="197" width="0.3" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
+<text  x="130.53" y="207.5" ></text>
 </g>
 <g >
-<title>47 (839,339,689 bytes, 29.47%)</title><rect x="264.0" y="341" width="406.7" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="266.98" y="351.5" >47</text>
+<title>github.com/hashicorp/memberlist.(*Memberlist).streamListen (524,304 bytes, 0.02%)</title><rect x="10.5" y="373" width="0.3" height="15.0" fill="rgb(216,53,12)" rx="2" ry="2" />
+<text  x="13.53" y="383.5" ></text>
 </g>
 <g >
-<title>203 (524,296 bytes, 0.02%)</title><rect x="254.4" y="293" width="0.3" height="15.0" fill="rgb(251,211,50)" rx="2" ry="2" />
-<text  x="257.41" y="303.5" ></text>
+<title>time.newTimer (1,048,688 bytes, 0.04%)</title><rect x="122.9" y="277" width="0.5" height="15.0" fill="rgb(236,144,34)" rx="2" ry="2" />
+<text  x="125.93" y="287.5" ></text>
 </g>
 <g >
-<title>60 (125,507,451 bytes, 4.41%)</title><rect x="721.3" y="309" width="60.8" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
-<text  x="724.27" y="319.5" >60</text>
+<title>google.golang.org/grpc.recvAndDecompress (1,573,032 bytes, 0.06%)</title><rect x="793.4" y="245" width="0.8" height="15.0" fill="rgb(219,66,15)" rx="2" ry="2" />
+<text  x="796.44" y="255.5" ></text>
 </g>
 <g >
-<title>88 (1,048,640 bytes, 0.04%)</title><rect x="1382.8" y="277" width="0.5" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
-<text  x="1385.81" y="287.5" ></text>
+<title>google.golang.org/grpc/internal/mem.(*sizedBufferPool).Get (67,911,012 bytes, 2.38%)</title><rect x="794.2" y="197" width="32.9" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="797.20" y="207.5" >go..</text>
 </g>
 <g >
-<title>58 (438,916,109 bytes, 15.41%)</title><rect x="438.6" y="165" width="212.7" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="441.65" y="175.5" >58</text>
+<title>google.golang.org/protobuf/proto.Unmarshal (762,572,297 bytes, 26.78%)</title><rect x="409.6" y="293" width="369.5" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="412.58" y="303.5" >google.golang.org/protobuf/proto.Unmarshal</text>
 </g>
 <g >
-<title>286 (557,738 bytes, 0.02%)</title><rect x="258.3" y="37" width="0.3" height="15.0" fill="rgb(229,114,27)" rx="2" ry="2" />
-<text  x="261.33" y="47.5" ></text>
+<title>runtime.allocm (525,312 bytes, 0.02%)</title><rect x="1387.4" y="245" width="0.2" height="15.0" fill="rgb(246,191,45)" rx="2" ry="2" />
+<text  x="1390.39" y="255.5" ></text>
 </g>
 <g >
-<title>162 (37,225,300 bytes, 1.31%)</title><rect x="721.3" y="293" width="18.0" height="15.0" fill="rgb(225,92,22)" rx="2" ry="2" />
-<text  x="724.27" y="303.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/model.appendField (524,304 bytes, 0.02%)</title><rect x="779.1" y="277" width="0.3" height="15.0" fill="rgb(226,100,23)" rx="2" ry="2" />
+<text  x="782.11" y="287.5" ></text>
 </g>
 <g >
-<title>94 (540,842 bytes, 0.02%)</title><rect x="256.0" y="293" width="0.3" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="259.00" y="303.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/ingest.(*service).process (10,541,496 bytes, 0.37%)</title><rect x="788.1" y="277" width="5.1" height="15.0" fill="rgb(243,177,42)" rx="2" ry="2" />
+<text  x="791.08" y="287.5" ></text>
 </g>
 <g >
-<title>288 (557,738 bytes, 0.02%)</title><rect x="258.1" y="117" width="0.2" height="15.0" fill="rgb(217,55,13)" rx="2" ry="2" />
-<text  x="261.06" y="127.5" ></text>
+<title>reflect.compiledTypelinks (570,634 bytes, 0.02%)</title><rect x="1385.3" y="101" width="0.3" height="15.0" fill="rgb(250,207,49)" rx="2" ry="2" />
+<text  x="1388.30" y="111.5" ></text>
 </g>
 <g >
-<title>78 (1,231,222,204 bytes, 43.23%)</title><rect x="786.9" y="325" width="596.7" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
-<text  x="789.94" y="335.5" >78</text>
+<title>runtime.newproc.func1 (524,528 bytes, 0.02%)</title><rect x="1387.9" y="357" width="0.3" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="1390.90" y="367.5" ></text>
 </g>
 <g >
-<title>58 (645,526,560 bytes, 22.67%)</title><rect x="1034.8" y="101" width="312.8" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="1037.82" y="111.5" >58</text>
+<title>github.com/jackc/pgx/v5/pgconn.ConnectConfig (1,115,476 bytes, 0.04%)</title><rect x="1386.3" y="197" width="0.6" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="1389.34" y="207.5" ></text>
 </g>
 <g >
-<title>159 (1,573,080 bytes, 0.06%)</title><rect x="1379.0" y="245" width="0.7" height="15.0" fill="rgb(236,144,34)" rx="2" ry="2" />
-<text  x="1381.97" y="255.5" ></text>
+<title>runtime.wakep (525,312 bytes, 0.02%)</title><rect x="1387.6" y="309" width="0.3" height="15.0" fill="rgb(216,54,13)" rx="2" ry="2" />
+<text  x="1390.65" y="319.5" ></text>
 </g>
 <g >
-<title>99 (540,842 bytes, 0.02%)</title><rect x="1383.6" y="277" width="0.2" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
-<text  x="1386.57" y="287.5" ></text>
+<title>runtime.doInit1 (1,619,322 bytes, 0.06%)</title><rect x="1385.3" y="357" width="0.8" height="15.0" fill="rgb(239,160,38)" rx="2" ry="2" />
+<text  x="1388.30" y="367.5" ></text>
 </g>
 <g >
-<title>166 (524,320 bytes, 0.02%)</title><rect x="259.9" y="197" width="0.2" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="262.89" y="207.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/model.appendField (1,048,624 bytes, 0.04%)</title><rect x="373.4" y="261" width="0.5" height="15.0" fill="rgb(226,100,23)" rx="2" ry="2" />
+<text  x="376.40" y="271.5" ></text>
 </g>
 <g >
-<title>204 (524,296 bytes, 0.02%)</title><rect x="254.4" y="309" width="0.3" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="257.41" y="319.5" ></text>
+<title>runtime.resetspinning (525,312 bytes, 0.02%)</title><rect x="1387.1" y="325" width="0.3" height="15.0" fill="rgb(225,95,22)" rx="2" ry="2" />
+<text  x="1390.14" y="335.5" ></text>
 </g>
 <g >
-<title>161 (1,573,080 bytes, 0.06%)</title><rect x="1379.0" y="277" width="0.7" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="1381.97" y="287.5" ></text>
+<title>net/http.HandlerFunc.ServeHTTP (1,736,992 bytes, 0.06%)</title><rect x="1384.5" y="325" width="0.8" height="15.0" fill="rgb(209,19,4)" rx="2" ry="2" />
+<text  x="1387.46" y="335.5" ></text>
 </g>
 <g >
-<title>182 (526,338 bytes, 0.02%)</title><rect x="255.7" y="373" width="0.3" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="258.75" y="383.5" ></text>
+<title>reflect.(*rtype).ptrTo (570,634 bytes, 0.02%)</title><rect x="1385.3" y="133" width="0.3" height="15.0" fill="rgb(225,94,22)" rx="2" ry="2" />
+<text  x="1388.30" y="143.5" ></text>
 </g>
 <g >
-<title>321 (524,344 bytes, 0.02%)</title><rect x="262.4" y="261" width="0.3" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="265.44" y="271.5" ></text>
+<title>google.golang.org/protobuf/internal/impl.consumeStringValidateUTF8 (524,296 bytes, 0.02%)</title><rect x="827.1" y="101" width="0.3" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="830.11" y="111.5" ></text>
 </g>
 <g >
-<title>276 (524,300 bytes, 0.02%)</title><rect x="260.9" y="325" width="0.3" height="15.0" fill="rgb(236,144,34)" rx="2" ry="2" />
-<text  x="263.90" y="335.5" ></text>
+<title>google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshalPointerEager (762,572,297 bytes, 26.78%)</title><rect x="409.6" y="229" width="369.5" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="412.58" y="239.5" >google.golang.org/protobuf/internal/impl.(*Message..</text>
 </g>
 <g >
-<title>116 (528,394 bytes, 0.02%)</title><rect x="10.5" y="357" width="0.3" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="13.51" y="367.5" ></text>
+<title>sync.(*Pool).pin (524,992 bytes, 0.02%)</title><rect x="1384.2" y="309" width="0.3" height="15.0" fill="rgb(239,156,37)" rx="2" ry="2" />
+<text  x="1387.21" y="319.5" ></text>
 </g>
 <g >
-<title>186 (540,842 bytes, 0.02%)</title><rect x="256.0" y="357" width="0.3" height="15.0" fill="rgb(236,144,34)" rx="2" ry="2" />
-<text  x="259.00" y="367.5" ></text>
+<title>github.com/prometheus/client_golang/prometheus.(*goCollector).Describe (524,344 bytes, 0.02%)</title><rect x="780.4" y="357" width="0.2" height="15.0" fill="rgb(219,66,15)" rx="2" ry="2" />
+<text  x="783.38" y="367.5" ></text>
 </g>
 <g >
-<title>138 (2,097,456 bytes, 0.07%)</title><rect x="263.0" y="341" width="1.0" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
-<text  x="265.97" y="351.5" ></text>
+<title>reflect.New (524,336 bytes, 0.02%)</title><rect x="827.4" y="133" width="0.2" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
+<text  x="830.37" y="143.5" ></text>
 </g>
 <g >
-<title>87 (1,048,640 bytes, 0.04%)</title><rect x="1382.8" y="261" width="0.5" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
-<text  x="1385.81" y="271.5" ></text>
+<title>io.ReadAtLeast (540,842 bytes, 0.02%)</title><rect x="782.4" y="277" width="0.3" height="15.0" fill="rgb(234,137,32)" rx="2" ry="2" />
+<text  x="785.42" y="287.5" ></text>
 </g>
 <g >
-<title>12 (1,736,992 bytes, 0.06%)</title><rect x="253.8" y="325" width="0.9" height="15.0" fill="rgb(224,87,20)" rx="2" ry="2" />
-<text  x="256.82" y="335.5" ></text>
+<title>github.com/jackc/pgx/v5/pgconn.(*PgConn).CopyFrom (524,344 bytes, 0.02%)</title><rect x="127.8" y="213" width="0.2" height="15.0" fill="rgb(213,40,9)" rx="2" ry="2" />
+<text  x="130.78" y="223.5" ></text>
 </g>
 <g >
-<title>75 (1,217,534,760 bytes, 42.75%)</title><rect x="787.2" y="277" width="590.0" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
-<text  x="790.20" y="287.5" >75</text>
+<title>github.com/jackc/pgx/v5/internal/stmtcache.NewLRUCache (538,038 bytes, 0.02%)</title><rect x="122.2" y="309" width="0.2" height="15.0" fill="rgb(230,118,28)" rx="2" ry="2" />
+<text  x="125.16" y="319.5" ></text>
 </g>
 <g >
-<title>121 (1,573,032 bytes, 0.06%)</title><rect x="783.1" y="325" width="0.8" height="15.0" fill="rgb(207,11,2)" rx="2" ry="2" />
-<text  x="786.10" y="335.5" ></text>
+<title>runtime.main (1,640,916 bytes, 0.06%)</title><rect x="1386.3" y="373" width="0.8" height="15.0" fill="rgb(209,21,5)" rx="2" ry="2" />
+<text  x="1389.34" y="383.5" ></text>
 </g>
 <g >
-<title>18 (524,344 bytes, 0.02%)</title><rect x="260.1" y="245" width="0.3" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
-<text  x="263.14" y="255.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/model.NewStream (524,304 bytes, 0.02%)</title><rect x="779.1" y="309" width="0.3" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
+<text  x="782.11" y="319.5" ></text>
 </g>
 <g >
-<title>257 (525,440 bytes, 0.02%)</title><rect x="257.8" y="197" width="0.3" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
-<text  x="260.81" y="207.5" ></text>
+<title>google.golang.org/protobuf/internal/impl.consumeMessageSliceInfo (1,085,464,602 bytes, 38.12%)</title><rect x="827.6" y="149" width="526.0" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="830.62" y="159.5" >google.golang.org/protobuf/internal/impl.consumeMessageSliceInfo</text>
 </g>
 <g >
-<title>222 (438,916,109 bytes, 15.41%)</title><rect x="438.6" y="213" width="212.7" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="441.65" y="223.5" >222</text>
+<title>github.com/jamespolk/go-log-aggregator/internal/storage.(*Writer).commitRecords (1,572,976 bytes, 0.06%)</title><rect x="127.3" y="325" width="0.7" height="15.0" fill="rgb(249,206,49)" rx="2" ry="2" />
+<text  x="130.28" y="335.5" ></text>
 </g>
 <g >
-<title>287 (557,738 bytes, 0.02%)</title><rect x="258.1" y="101" width="0.2" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
-<text  x="261.06" y="111.5" ></text>
+<title>github.com/jackc/pgx/v5/pgxpool.(*Pool).createIdleResources.func1 (538,038 bytes, 0.02%)</title><rect x="122.2" y="373" width="0.2" height="15.0" fill="rgb(208,14,3)" rx="2" ry="2" />
+<text  x="125.16" y="383.5" ></text>
 </g>
 <g >
-<title>238 (525,312 bytes, 0.02%)</title><rect x="256.5" y="309" width="0.3" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="259.52" y="319.5" ></text>
+<title>google.golang.org/protobuf/internal/encoding/json.init (524,344 bytes, 0.02%)</title><rect x="1385.8" y="341" width="0.3" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
+<text  x="1388.83" y="351.5" ></text>
 </g>
 <g >
-<title>97 (540,842 bytes, 0.02%)</title><rect x="1383.6" y="245" width="0.2" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
-<text  x="1386.57" y="255.5" ></text>
+<title>google.golang.org/protobuf/internal/impl.pointer.AppendPointerSlice (39,453,203 bytes, 1.39%)</title><rect x="760.0" y="213" width="19.1" height="15.0" fill="rgb(232,125,30)" rx="2" ry="2" />
+<text  x="762.99" y="223.5" ></text>
 </g>
 <g >
-<title>202 (524,296 bytes, 0.02%)</title><rect x="254.4" y="277" width="0.3" height="15.0" fill="rgb(207,11,2)" rx="2" ry="2" />
-<text  x="257.41" y="287.5" ></text>
+<title>encoding/gob.validUserType (570,634 bytes, 0.02%)</title><rect x="1385.3" y="165" width="0.3" height="15.0" fill="rgb(235,140,33)" rx="2" ry="2" />
+<text  x="1388.30" y="175.5" ></text>
 </g>
 <g >
-<title>19 (524,344 bytes, 0.02%)</title><rect x="260.1" y="261" width="0.3" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="263.14" y="271.5" ></text>
+<title>sync.(*Pool).pinSlow (524,992 bytes, 0.02%)</title><rect x="1384.2" y="293" width="0.3" height="15.0" fill="rgb(219,66,15)" rx="2" ry="2" />
+<text  x="1387.21" y="303.5" ></text>
 </g>
 <g >
-<title>24 (1,572,976 bytes, 0.06%)</title><rect x="259.9" y="341" width="0.7" height="15.0" fill="rgb(254,228,54)" rx="2" ry="2" />
-<text  x="262.89" y="351.5" ></text>
+<title>github.com/jamespolk/go-log-aggregator/internal/queue.(*Conn).Consume.func1 (841,437,145 bytes, 29.55%)</title><rect x="372.6" y="341" width="407.8" height="15.0" fill="rgb(249,206,49)" rx="2" ry="2" />
+<text  x="375.64" y="351.5" >github.com/jamespolk/go-log-aggregator/internal/queue.(..</text>
 </g>
 <g >
-<title>105 (1,573,032 bytes, 0.06%)</title><rect x="787.2" y="213" width="0.8" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="790.20" y="223.5" ></text>
+<title>google.golang.org/grpc.(*serverStream).RecvMsg (1,217,534,760 bytes, 42.75%)</title><rect x="793.4" y="277" width="590.0" height="15.0" fill="rgb(217,58,14)" rx="2" ry="2" />
+<text  x="796.44" y="287.5" >google.golang.org/grpc.(*serverStream).RecvMsg</text>
 </g>
 <g >
-<title>77 (1,217,534,760 bytes, 42.75%)</title><rect x="787.2" y="309" width="590.0" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
-<text  x="790.20" y="319.5" >77</text>
+<title>runtime/pprof.profileWriter (1,577,138 bytes, 0.06%)</title><rect x="1388.2" y="373" width="0.7" height="15.0" fill="rgb(237,147,35)" rx="2" ry="2" />
+<text  x="1391.15" y="383.5" ></text>
 </g>
 <g >
-<title>76 (1,217,534,760 bytes, 42.75%)</title><rect x="787.2" y="293" width="590.0" height="15.0" fill="rgb(209,20,4)" rx="2" ry="2" />
-<text  x="790.20" y="303.5" >76</text>
+<title>github.com/jackc/pgx/v5.ConnectConfig (1,115,476 bytes, 0.04%)</title><rect x="1386.3" y="229" width="0.6" height="15.0" fill="rgb(218,61,14)" rx="2" ry="2" />
+<text  x="1389.34" y="239.5" ></text>
 </g>
 <g >
-<title>170 (524,320 bytes, 0.02%)</title><rect x="259.9" y="261" width="0.2" height="15.0" fill="rgb(231,122,29)" rx="2" ry="2" />
-<text  x="262.89" y="271.5" ></text>
+<title>google.golang.org/protobuf/internal/impl.consumeStringValidateUTF8 (438,916,109 bytes, 15.41%)</title><rect x="410.3" y="165" width="212.7" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="413.34" y="175.5" >google.golang.org/protobuf/i..</text>
 </g>
 <g >
-<title>82 (3,675,681 bytes, 0.13%)</title><rect x="1388.2" y="309" width="1.8" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="1391.22" y="319.5" ></text>
+<title>time.AfterFunc (1,048,688 bytes, 0.04%)</title><rect x="122.9" y="293" width="0.5" height="15.0" fill="rgb(207,9,2)" rx="2" ry="2" />
+<text  x="125.93" y="303.5" ></text>
 </g>
 <g >
-<title>238 (525,312 bytes, 0.02%)</title><rect x="261.9" y="325" width="0.3" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="264.93" y="335.5" ></text>
+<title>sync.(*Pool).Put (524,864 bytes, 0.02%)</title><rect x="1383.2" y="213" width="0.2" height="15.0" fill="rgb(229,112,26)" rx="2" ry="2" />
+<text  x="1386.18" y="223.5" ></text>
 </g>
 <g >
-<title>317 (524,344 bytes, 0.02%)</title><rect x="262.2" y="341" width="0.2" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="265.18" y="351.5" ></text>
+<title>encoding/gob.newTypeObject (570,634 bytes, 0.02%)</title><rect x="1385.3" y="245" width="0.3" height="15.0" fill="rgb(225,96,23)" rx="2" ry="2" />
+<text  x="1388.30" y="255.5" ></text>
 </g>
 <g >
-<title>301 (1,115,476 bytes, 0.04%)</title><rect x="258.1" y="341" width="0.5" height="15.0" fill="rgb(207,11,2)" rx="2" ry="2" />
-<text  x="261.06" y="351.5" ></text>
+<title>net.(*conf).hostLookupOrder (557,738 bytes, 0.02%)</title><rect x="1386.6" y="133" width="0.3" height="15.0" fill="rgb(227,105,25)" rx="2" ry="2" />
+<text  x="1389.61" y="143.5" ></text>
 </g>
 <g >
-<title>330 (570,634 bytes, 0.02%)</title><rect x="262.7" y="213" width="0.3" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
-<text  x="265.69" y="223.5" ></text>
+<title>bufio.NewReaderSize (526,338 bytes, 0.02%)</title><rect x="1384.0" y="357" width="0.2" height="15.0" fill="rgb(249,205,49)" rx="2" ry="2" />
+<text  x="1386.95" y="367.5" ></text>
 </g>
 <g >
-<title>322 (524,344 bytes, 0.02%)</title><rect x="262.4" y="341" width="0.3" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="265.44" y="351.5" ></text>
+<title>github.com/nats-io/nats%2ego.(*Conn).waitForMsgs (841,437,145 bytes, 29.55%)</title><rect x="372.6" y="373" width="407.8" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
+<text  x="375.64" y="383.5" >github.com/nats-io/nats%2ego.(*Conn).waitForMsgs</text>
 </g>
 <g >
-<title>83 (3,675,681 bytes, 0.13%)</title><rect x="1388.2" y="325" width="1.8" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="1391.22" y="335.5" ></text>
+<title>strings.(*Builder).grow (524,360 bytes, 0.02%)</title><rect x="789.1" y="213" width="0.2" height="15.0" fill="rgb(218,61,14)" rx="2" ry="2" />
+<text  x="792.10" y="223.5" ></text>
 </g>
 <g >
-<title>66 (524,312 bytes, 0.02%)</title><rect x="260.4" y="309" width="0.2" height="15.0" fill="rgb(215,50,11)" rx="2" ry="2" />
-<text  x="263.40" y="319.5" ></text>
+<title>google.golang.org/grpc.(*Server).serveStreams.func2.1 (1,231,222,204 bytes, 43.23%)</title><rect x="787.1" y="373" width="596.6" height="15.0" fill="rgb(226,97,23)" rx="2" ry="2" />
+<text  x="790.06" y="383.5" >google.golang.org/grpc.(*Server).serveStreams.func2.1</text>
 </g>
 <g >
-<title>91 (524,336 bytes, 0.02%)</title><rect x="1383.3" y="261" width="0.3" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
-<text  x="1386.32" y="271.5" ></text>
+<title>google.golang.org/grpc/internal/transport.(*loopyWriter).run (540,842 bytes, 0.02%)</title><rect x="1383.7" y="357" width="0.3" height="15.0" fill="rgb(229,112,26)" rx="2" ry="2" />
+<text  x="1386.69" y="367.5" ></text>
 </g>
 <g >
-<title>300 (1,115,476 bytes, 0.04%)</title><rect x="258.1" y="325" width="0.5" height="15.0" fill="rgb(213,41,9)" rx="2" ry="2" />
-<text  x="261.06" y="335.5" ></text>
+<title>encoding/gob.newTypeObject (570,634 bytes, 0.02%)</title><rect x="1385.3" y="197" width="0.3" height="15.0" fill="rgb(225,96,23)" rx="2" ry="2" />
+<text  x="1388.30" y="207.5" ></text>
 </g>
 <g >
-<title>198 (1,212,696 bytes, 0.04%)</title><rect x="253.8" y="293" width="0.6" height="15.0" fill="rgb(217,55,13)" rx="2" ry="2" />
-<text  x="256.82" y="303.5" ></text>
-</g>
-<g >
-<title>205 (524,992 bytes, 0.02%)</title><rect x="256.3" y="293" width="0.2" height="15.0" fill="rgb(238,152,36)" rx="2" ry="2" />
-<text  x="259.26" y="303.5" ></text>
-</g>
-<g >
-<title>177 (2,230,953 bytes, 0.08%)</title><rect x="254.7" y="357" width="1.0" height="15.0" fill="rgb(236,144,34)" rx="2" ry="2" />
-<text  x="257.66" y="367.5" ></text>
-</g>
-<g >
-<title>247 (562,015 bytes, 0.02%)</title><rect x="257.0" y="357" width="0.3" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="260.03" y="367.5" ></text>
-</g>
-<g >
-<title>226 (583,721 bytes, 0.02%)</title><rect x="786.4" y="277" width="0.3" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
-<text  x="789.41" y="287.5" ></text>
-</g>
-<g >
-<title>74 (1,215,436,864 bytes, 42.68%)</title><rect x="788.2" y="261" width="589.0" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
-<text  x="791.22" y="271.5" >74</text>
-</g>
-<g >
-<title>275 (524,300 bytes, 0.02%)</title><rect x="260.9" y="309" width="0.3" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
-<text  x="263.90" y="319.5" ></text>
+<title>internal/bytealg.MakeNoZero (524,360 bytes, 0.02%)</title><rect x="789.1" y="197" width="0.2" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
+<text  x="792.10" y="207.5" ></text>
 </g>
 </g>
 </svg>

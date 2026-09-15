@@ -37,6 +37,7 @@ func testWriterConfig() config.Writer {
 		RetryMaxDelay:         10 * time.Millisecond,
 		StreamCacheSize:       16,
 		StreamRefreshInterval: time.Minute,
+		CopyMode:              config.CopyModeDirect,
 	}
 }
 

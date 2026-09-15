@@ -83,18 +83,6 @@ wait_for_rows() {
 	echo "$(now) $started" | awk '{printf "%.2f", $1 - $2}'
 }
 
-# wait_for_settle waits until the row count stops moving, for the warm-up whose
-# exact count does not matter.
-wait_for_settle() {
-	local prev=-1 cur
-	while :; do
-		cur=$(row_count)
-		[ "$cur" = "$prev" ] && break
-		prev=$cur
-		sleep 2
-	done
-}
-
 # hardware prints the baseline as JSON: what this run's numbers were measured on.
 hardware() {
 	local cpu cores mem os
@@ -135,7 +123,8 @@ metric_delta() {
 	local name=$1 b a
 	b=$(awk -v n="$name" '$1 == n || index($1, n "{") == 1 {s += $2} END {print s + 0}' "$OUT/metrics-before.txt")
 	a=$(awk -v n="$name" '$1 == n || index($1, n "{") == 1 {s += $2} END {print s + 0}' "$OUT/metrics-after.txt")
-	echo "$a $b" | awk '{printf "%.6g", $1 - $2}'
+	# 15 significant digits: exact for every counter, ample for the _sum seconds.
+	echo "$a $b" | awk '{printf "%.15g", $1 - $2}'
 }
 
 # flamegraph renders one pprof profile as an SVG flame graph and a text top list.
@@ -149,7 +138,8 @@ flamegraph() {
 	local in=$1 stem=$2 index=$3 col=$4 unit=$5
 	go tool pprof -sample_index="$index" -top -nodecount=30 "$in" >"$stem-top.txt" 2>/dev/null || true
 	go tool pprof -raw "$in" 2>/dev/null |
-		awk -v col="$col" '/^ *[0-9]+( +[0-9]+)*: / {
+		awk -v col="$col" '/^Locations/ { samples = 0 } /^Samples:/ { samples = 1 }
+		samples && /^ *[0-9]+( +[0-9]+)*: / {
 			split($0, a, ":"); n = split(a[1], v, " "); print v[col], v[col] ":" a[2]; next
 		} { print }' |
 		perl bin/flamegraph/stackcollapse-go.pl 2>/dev/null |
@@ -201,9 +191,13 @@ $COMPOSE up -d "${build_flag[@]}" --force-recreate --wait --wait-timeout 240 col
 psql_q "TRUNCATE logs" >/dev/null
 
 say "warming up (${WARMUP_RECORDS} records)"
+# The warm-up is drained by count like the run itself: a "count stopped moving"
+# check would end early on any writer stall over its poll interval and leave
+# warm-up rows to land inside the measured drain.
+rows_at_start=$(row_count)
 bin/loadgen -addr "$INGEST" -records "$WARMUP_RECORDS" -batch-size "$BATCH" \
-	-streams "$STREAMS" -senders "$SENDERS" -message-size "$MESSAGE_SIZE" >/dev/null
-wait_for_settle
+	-streams "$STREAMS" -senders "$SENDERS" -message-size "$MESSAGE_SIZE" -out "$RAW/warmup.json" >/dev/null
+wait_for_rows $((rows_at_start + $(jq -r .accepted "$RAW/warmup.json"))) >/dev/null
 rows_before=$(row_count)
 curl -fsS "$ADMIN/metrics" | grep '^logagg_' >"$OUT/metrics-before.txt"
 
@@ -264,7 +258,9 @@ jq -n \
 	--arg name "$NAME" --arg started "$started_at" \
 	--arg commit "$(git rev-parse --short HEAD)" \
 	--argjson hardware "$(hardware)" \
-	--argjson env "$(env | grep -E '^(LOGAGG|PG)_' | jq -Rn '[inputs | capture("(?<key>[^=]+)=(?<value>.*)")] | from_entries')" \
+	# Allowlisted, not every LOGAGG_* variable: run.json is committed, and the
+	# same prefix carries the DB DSN and the API token.
+	--argjson env "$(env | grep -E '^(LOGAGG_(WRITER|ADMIN|LOG_LEVEL|DB_MAX_CONNS|QUEUE_MAX_ACK_PENDING)|PG_)' | jq -Rn '[inputs | capture("(?<key>[^=]+)=(?<value>.*)")] | from_entries')" \
 	--argjson loadgen "$(cat "$OUT/loadgen.json")" \
 	--argjson profiled "$([ "$PROFILE" = 1 ] && echo true || echo false)" \
 	--argjson loadgen_exit "$loadgen_exit" \

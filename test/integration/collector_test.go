@@ -205,6 +205,7 @@ func collectorWriterConfig(opt *collectorOptions) config.Writer {
 		RetryMaxDelay:         time.Second,
 		StreamCacheSize:       1024,
 		StreamRefreshInterval: time.Minute,
+		CopyMode:              config.CopyModeDirect,
 	}
 }
 

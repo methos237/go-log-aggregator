@@ -50,6 +50,7 @@ func writerConfig() config.Writer {
 		RetryMaxDelay:         time.Second,
 		StreamCacheSize:       4096,
 		StreamRefreshInterval: time.Minute,
+		CopyMode:              config.CopyModeDirect,
 	}
 }
 
@@ -237,6 +238,18 @@ func testWriterDeduplicatesOnReplay(t *testing.T, mode string) {
 
 	// And the first writer's counters should not have been touched by the replay.
 	require.Equal(t, float64(size), counterValue(t, reg, "logagg_storage_rows_inserted_total"))
+
+	// A replay that arrives after the chunk was compressed must still be a no-op:
+	// the dedup index has to be enforced on COPY into a compressed chunk too.
+	compressAllChunks(ctx, t, pool)
+	late, reg3 := newWriter(t, pool, cfg)
+	submit(late)
+	require.NoError(t, late.Close(mustDeadline(t, time.Minute)))
+	require.Equal(t, int64(size), countLogs(ctx, t, pool), "replay into a compressed chunk duplicated rows")
+	require.Equal(t, float64(size), counterValue(t, reg3, "logagg_storage_rows_deduplicated_total"))
+	if mode == config.CopyModeDirect {
+		require.Equal(t, float64(size/200), counterValue(t, reg3, "logagg_storage_direct_copy_fallbacks_total"))
+	}
 }
 
 // TestWriterHandlesPartialReplay covers the realistic redelivery case: an overlapping

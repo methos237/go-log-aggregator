@@ -226,7 +226,7 @@ func TestValidate(t *testing.T) {
 		},
 		{
 			name:   "unknown copy mode",
-			mutate: func(c *Config) { c.Writer.CopyMode = "fast" },
+			mutate: func(c *Config) { c.Writer.CopyMode = "" },
 			want:   "writer copy mode must be",
 		},
 		{

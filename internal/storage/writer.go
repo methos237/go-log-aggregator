@@ -86,8 +86,11 @@ type Shipment struct {
 	// stream it did not send.
 	Stream model.Stream
 	// Records is taken over by Submit, which stamps the stream ID onto each entry
-	// and compacts out any that fail validation. Callers must not read or reuse the
-	// slice afterwards.
+	// and compacts out any that fail validation. The slice must exclusively own its
+	// backing array (NewRecords is the intended source): once a worker has copied
+	// it into a batch the writer clears the whole array and recycles it, so a
+	// caller must neither read it afterwards nor hand two shipments slices of one
+	// array.
 	Records []model.LogRecord
 
 	// Ack is called exactly once, with nil when every accepted record is durably
@@ -437,6 +440,15 @@ func (w *Writer) flush(dbCtx context.Context, log *slog.Logger, batch *writeBatc
 		w.metrics.BatchSize.Observe(float64(len(batch.records)))
 	}
 
+	// One global insertion order for both copy paths. The staging insert's
+	// ORDER BY gave every writer in the cluster the same lock order on the dedup
+	// index (see insertFromStagingSQL); the direct COPY has no ORDER BY, so the
+	// records are sorted here instead, and both paths get it for the price of
+	// sorting a few thousand rows. Index locality comes with it.
+	slices.SortFunc(batch.records, func(a, b model.LogRecord) int {
+		return cmp.Or(cmp.Compare(a.StreamID, b.StreamID), cmp.Compare(a.Seq, b.Seq), a.Time.Compare(b.Time))
+	})
+
 	// One span per flush, parented on the first sampled shipment's trace and
 	// linked to the rest: a batch merges many publishes, and a trace can only
 	// have one parent. That one therefore shows the whole agent-to-Postgres
@@ -704,7 +716,7 @@ func copyRecords(ctx context.Context, tx pgx.Tx, table string, records []model.L
 // the direct path means a redelivered record met the dedup index.
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+	return errors.As(err, &pgErr) && pgErr.Code == "23505" // pgerrcode.UniqueViolation, without the import
 }
 
 // copyRow renders records in logColumns order, reusing one []any and handing pgx
@@ -796,13 +808,18 @@ type writeBatch struct {
 // hold no strings alive.
 var recordPool = sync.Pool{New: func() any { s := make([]model.LogRecord, 0, 512); return &s }}
 
+// maxPooledRecords bounds what RecycleRecords keeps; a shipment is bounded by the
+// ingest message size, and anything past this is an outlier not worth pinning.
+const maxPooledRecords = 1 << 16
+
 // NewRecords returns an empty slice with room for n records, possibly recycled.
 // Pass the filled slice to Writer.Submit, which owns it from then on.
 func NewRecords(n int) []model.LogRecord {
 	sp := recordPool.Get().(*[]model.LogRecord) //nolint:errcheck // pool holds one type
 	if cap(*sp) < n {
-		// Too small for this shipment; put it back for a smaller one and allocate.
-		recordPool.Put(sp)
+		// Too small for this shipment: drop it and allocate. Putting it back
+		// would refill the pool's per-P slot with the small slice and keep the
+		// larger recycled ones out of reach, so the pool would never converge.
 		return make([]model.LogRecord, 0, n)
 	}
 	return (*sp)[:0]
@@ -812,7 +829,9 @@ func NewRecords(n int) []model.LogRecord {
 // Exported for the test that proves the round trip; production callers are the
 // writer's workers.
 func RecycleRecords(s []model.LogRecord) {
-	if cap(s) == 0 {
+	// Nothing to keep, or too big to keep: an oversized slice would be pinned
+	// and fully cleared on every recycle for the rest of the process's life.
+	if cap(s) == 0 || cap(s) > maxPooledRecords {
 		return
 	}
 	s = s[:cap(s)]

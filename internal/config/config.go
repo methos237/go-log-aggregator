@@ -186,7 +186,8 @@ type Writer struct {
 	// and INSERT ... ON CONFLICT (ADR-0002 §2). Direct is the default since phase 8
 	// measured it at roughly 1.3x the writer throughput of staging (ADR-0008,
 	// docs/benchmarks); staging remains for a deployment where replays are the
-	// norm rather than the exception.
+	// norm rather than the exception. Required: a struct literal has to pick one,
+	// so the shipped default lives in exactly one place (Load).
 	CopyMode string
 }
 
@@ -783,10 +784,7 @@ func (w *Writer) Validate() error {
 	if w.FlushInterval <= 0 {
 		bad("writer flush interval must be positive, got %s", w.FlushInterval)
 	}
-	// Empty is allowed and means staging, the conservative path, so a Writer built
-	// as a struct literal (tests, embedding callers) gets the ADR-0002 behavior
-	// without knowing the knob exists.
-	if w.CopyMode != "" && w.CopyMode != CopyModeStaging && w.CopyMode != CopyModeDirect {
+	if w.CopyMode != CopyModeStaging && w.CopyMode != CopyModeDirect {
 		bad("writer copy mode must be %q or %q, got %q", CopyModeStaging, CopyModeDirect, w.CopyMode)
 	}
 	if w.QueueDepth < 1 {
