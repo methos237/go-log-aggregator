@@ -18,8 +18,9 @@ import (
 // per distinct batch size, and there is no string building anywhere near a query.
 //
 // GREATEST on last_seen keeps the column monotonic. Without it, two collectors
-// writing the same stream out of order would make last_seen jitter backwards, and
-// /v1/labels uses it to hide streams that stopped reporting.
+// writing the same stream out of order would make last_seen jitter backwards.
+// Nothing reads the column yet (ADR-0002 §4); it is kept current so a stream
+// retirement or ranking feature has the data when it wants it.
 //
 // first_seen is intentionally not updated: it records when the stream was first
 // observed by the cluster, and EXCLUDED.first_seen from a later batch is newer.

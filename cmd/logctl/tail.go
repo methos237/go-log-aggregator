@@ -40,9 +40,9 @@ type tailRecord struct {
 }
 
 func tailCmd(args []string) error {
-	fs := flag.NewFlagSet("tail", flag.ExitOnError)
+	fs := flag.NewFlagSet("tail", flag.ContinueOnError)
 	var opt tailOptions
-	fs.StringVar(&opt.addr, "addr", "http://127.0.0.1:8080", "collector HTTP address")
+	fs.StringVar(&opt.addr, "addr", "http://127.0.0.1:8080", "collector HTTP base URL")
 	fs.StringVar(&opt.token, "token", os.Getenv("LOGAGG_HTTP_AUTH_TOKEN"), "bearer token (default $LOGAGG_HTTP_AUTH_TOKEN)")
 	fs.BoolVar(&opt.raw, "json", false, "print each message as-is, one per line")
 	fs.Usage = func() {
@@ -51,12 +51,12 @@ func tailCmd(args []string) error {
 			"selectors and line filters only; parser stages and aggregations need query\n")
 		fs.PrintDefaults()
 	}
-	if err := fs.Parse(args); err != nil {
+	if helped, err := parseFlags(fs, args); helped || err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return errors.New("exactly one query is required; quote it so the shell leaves it alone")
+		return usagef("exactly one query is required; quote it so the shell leaves it alone")
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -70,7 +70,7 @@ func tailCmd(args []string) error {
 func (o *tailOptions) run(ctx context.Context, query string, out, errOut io.Writer) error {
 	u, err := url.Parse(o.addr)
 	if err != nil {
-		return fmt.Errorf("-addr: %w", err)
+		return usagef("-addr: %w", err)
 	}
 	switch strings.ToLower(u.Scheme) {
 	case "http", "ws":
@@ -78,7 +78,7 @@ func (o *tailOptions) run(ctx context.Context, query string, out, errOut io.Writ
 	case "https", "wss":
 		u.Scheme = "wss"
 	default:
-		return fmt.Errorf("-addr %q: scheme must be http or https", o.addr)
+		return usagef("-addr %q: scheme must be http or https", o.addr)
 	}
 	u.Path = strings.TrimSuffix(u.Path, "/") + "/v1/tail"
 	u.RawQuery = "query=" + url.QueryEscape(query)

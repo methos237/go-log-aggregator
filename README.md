@@ -7,7 +7,9 @@ JetStream, batch-write into TimescaleDB hypertables, and answer queries written 
 small log query language. Collectors find each other by gossip and share work over a
 consistent hash ring, so nodes can join and leave while ingest continues.
 
-Delivery is at-least-once end to end, with duplicates removed at the storage layer.
+**Delivery semantics: at-least-once end to end, deduplicated at the storage layer.**
+Not exactly-once: a crash between a database write and its acknowledgement replays the
+batch, and a unique index makes the replay a no-op.
 
 ## What it does, in plain terms
 
@@ -38,8 +40,9 @@ turn the matches into a rate over time. Every query runs against the database th
 a fixed set of parameterized statements, so nothing you type can become SQL.
 
 Several collectors form a **cluster**. They learn about each other by gossip, divide
-the streams between them with a hash ring, and forward queries to whichever node holds
-the data. A **live tail** lets you watch matching lines arrive as they happen.
+the streams between them with a hash ring, and split a query so that each node scans
+its share and one of them merges the rows. A **live tail** lets you watch matching
+lines arrive as they happen.
 
 Two command-line tools ship with it: `logctl` for sending test lines, running queries,
 and inspecting the cluster, and `loadgen` for pushing synthetic load through the
@@ -47,21 +50,24 @@ pipeline to see what it can take.
 
 ## Status
 
-Phases 1 through 8 of 9 are complete: the schema and write path, the ingest service,
-the agent, the query language with its HTTP API and `logctl query`, the cluster
-layer (gossip membership, hash ring, query fan-out, a proxy for the scaled stack, and
-a chaos test that kills two of five collectors mid-ingest), live tail over
-WebSocket with `logctl tail`, observability (the full metric set, one trace from
-the agent's send to the Postgres commit, Grafana dashboards provisioned from git),
-and benchmarks: a reproducible harness, published numbers with their methodology and
-hardware, and an optimization log of six measured changes in
-[`docs/benchmarks/`](docs/benchmarks/README.md). Phase 9 is polish. Each phase is one GitHub issue
-and one pull request, and every design decision that shaped the code is written up in
-[`docs/decisions/`](docs/decisions/).
+All nine phases are complete: the schema and write path, the ingest service, the
+agent, the query language with its HTTP API and `logctl query`, the cluster layer
+(gossip membership, hash ring, query fan-out, a proxy for the scaled stack, and a
+chaos test that kills two of five collectors mid-ingest), live tail over WebSocket
+with `logctl tail`, observability (the full metric set, one trace from the agent's
+send to the Postgres commit, Grafana dashboards provisioned from git), benchmarks (a
+reproducible harness, published numbers with their methodology and hardware, and an
+optimization log of six measured changes in
+[`docs/benchmarks/`](docs/benchmarks/README.md)), and this documentation pass. Each
+phase was one GitHub issue and one pull request, and every design decision that
+shaped the code is written up in [`.aidocs/decisions`](.aidocs/decisions/). Stretch goals
+that did not make the cut are listed in
+[ADR-0001](.aidocs/decisions/ADR-0001-architecture-baseline.md).
 
 ## Quickstart
 
-Requires Docker. Go is only needed to run tests and linters locally.
+Requires Docker with Compose v2, and Go 1.27 for `make build` and the tests. The
+services themselves are built inside Docker, so `make dev` works with Docker alone.
 
 ```bash
 make dev          # build and start the stack, wait until healthy
@@ -91,7 +97,9 @@ echo "hello from logctl" | ./bin/logctl send -addr 127.0.0.1:9095 -service demo
 ./bin/loadgen -addr 127.0.0.1:9095 -records 200000    # synthetic load
 ```
 
-`loadgen` prints accepted and rejected counts, ack latency percentiles, and exits
+`logctl` exits 0 on success, 2 for a usage error and 1 for anything the cluster
+refused or could not reach; rows go to stdout and everything else to stderr, so
+`logctl query -json ... | jq` works. `loadgen` prints accepted and rejected counts, ack latency percentiles, and exits
 non-zero if anything was rejected, so you can use it as a check as well as a demo.
 `-rate`, `-ramp` and `-duration` pace a run; `make bench-run NAME=...` wraps it in the
 benchmark harness described in [`docs/benchmarks/`](docs/benchmarks/README.md).
@@ -138,8 +146,9 @@ reports which relation it read as `source`.
 Every literal, including label names, becomes a `$n` argument. Tests assert the
 generated SQL contains no user bytes, an ast-grep rule forbids concatenated SQL at any
 query call, and `make fuzz` runs the lexer, parser and planner for a minute each. The
-grammar is the package doc of `internal/query`; the reasoning is in
-[`ADR-0004`](docs/decisions/ADR-0004-query-compiler.md).
+full reference, with every operator and a worked example of each, is
+[`docs/query-language.md`](docs/query-language.md); the reasoning is in
+[`ADR-0004`](.aidocs/decisions/ADR-0004-query-compiler.md).
 
 ### HTTP API
 
@@ -164,12 +173,34 @@ streams could not be searched.
 ## Architecture
 
 ```
-agents ──gRPC stream──> collectors ──> NATS JetStream ──> writer pool ──> TimescaleDB
-                            │                                                   ▲
-                            ├── memberlist gossip + consistent hash ring         │
-                            ├── tail: NATS core `tail.>` ──> WebSocket /v1/tail  │
-                            └── query: DSL ──> parameterized SQL ────────────────┘
+┌─────────┐  ┌─────────┐  ┌─────────┐
+│ agent 1 │  │ agent 2 │  │ agent N │   tail files, checkpoint per file, batch by size and time
+└────┬────┘  └────┬────┘  └────┬────┘
+     │  gRPC bidi stream (protobuf, batched, ack'd after the JetStream publish; mTLS optional)
+     └────────────┼────────────┘
+                  ▼
+   ┌───────────────────────────────────────────┐
+   │ collector × N     memberlist gossip +     │
+   │                   consistent hash ring    │
+   │  ingest: validate, fingerprint labels,    │
+   │          shed when the queue is full      │
+   │     │                                     │
+   │     ▼ publish            ┌──────────────┐ │
+   │  NATS JetStream ────────>│ writer pool  │ │──COPY──> TimescaleDB hypertable
+   │  NATS core tail.> ──────>│ tail fan-out │ │──WS────> /v1/tail
+   │                          └──────────────┘ │
+   │  query: DSL → parameterized SQL, fan out  │<──SQL──── TimescaleDB
+   │         by ring owner, merge by time      │
+   └───────────────────────────────────────────┘
+        │ /metrics, OTLP traces
+        ▼
+   Prometheus · Grafana · Jaeger
 ```
+
+Each collector runs every role. The ring divides *reads*: any collector accepts any
+agent and writes through the shared JetStream stream, and a query fans out to whichever
+collectors own the matching streams. A collector that dies mid-batch leaves its
+unacknowledged messages in JetStream for a survivor to write.
 
 Ports, all bound to loopback in development:
 
@@ -182,7 +213,7 @@ Ports, all bound to loopback in development:
 | 7946 | memberlist gossip | UDP and TCP; never published to the host |
 | 5432 | TimescaleDB | development credentials only |
 | 4222 | NATS | 8222 serves its monitoring endpoint |
-| 3000 | Grafana | anonymous admin, dashboards provisioned from `deploy/grafana/` |
+| 3000 | Grafana | anonymous viewer, dashboards provisioned from `deploy/grafana/` |
 | 9091 | Prometheus | scrapes every collector and agent through Compose DNS |
 | 16686 | Jaeger | traces; collectors and the agent export OTLP to it on 4317 |
 
@@ -218,7 +249,7 @@ many publishes into one transaction, so its span is a child of the first shipmen
 trace and linked to the rest. Tracing is off unless `LOGAGG_TRACING_ENABLED=true`;
 `LOGAGG_TRACING_ENDPOINT` and `LOGAGG_TRACING_SAMPLE_RATIO` do what they say. The dev
 agent also follows the collector's own container, so `logagg` ingests its own logs.
-[ADR-0007](docs/decisions/ADR-0007-observability.md) has the reasoning.
+[ADR-0007](.aidocs/decisions/ADR-0007-observability.md) has the reasoning.
 
 ## Cluster
 
@@ -235,19 +266,59 @@ curl -s -H "Authorization: Bearer dev-token" http://127.0.0.1:8080/v1/cluster | 
 make chaos                               # kill two mid-ingest, assert zero gaps
 ```
 
+![Two of five collectors killed under load: membership drops to three, the ring
+rebalances, ingest moves to a survivor, nothing is dropped](docs/images/rebalance.gif)
+
+The recording is the overview dashboard while `loadgen` pushes a steady 3 000
+records/s through the proxy and two collectors are killed twenty-five seconds
+apart, each the one carrying the ingest stream at the time. The client reconnects
+through the proxy to a survivor, the membership timeline steps from five to three,
+the ring ownership panel spikes as the survivors take over the dead nodes' ranges,
+and the drop counter stays at zero.
+
 `GET /v1/cluster` shows the members, what each advertised, and its share of the key
 space; `?arcs=1` adds every owned range. The chaos test runs the agent through the
 proxy, kills two collectors outright while lines are in flight, then asserts every
 numbered line landed with no gaps, that the ring settled on the survivors, and that a
 fanned-out count agrees with the database. It waits out the queue's `ack_wait`,
 since a killed collector's unacknowledged deliveries are redelivered only after it
-expires. The reasoning is in [`ADR-0005`](docs/decisions/ADR-0005-cluster-layer.md).
+expires. The reasoning is in [`ADR-0005`](.aidocs/decisions/ADR-0005-cluster-layer.md).
 
 `make dev` publishes fixed host ports for its single collector. `make dev-scale N=5`
 puts an nginx proxy on the same 8080 and 9095 in front of N collectors, resolving
 them through Compose's DNS on every connection, so the host addresses never change
 and a killed replica drops out of rotation within seconds. Only the admin port stays
 per replica, on 9190-9199; `make dev-ps` shows which is which.
+
+## Benchmarks
+
+Measured on a laptop, so read the deltas, not the absolutes: Apple M2 Pro, Docker
+Desktop VM with 10 CPUs and 7.65 GiB, TimescaleDB 2.22 on PG 17 with image defaults,
+data on a Docker volume. The load shape is 3 000 000 records of 200 bytes in batches
+of 500 across 64 streams on 4 gRPC streams, unpaced, into one collector. "Client" is
+the rate the collector accepted; "sustained" is accepted records over client time plus
+the drain into the database, which is the number that matters when the client outruns
+the writer. Single runs unless a range is given; the noise floor on this machine is
+about 20%.
+
+| State | Client rec/s | Sustained rec/s | Ack p99 (ms) | Write per 5 000-row batch (ms) |
+|---|---|---|---|---|
+| Baseline (phase 7 code, image defaults) | 65 374 / 64 083 | 33 186 / 27 133 | 1 380 / 1 100 | 588 / 726 |
+| 1. `max_wal_size` 1 GB → 4 GB | 102 568 | 30 042 | 903 | 654 |
+| 2. Fewer allocations (−37% bytes) | 52 059 | 34 995 | 4 552 | 564 |
+| 3. `SET LOCAL work_mem` in the staging insert | 91 569 / 62 786 / 70 699 | 44 397 / 36 200 / 34 817 | 1 563 / 5 358 / 2 015 | 437 / 552 / 562 |
+| 4. Direct `COPY` with staging fallback | 90 267 / 62 739 / 118 349 | 47 070 / 32 031 / 50 883 | 985 / 2 916 / 691 | 390 / 555 / 385 |
+| 5. Drop the default `time` index | 183 553 | **55 903** | 496 | 357 |
+
+![Sustained throughput after each optimization](docs/benchmarks/charts/optimization-log.svg)
+
+The writer is the bottleneck throughout: the client pushes 90–120k records/s into
+JetStream and the database absorbs 30–55k/s. Compression measured at 5.3× (382 to 72
+bytes per row). Every change above, what it was expected to do, what it did, and the
+flame graphs behind it are in [`docs/benchmarks/`](docs/benchmarks/README.md); the
+defaults it changed are recorded in
+[`ADR-0008`](.aidocs/decisions/ADR-0008-benchmark-driven-defaults.md). Reproduce a run
+with `make bench-run NAME=mine`.
 
 ## Configuration
 
@@ -349,21 +420,37 @@ with 1 hour chunks, columnar compression segmented by stream, 30 day retention, 
 per-minute and per-hour count aggregates that the query planner reads when an
 aggregation can be answered from them exactly.
 
-[`ADR-0003`](docs/decisions/ADR-0003-ingest-path.md) covers the ingest path: why the
+[`ADR-0003`](.aidocs/decisions/ADR-0003-ingest-path.md) covers the ingest path: why the
 ack comes after the JetStream publish, why a full buffer sheds instead of waiting, and
 why a corrupt message is terminated rather than retried.
 
-The write path is `COPY` into a session-local staging table followed by
-`INSERT ... ON CONFLICT DO NOTHING` against a unique `(stream_id, seq, time)` index,
-which makes a redelivered batch a no-op instead of a duplicate or an error.
-[`ADR-0002`](docs/decisions/ADR-0002-schema-and-write-path.md) has the full reasoning,
-including the TimescaleDB behaviours that shaped it.
+The write path is a direct `COPY` into the hypertable, guarded by a unique
+`(stream_id, seq, time)` index. A redelivered batch trips that index, and the writer
+then redoes it through a session-local staging table and
+`INSERT ... ON CONFLICT DO NOTHING`, so a replay is a no-op instead of a duplicate or
+an error, and the normal case pays for one pass. `LOGAGG_WRITER_COPY_MODE=staging`
+makes every batch take the second path, for a deployment where replay is routine.
+[`ADR-0002`](.aidocs/decisions/ADR-0002-schema-and-write-path.md) has the reasoning,
+including the TimescaleDB behaviours that shaped it, and
+[`ADR-0008`](.aidocs/decisions/ADR-0008-benchmark-driven-defaults.md) the measurement
+that made direct the default.
 
 ## Non-goals
 
-This is not a Loki or Elasticsearch replacement. No multi-tenancy, no RBAC beyond a
-static API token, no cross-region replication, no plugin system, no TimescaleDB
-multi-node. [`docs/decisions/`](docs/decisions/) gives the rationale for each.
+Decided up front, so the scope reads as deliberate rather than unfinished.
+
+- Not a Loki or Elasticsearch replacement.
+- No multi-tenancy, and no RBAC beyond a static API token.
+- No cross-region replication.
+- No log parsing or enrichment plugin system. Field extraction is regex at the agent
+  and `json`, `logfmt` and `regexp` stages at query time.
+- No TimescaleDB multi-node. Timescale deprecated distributed hypertables, so
+  horizontal distribution lives in the Go layer, which is the point of the project.
+- No Kubernetes manifests or Helm chart, and no public cloud demo. Everything runs
+  under Docker Compose via `make dev`.
+
+[`ADR-0001`](.aidocs/decisions/ADR-0001-architecture-baseline.md) records the rejected
+alternatives behind each.
 
 ## License
 

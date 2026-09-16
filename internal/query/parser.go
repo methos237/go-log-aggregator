@@ -23,6 +23,8 @@ type Error struct {
 	Msg string
 }
 
+// Error formats the message with its line:column position, so a client can
+// point at the offending token.
 func (e *Error) Error() string { return fmt.Sprintf("%d:%d: %s", e.Pos.Line, e.Pos.Col, e.Msg) }
 
 // Parse parses one query. The error is always a *Error pointing at the

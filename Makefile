@@ -190,12 +190,12 @@ demo-rotate-log: ## Exit-criteria demo: force an out-of-band log rotation in the
 	$(COMPOSE) exec -T logwriter sh -c 'mv "$$LOG_DIR/app.log" "$$LOG_DIR/app.log.1" && : > "$$LOG_DIR/app.log"'
 
 .PHONY: dev-down
-dev-down: ## Stop the dev stack, keeping volumes
-	$(COMPOSE) down
+dev-down: ## Stop the dev stack, keeping volumes (also stops a dev-scale stack and its proxy)
+	$(COMPOSE_SCALE) down --remove-orphans
 
 .PHONY: dev-nuke
 dev-nuke: ## Stop the dev stack and delete its volumes (destroys all ingested data)
-	$(COMPOSE) down -v
+	$(COMPOSE_SCALE) down -v --remove-orphans
 
 .PHONY: dev-logs
 dev-logs: ## Follow logs from the dev stack
