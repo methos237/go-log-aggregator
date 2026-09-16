@@ -40,8 +40,9 @@ turn the matches into a rate over time. Every query runs against the database th
 a fixed set of parameterized statements, so nothing you type can become SQL.
 
 Several collectors form a **cluster**. They learn about each other by gossip, divide
-the streams between them with a hash ring, and forward queries to whichever node holds
-the data. A **live tail** lets you watch matching lines arrive as they happen.
+the streams between them with a hash ring, and split a query so that each node scans
+its share and one of them merges the rows. A **live tail** lets you watch matching
+lines arrive as they happen.
 
 Two command-line tools ship with it: `logctl` for sending test lines, running queries,
 and inspecting the cluster, and `loadgen` for pushing synthetic load through the
@@ -212,7 +213,7 @@ Ports, all bound to loopback in development:
 | 7946 | memberlist gossip | UDP and TCP; never published to the host |
 | 5432 | TimescaleDB | development credentials only |
 | 4222 | NATS | 8222 serves its monitoring endpoint |
-| 3000 | Grafana | anonymous admin, dashboards provisioned from `deploy/grafana/` |
+| 3000 | Grafana | anonymous viewer, dashboards provisioned from `deploy/grafana/` |
 | 9091 | Prometheus | scrapes every collector and agent through Compose DNS |
 | 16686 | Jaeger | traces; collectors and the agent export OTLP to it on 4317 |
 

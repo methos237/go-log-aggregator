@@ -198,8 +198,10 @@ payload.
 
 ### 9. Shutdown order is fixed, and the queue connection closes last
 
-Deregister readiness checks, stop the ingest listener, stop the consumer (waiting for
-handlers mid-Submit), stop the public API, drain the writer, tear down admin. Unready
+Deregister readiness checks, leave the cluster and stop the peer server (added in
+phase 5, so a departing node stops receiving fan-out before it stops answering), stop
+the ingest listener, stop the consumer (waiting for handlers mid-Submit), stop the
+public API, drain the writer, tear down admin. Unready
 then drain produces no client-visible errors; drain then unready produces a burst of
 them. The queue connection closes after all of it, because draining the writer is what
 fires the deferred acks and they travel on that connection.
@@ -215,8 +217,11 @@ is allowed to be imperfect because the delivery contract is not.
   senders and 500-record batches. Phase 8 profiles this properly.
 - A collector killed mid-stream loses no acknowledged record, at the cost of duplicate
   rows that the dedup index absorbs. The integration suite asserts both.
-- Records are converted between wire and model form twice per batch. Phase 8 may revisit
-  this; correctness of a single validation path came first.
+- Records are converted between wire and model form twice per batch. Phase 8 profiled
+  the ingest path and cut allocations elsewhere (entry 2 of the optimization log in
+  `docs/benchmarks/`) but left this in place:
+  the profiles put the bottleneck in the database, not the collector, so the
+  conversion was not worth the second validation path it would take to remove.
 - Overload is visible as `ACK_CODE_OVERLOADED` acks and
   `logagg_records_dropped_total{component="ingest",reason="ingest_buffer_full"}` rather
   than as growing memory. An operator watching the wrong one of those sees nothing.

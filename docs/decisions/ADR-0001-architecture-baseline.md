@@ -38,8 +38,11 @@ the README rather than glossed over.
 
 Collector nodes discover each other with SWIM gossip (`hashicorp/memberlist`) and use
 a consistent hash ring with virtual nodes to own log streams. Ownership routes
-**query fan-out and tail subscriptions**, not writes — writes go through JetStream and
-any node can write.
+**query fan-out**, not writes — writes go through JetStream and any node can write.
+
+*Amended 2026-09-16:* this originally said ownership also routed tail subscriptions.
+ADR-0006 chose NATS core fan-out for tail instead, evaluated on whichever node the
+client connected to; the ring is not consulted.
 
 Rejected:
 
@@ -56,9 +59,10 @@ the Go layer regardless — which happens to be the point.
 ### 3. Read side: custom query DSL + REST + WebSocket tail + Grafana
 
 A LogQL-shaped language compiled by a hand-written lexer, recursive-descent parser,
-AST, and planner that emits parameterized TimescaleDB SQL, choosing between the raw
-hypertable and continuous aggregates based on the requested range. Grafana reads the
-same hypertables for dashboards.
+AST, and planner that emits parameterized TimescaleDB SQL, reading a continuous
+aggregate instead of the raw hypertable when it can prove the answer is identical
+(the exactness rule is ADR-0004 §5, not a range heuristic). Grafana reads the same
+hypertables for dashboards.
 
 Rejected:
 
@@ -76,8 +80,9 @@ text, and a test asserts the generated SQL contains no bytes from the input.
 ### 4. Ops: Docker Compose everywhere, with deep observability and published benchmarks
 
 Everything runs in containers. `make dev` brings up TimescaleDB, NATS, collectors,
-and later Grafana, Prometheus and Jaeger, with provisioned dashboards. Benchmarks and
-pprof profiles are committed with before/after numbers.
+and later Grafana, Prometheus and Jaeger, with provisioned dashboards. Benchmarks are
+committed with before/after numbers and rendered flame graphs; raw `.pprof` files are
+not, since a profile is only readable against the binary that produced it.
 
 Rejected:
 
@@ -111,4 +116,4 @@ candidate follow-on, none is promised:
 - An object-storage tier for aged-out chunks.
 - A terminal UI for tail and query.
 - Kubernetes manifests and a Helm chart (see §4).
-- A Terraform module; researched and declined in ADR-0009.
+- A Terraform module; researched in ADR-0011.

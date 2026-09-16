@@ -54,6 +54,11 @@ whole performance story (§4 of the roadmap).
 
 ### 2. Dedup key is `(stream_id, seq, time)`, and the write path is COPY-then-INSERT
 
+*Amended 2026-09-16:* ADR-0008 §1 measured the two paths this section deferred and
+made direct `COPY` into `logs` the default, with the staging path below as the
+fallback a unique violation triggers. The dedup key and the staging mechanics are
+unchanged; only which path runs first moved.
+
 TimescaleDB requires the partitioning column in every unique index on a hypertable, so
 the dedup key includes `time`. The practical consequence, stated plainly: dedup only
 suppresses a record replayed with an *identical* timestamp. That is exactly the
@@ -74,8 +79,9 @@ connection rather than one per batch, and it is not WAL-logged.
 
 Rejected: plain `CopyFrom` into `logs` with duplicates tolerated (no unique index).
 It is faster, but it moves deduplication to read time forever, and every query would
-have to be written defensively. Phase 8 benchmarks the two paths and publishes the
-delta; this ADR only fixes the correctness default.
+have to be written defensively. Phase 8 benchmarked the two paths (ADR-0008 §1); this
+ADR fixed the correctness mechanism, and the dedup index is what lets direct COPY be
+safe.
 
 The gap between rows copied and rows inserted is exported as
 `logagg_storage_rows_deduplicated_total`, which makes the real-world redelivery rate a
@@ -143,7 +149,8 @@ only question it answers is "must I write this again".
   foreign key.
 - `last_seen` is rewritten at most once per `StreamRefreshInterval` (default 5 minutes)
   and guarded by `GREATEST(...)`, so a late write can never move it backwards. This is
-  an explicit freshness-for-writes trade, and `/v1/labels` is its only consumer.
+  an explicit freshness-for-writes trade. Nothing reads it yet; it exists so that a
+  stream-retirement or label-autocomplete ranking feature has the data when it wants it.
 
 ### 5. Invalid records are dropped at Submit, not at flush
 
@@ -188,9 +195,10 @@ is deliberately left off to keep that property.
 
 Down migrations exist and are exercised (`up → down → up`) by the integration suite.
 Not because a production rollback is likely, but because a migration that is never
-reversed is a migration whose ordering constraints are untested — and both of ours have
-real ones (decompress every chunk before disabling compression; drop the hierarchical
-aggregate before its parent).
+reversed is a migration whose ordering constraints are untested — and the first two
+have real ones (decompress every chunk before disabling compression; drop the
+hierarchical aggregate before its parent). Later migrations are held to the same rule
+even when, as with 0004's `CREATE INDEX`, the down path is trivial.
 
 ## TimescaleDB specifics, verified against 2.22.1
 
