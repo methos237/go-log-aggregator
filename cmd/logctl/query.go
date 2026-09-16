@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -56,9 +55,9 @@ type queryResponse struct {
 func queryCmd(args []string) error {
 	fs := flag.NewFlagSet("query", flag.ExitOnError)
 	var opt queryOptions
-	fs.StringVar(&opt.addr, "addr", "http://127.0.0.1:8080", "collector HTTP address")
+	fs.StringVar(&opt.addr, "addr", "http://127.0.0.1:8080", "collector HTTP base URL")
 	fs.StringVar(&opt.token, "token", os.Getenv("LOGAGG_HTTP_AUTH_TOKEN"), "bearer token (default $LOGAGG_HTTP_AUTH_TOKEN)")
-	fs.DurationVar(&opt.since, "since", time.Hour, "look back this far from now (ignored when -start is set)")
+	fs.DurationVar(&opt.since, "since", time.Hour, "look back this far from -end (ignored when -start is set)")
 	fs.StringVar(&opt.start, "start", "", "range start, RFC 3339")
 	fs.StringVar(&opt.end, "end", "", "range end, RFC 3339 (default now)")
 	fs.IntVar(&opt.limit, "limit", 100, "maximum rows")
@@ -74,12 +73,12 @@ func queryCmd(args []string) error {
 	}
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return errors.New("exactly one query is required; quote it so the shell leaves it alone")
+		return fmt.Errorf("%w: exactly one query is required; quote it so the shell leaves it alone", errUsage)
 	}
 
 	body, err := opt.body(fs.Arg(0), time.Now())
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", errUsage, err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -108,7 +107,9 @@ func queryCmd(args []string) error {
 		return fmt.Errorf("%s: %s", resp.Status, out.Error)
 	}
 	if opt.raw {
-		_, err = os.Stdout.Write(raw)
+		if _, err = os.Stdout.Write(raw); err == nil && !bytes.HasSuffix(raw, []byte("\n")) {
+			_, err = os.Stdout.WriteString("\n")
+		}
 		return err
 	}
 	return out.print(os.Stdout, os.Stderr)

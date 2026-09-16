@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -100,5 +101,15 @@ func TestSendRejectsInvalidLabelsBeforeConnecting(t *testing.T) {
 	err := sendCmd([]string{"-addr", "127.0.0.1:1", "-service", "api", "-env", ""})
 	if err == nil || !strings.Contains(err.Error(), "labels") {
 		t.Fatalf("err = %v, want a complaint about the labels", err)
+	}
+}
+
+func TestUsageErrorsAreDistinguishable(t *testing.T) {
+	t.Parallel()
+
+	for _, args := range [][]string{nil, {"frobnicate"}, {"send"}, {"send", "-service", "x", "stray"}, {"query"}, {"tail"}} {
+		if err := run(args); !errors.Is(err, errUsage) {
+			t.Errorf("run(%q) = %v, want a usage error", args, err)
+		}
 	}
 }

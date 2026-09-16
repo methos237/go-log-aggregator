@@ -96,7 +96,9 @@ echo "hello from logctl" | ./bin/logctl send -addr 127.0.0.1:9095 -service demo
 ./bin/loadgen -addr 127.0.0.1:9095 -records 200000    # synthetic load
 ```
 
-`loadgen` prints accepted and rejected counts, ack latency percentiles, and exits
+`logctl` exits 0 on success, 2 for a usage error and 1 for anything the cluster
+refused or could not reach; rows go to stdout and everything else to stderr, so
+`logctl query -json ... | jq` works. `loadgen` prints accepted and rejected counts, ack latency percentiles, and exits
 non-zero if anything was rejected, so you can use it as a check as well as a demo.
 `-rate`, `-ramp` and `-duration` pace a run; `make bench-run NAME=...` wraps it in the
 benchmark harness described in [`docs/benchmarks/`](docs/benchmarks/README.md).

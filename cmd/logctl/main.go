@@ -3,7 +3,11 @@
 // `send` ships lines from stdin or from a flag into a collector, so "does this
 // cluster accept a log line" is one command without a load generator or a real
 // agent. `query` runs a DSL query against the HTTP API and prints the rows.
-// Tail and cluster subcommands arrive in phases 5 and 6.
+// `tail` streams matching records over the WebSocket endpoint as they arrive.
+//
+// Exit codes: 0 on success, 2 for a usage error (bad flag, missing argument,
+// unknown command), 1 for anything that failed at runtime. Records and rows go
+// to stdout; progress, summaries and warnings go to stderr.
 package main
 
 import (
@@ -12,6 +16,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strings"
@@ -24,15 +29,25 @@ import (
 	"github.com/jamespolk/go-log-aggregator/internal/version"
 )
 
+// errUsage marks an error the operator caused by how the command was invoked,
+// as opposed to one the cluster caused. main maps it to exit code 2, the same
+// code the flag package uses for a bad flag, so scripts can tell the two apart.
+var errUsage = errors.New("usage")
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "logctl: %v\n", err)
+		if errors.Is(err, errUsage) {
+			os.Exit(2)
+		}
 		os.Exit(1)
 	}
 }
 
-func usage() {
-	fmt.Fprint(os.Stderr, `logctl controls a go-log-aggregator cluster.
+// usage writes the top-level help. It goes to stdout when the operator asked
+// for it and to stderr when it accompanies an error.
+func usage(w io.Writer) {
+	_, _ = fmt.Fprint(w, `logctl controls a go-log-aggregator cluster.
 
 usage: logctl <command> [flags]
 
@@ -42,14 +57,14 @@ commands:
   tail       stream matching records from a collector as they arrive
   version    print version and exit
 
-run "logctl <command> -h" for a command's flags.
+run "logctl <command> -h" or "logctl help <command>" for a command's flags.
 `)
 }
 
 func run(args []string) error {
 	if len(args) == 0 {
-		usage()
-		return errors.New("no command given")
+		usage(os.Stderr)
+		return fmt.Errorf("%w: no command given", errUsage)
 	}
 
 	switch args[0] {
@@ -63,11 +78,14 @@ func run(args []string) error {
 		fmt.Println(version.String("logctl"))
 		return nil
 	case "help", "-h", "--help":
-		usage()
+		if len(args) > 1 {
+			return run([]string{args[1], "-h"})
+		}
+		usage(os.Stdout)
 		return nil
 	default:
-		usage()
-		return fmt.Errorf("unknown command %q", args[0])
+		usage(os.Stderr)
+		return fmt.Errorf("%w: unknown command %q", errUsage, args[0])
 	}
 }
 
@@ -89,7 +107,7 @@ type sendOptions struct {
 func sendCmd(args []string) error {
 	fs := flag.NewFlagSet("send", flag.ExitOnError)
 	var opt sendOptions
-	fs.StringVar(&opt.addr, "addr", "127.0.0.1:9095", "collector ingest address")
+	fs.StringVar(&opt.addr, "addr", "127.0.0.1:9095", "collector gRPC ingest address, host:port")
 	fs.StringVar(&opt.service, "service", "", "service label (required)")
 	fs.StringVar(&opt.host, "host", hostname(), "host label")
 	fs.StringVar(&opt.env, "env", "dev", "env label")
@@ -100,19 +118,29 @@ func sendCmd(args []string) error {
 	fs.StringVar(&opt.certFile, "tls-cert", "", "client certificate (mTLS)")
 	fs.StringVar(&opt.keyFile, "tls-key", "", "client key (mTLS)")
 	fs.StringVar(&opt.caFile, "tls-ca", "", "CA that signed the collector certificate")
+	fs.Usage = func() {
+		_, _ = fmt.Fprint(fs.Output(), "usage: logctl send [flags] < lines\n",
+			"example: echo \"hello\" | logctl send -service demo\n",
+			"one record per input line, all with the same labels and level\n")
+		fs.PrintDefaults()
+	}
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if fs.NArg() != 0 {
+		fs.Usage()
+		return fmt.Errorf("%w: send takes no arguments; pipe lines in or use -message", errUsage)
+	}
 
 	if opt.service == "" {
-		return errors.New("-service is required: it is part of the stream identity")
+		return fmt.Errorf("%w: -service is required: it is part of the stream identity", errUsage)
 	}
 	level, err := parseLevel(opt.level)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", errUsage, err)
 	}
 	if opt.batchSize < 1 {
-		return fmt.Errorf("batch size must be at least 1, got %d", opt.batchSize)
+		return fmt.Errorf("%w: batch size must be at least 1, got %d", errUsage, opt.batchSize)
 	}
 
 	// Validated locally before a connection is made, so a bad label set is a message
@@ -249,15 +277,16 @@ func ship(
 	return nil
 }
 
-// report prints one ack, including the detail, which is the only place the reason
-// for a rejection is visible to a human.
+// report prints one ack to stderr, including the detail, which is the only place
+// the reason for a rejection is visible to a human. Stderr because it is
+// progress, and stdout is kept for the final count.
 func report(ack *logaggv1.Ack) {
 	line := fmt.Sprintf("%-24s %-12s accepted=%d rejected=%d",
 		ack.GetBatchId(), code(ack.GetCode()), ack.GetAccepted(), ack.GetRejected())
 	if detail := ack.GetDetail(); detail != "" {
 		line += ": " + detail
 	}
-	fmt.Println(line)
+	fmt.Fprintln(os.Stderr, line)
 }
 
 func code(c logaggv1.AckCode) string {
