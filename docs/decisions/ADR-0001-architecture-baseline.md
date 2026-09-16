@@ -98,3 +98,17 @@ Rejected:
   and exposes heap contents.
 - Base images are pinned by digest so builds are reproducible and a re-pointed
   upstream tag cannot change what ships.
+
+## Deferred
+
+Considered, wanted, and left out so the nine phases would finish. Each is a
+candidate follow-on, none is promised:
+
+- An OTLP logs receiver alongside gRPC ingest.
+- Alerting rules evaluated over the continuous aggregates, with a webhook sink.
+- Hinted handoff for tail subscriptions during a rebalance.
+- Adaptive load shedding driven by observed write latency.
+- An object-storage tier for aged-out chunks.
+- A terminal UI for tail and query.
+- Kubernetes manifests and a Helm chart (see §4).
+- A Terraform module; researched and declined in ADR-0009.
