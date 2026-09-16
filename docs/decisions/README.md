@@ -19,7 +19,7 @@ readable.
 | [0007](ADR-0007-observability.md) | Observability: OpenTelemetry over OTLP, trace context in the batch, dashboards as code | 7 |
 | [0008](ADR-0008-benchmark-driven-defaults.md) | Benchmark-driven defaults: direct COPY, `work_mem`, WAL sizing, dropped index, `ILIKE` stays | 8 |
 | [0010](ADR-0010-license.md) | AGPL-3.0 over MIT | 9 |
-| [0011](ADR-0011-terraform-module.md) | Terraform module: researched, and what was decided | 9 |
+| [0011](ADR-0011-terraform-module.md) | Terraform module: researched and not shipped, with the scoped design if revisited | 9 |
 
 Several records cite "the roadmap" or "the project plan". That is the author's
 working plan, kept outside the repository; everything a reader needs from it has
