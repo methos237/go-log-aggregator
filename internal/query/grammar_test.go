@@ -15,8 +15,10 @@ func TestGrammarMatchesReference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Only the package doc: everything before the package clause.
+	doc0, _, _ := strings.Cut(string(src), "\npackage ")
 	var pkg []string
-	for _, l := range strings.Split(string(src), "\n") {
+	for _, l := range strings.Split(doc0, "\n") {
 		if strings.HasPrefix(l, "//\t") {
 			pkg = append(pkg, strings.TrimPrefix(l, "//\t"))
 		}

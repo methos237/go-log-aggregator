@@ -29,19 +29,48 @@ import (
 	"github.com/jamespolk/go-log-aggregator/internal/version"
 )
 
-// errUsage marks an error the operator caused by how the command was invoked,
-// as opposed to one the cluster caused. main maps it to exit code 2, the same
-// code the flag package uses for a bad flag, so scripts can tell the two apart.
-var errUsage = errors.New("usage")
+// usageError marks an error the operator caused by how the command was invoked,
+// as opposed to one the cluster caused. main maps it to exit code 2, the code
+// the flag package conventionally uses for a bad flag, so scripts can tell the
+// two apart. It is a type rather than a sentinel so the classification never
+// leaks into the message.
+type usageError struct{ err error }
+
+func (e usageError) Error() string { return e.err.Error() }
+func (e usageError) Unwrap() error { return e.err }
+
+// usagef builds a usageError.
+func usagef(format string, a ...any) error { return usageError{fmt.Errorf(format, a...)} }
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "logctl: %v\n", err)
-		if errors.Is(err, errUsage) {
+		var ue usageError
+		if errors.As(err, &ue) {
 			os.Exit(2)
 		}
 		os.Exit(1)
 	}
+}
+
+// parseFlags parses args and decides where the output goes: requested help
+// prints the usage to stdout and reports helped, a bad flag prints the usage to
+// stderr and returns a usageError carrying the flag package's message.
+func parseFlags(fs *flag.FlagSet, args []string) (helped bool, err error) {
+	fs.SetOutput(io.Discard)
+	err = fs.Parse(args)
+	switch {
+	case errors.Is(err, flag.ErrHelp):
+		fs.SetOutput(os.Stdout)
+		fs.Usage()
+		return true, nil
+	case err != nil:
+		fs.SetOutput(os.Stderr)
+		fs.Usage()
+		return false, usageError{err}
+	}
+	fs.SetOutput(os.Stderr)
+	return false, nil
 }
 
 // usage writes the top-level help. It goes to stdout when the operator asked
@@ -64,7 +93,7 @@ run "logctl <command> -h" or "logctl help <command>" for a command's flags.
 func run(args []string) error {
 	if len(args) == 0 {
 		usage(os.Stderr)
-		return fmt.Errorf("%w: no command given", errUsage)
+		return usagef("no command given")
 	}
 
 	switch args[0] {
@@ -79,13 +108,16 @@ func run(args []string) error {
 		return nil
 	case "help", "-h", "--help":
 		if len(args) > 1 {
-			return run([]string{args[1], "-h"})
+			switch args[1] {
+			case "send", "query", "tail":
+				return run([]string{args[1], "-h"})
+			}
 		}
 		usage(os.Stdout)
 		return nil
 	default:
 		usage(os.Stderr)
-		return fmt.Errorf("%w: unknown command %q", errUsage, args[0])
+		return usagef("unknown command %q", args[0])
 	}
 }
 
@@ -105,7 +137,7 @@ type sendOptions struct {
 }
 
 func sendCmd(args []string) error {
-	fs := flag.NewFlagSet("send", flag.ExitOnError)
+	fs := flag.NewFlagSet("send", flag.ContinueOnError)
 	var opt sendOptions
 	fs.StringVar(&opt.addr, "addr", "127.0.0.1:9095", "collector gRPC ingest address, host:port")
 	fs.StringVar(&opt.service, "service", "", "service label (required)")
@@ -124,30 +156,30 @@ func sendCmd(args []string) error {
 			"one record per input line, all with the same labels and level\n")
 		fs.PrintDefaults()
 	}
-	if err := fs.Parse(args); err != nil {
+	if helped, err := parseFlags(fs, args); helped || err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
 		fs.Usage()
-		return fmt.Errorf("%w: send takes no arguments; pipe lines in or use -message", errUsage)
+		return usagef("send takes no arguments; pipe lines in or use -message")
 	}
 
 	if opt.service == "" {
-		return fmt.Errorf("%w: -service is required: it is part of the stream identity", errUsage)
+		return usagef("-service is required: it is part of the stream identity")
 	}
 	level, err := parseLevel(opt.level)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUsage, err)
+		return usageError{err}
 	}
 	if opt.batchSize < 1 {
-		return fmt.Errorf("%w: batch size must be at least 1, got %d", errUsage, opt.batchSize)
+		return usagef("batch size must be at least 1, got %d", opt.batchSize)
 	}
 
 	// Validated locally before a connection is made, so a bad label set is a message
 	// about the label set rather than a rejected batch to interpret.
 	labels := model.LabelSet{Service: opt.service, Host: opt.host, Env: opt.env}
 	if err = labels.Validate(); err != nil {
-		return fmt.Errorf("labels: %w", err)
+		return usagef("labels: %w", err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -270,7 +302,7 @@ func ship(
 		return fmt.Errorf("close send: %w", err)
 	}
 
-	fmt.Printf("%d accepted, %d rejected\n", accepted, rejected)
+	fmt.Fprintf(os.Stderr, "%d accepted, %d rejected\n", accepted, rejected)
 	if rejected > 0 {
 		return fmt.Errorf("%d records were rejected", rejected)
 	}
@@ -278,8 +310,8 @@ func ship(
 }
 
 // report prints one ack to stderr, including the detail, which is the only place
-// the reason for a rejection is visible to a human. Stderr because it is
-// progress, and stdout is kept for the final count.
+// the reason for a rejection is visible to a human. Everything send prints is
+// progress or a summary, so like the other commands it keeps stdout empty.
 func report(ack *logaggv1.Ack) {
 	line := fmt.Sprintf("%-24s %-12s accepted=%d rejected=%d",
 		ack.GetBatchId(), code(ack.GetCode()), ack.GetAccepted(), ack.GetRejected())

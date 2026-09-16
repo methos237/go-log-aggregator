@@ -53,7 +53,7 @@ type queryResponse struct {
 }
 
 func queryCmd(args []string) error {
-	fs := flag.NewFlagSet("query", flag.ExitOnError)
+	fs := flag.NewFlagSet("query", flag.ContinueOnError)
 	var opt queryOptions
 	fs.StringVar(&opt.addr, "addr", "http://127.0.0.1:8080", "collector HTTP base URL")
 	fs.StringVar(&opt.token, "token", os.Getenv("LOGAGG_HTTP_AUTH_TOKEN"), "bearer token (default $LOGAGG_HTTP_AUTH_TOKEN)")
@@ -68,17 +68,17 @@ func queryCmd(args []string) error {
 			`example: logctl query -since 15m '{service="api", level>="warn"} |= "timeout"'`, "\n")
 		fs.PrintDefaults()
 	}
-	if err := fs.Parse(args); err != nil {
+	if helped, err := parseFlags(fs, args); helped || err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return fmt.Errorf("%w: exactly one query is required; quote it so the shell leaves it alone", errUsage)
+		return usagef("exactly one query is required; quote it so the shell leaves it alone")
 	}
 
 	body, err := opt.body(fs.Arg(0), time.Now())
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUsage, err)
+		return usageError{err}
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -107,9 +107,7 @@ func queryCmd(args []string) error {
 		return fmt.Errorf("%s: %s", resp.Status, out.Error)
 	}
 	if opt.raw {
-		if _, err = os.Stdout.Write(raw); err == nil && !bytes.HasSuffix(raw, []byte("\n")) {
-			_, err = os.Stdout.WriteString("\n")
-		}
+		_, err = fmt.Fprintf(os.Stdout, "%s\n", bytes.TrimRight(raw, "\n"))
 		return err
 	}
 	return out.print(os.Stdout, os.Stderr)
