@@ -266,6 +266,16 @@ curl -s -H "Authorization: Bearer dev-token" http://127.0.0.1:8080/v1/cluster | 
 make chaos                               # kill two mid-ingest, assert zero gaps
 ```
 
+![Two of five collectors killed under load: membership drops to three, the ring
+rebalances, ingest moves to a survivor, nothing is dropped](docs/images/rebalance.gif)
+
+The recording is the overview dashboard while `loadgen` pushes a steady 3 000
+records/s through the proxy and two collectors are killed twenty-five seconds
+apart, each the one carrying the ingest stream at the time. The client reconnects
+through the proxy to a survivor, the membership timeline steps from five to three,
+the ring ownership panel spikes as the survivors take over the dead nodes' ranges,
+and the drop counter stays at zero.
+
 `GET /v1/cluster` shows the members, what each advertised, and its share of the key
 space; `?arcs=1` adds every owned range. The chaos test runs the agent through the
 proxy, kills two collectors outright while lines are in flight, then asserts every
