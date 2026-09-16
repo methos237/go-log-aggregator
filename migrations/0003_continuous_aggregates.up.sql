@@ -55,7 +55,7 @@ SELECT add_continuous_aggregate_policy('logs_rate_1m',
 -- alter_job() on this one is rejected with "multiple refresh policies are not
 -- supported for hierarchical continuous aggregates". Refreshing works; only in-place
 -- retuning does not. To change this schedule, remove the policy and add it again --
--- which is what a migration would do anyway. Recorded in ADR-0002.
+-- which is what a migration would do anyway.
 SELECT add_continuous_aggregate_policy('logs_rate_1h',
     start_offset      => INTERVAL '3 hours',
     end_offset        => INTERVAL '1 hour',

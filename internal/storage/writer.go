@@ -601,7 +601,7 @@ func (w *Writer) commitStreams(ctx context.Context, batch *writeBatch) error {
 
 // commitRecords moves the batch into the hypertable.
 //
-// The staging path (ADR-0002 §2) is the correctness mechanism: COPY into a temp
+// The staging path is the correctness mechanism: COPY into a temp
 // table, then INSERT ... ON CONFLICT DO NOTHING, so a redelivered record is a no-op.
 // The direct path copies straight into logs and skips the second pass. COPY has no
 // ON CONFLICT, so a replayed record aborts it with a unique violation; the batch is

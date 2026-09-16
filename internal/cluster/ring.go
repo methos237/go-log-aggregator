@@ -1,7 +1,7 @@
 // Package cluster is the membership and ownership layer: a consistent hash
 // ring over the collector nodes, kept current from memberlist events, used to
-// route query fan-out. Writes never consult it, and neither does live tail
-// (ADR-0006); every node writes through JetStream.
+// route query fan-out. Writes never consult it, and neither does live tail,
+// which fans out over core NATS; every node writes through JetStream.
 package cluster
 
 import (

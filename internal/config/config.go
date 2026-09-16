@@ -183,9 +183,8 @@ type Writer struct {
 	// CopyMode selects how a batch reaches the hypertable: CopyModeDirect copies
 	// straight into logs and falls back to staging only when a redelivered record
 	// trips the dedup index; CopyModeStaging always goes through the temp table
-	// and INSERT ... ON CONFLICT (ADR-0002 §2). Direct is the default since phase 8
-	// measured it at roughly 1.3x the writer throughput of staging (ADR-0008,
-	// docs/benchmarks); staging remains for a deployment where replays are the
+	// and INSERT ... ON CONFLICT. Direct is the default since phase 8 measured it
+	// at roughly 1.3x the writer throughput of staging (docs/benchmarks); staging remains for a deployment where replays are the
 	// norm rather than the exception. Required: a struct literal has to pick one,
 	// so the shipped default lives in exactly one place (Load).
 	CopyMode string
