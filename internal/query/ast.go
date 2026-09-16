@@ -98,6 +98,7 @@ const (
 
 var opNames = [...]string{"=", "!=", "=~", "!~", ">=", "<=", ">", "<"}
 
+// String returns the operator as it is spelled in a query.
 func (o Op) String() string {
 	if int(o) < len(opNames) {
 		return opNames[o]
@@ -134,6 +135,7 @@ const (
 
 var lineOpNames = [...]string{"|=", "!=", "|~", "!~"}
 
+// String returns the operator as it is spelled in a query.
 func (o LineOp) String() string {
 	if int(o) < len(lineOpNames) {
 		return lineOpNames[o]
@@ -175,6 +177,7 @@ const (
 
 var parserKindNames = [...]string{"json", "logfmt", "regexp"}
 
+// String returns the stage keyword as it is spelled in a query.
 func (k ParserKind) String() string {
 	if int(k) < len(parserKindNames) {
 		return parserKindNames[k]
@@ -206,6 +209,7 @@ const (
 
 var aggFuncNames = [...]string{"rate", "count_over_time", "bytes_over_time"}
 
+// String returns the function name as it is spelled in a query.
 func (f AggFunc) String() string {
 	if int(f) < len(aggFuncNames) {
 		return aggFuncNames[f]
