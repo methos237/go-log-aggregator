@@ -1,19 +1,21 @@
 # ADR-0005: Cluster layer
 
-**Status:** accepted (phase 5)
+- **Status:** Accepted
+- **Date:** 2026-09-13
+- **Supersedes:** none
 
 ## Context
 
 Several collectors run against one TimescaleDB and one NATS JetStream. Any of
 them can accept writes, because a write is a publish to JetStream and the
 writer pool drains it; the queue is what makes a killed collector lose nothing
-that was acknowledged. What the collectors did not have was any knowledge of
-each other: a query ran wherever it landed, and there was no way to divide
-work or to show an operator who is in the cluster.
+that was acknowledged. What the collectors did not have before phase 5 was any
+knowledge of each other: a query ran wherever it landed, and there was no way
+to divide work or to show an operator who is in the cluster.
 
 ## Decisions
 
-### Membership is gossip; the ring is derived
+### 1. Membership is gossip; the ring is derived
 
 `hashicorp/memberlist` provides membership and failure detection. Each node
 gossips a small JSON metadata record: its peer and HTTP ports, build version,
@@ -36,26 +38,42 @@ compose service name resolves to every replica, so the node is found as soon
 as any peer joins through it. Shutdown withdraws readiness and leaves before
 draining, so peers stop routing to a node before it stops answering.
 
-### The ring divides scans, not data
+Rejected:
+
+- Gossiping the ring tokens in the metadata record, as the plan had it. A
+  node's tokens do not fit memberlist's 512-byte limit, and tokens derived from
+  the name cannot disagree between members that agree on the count.
+
+### 2. The ring divides scans, not data
 
 Every collector writes to the same database, so stream ownership is not
 about where data lives. It divides the read: a coordinator resolves the
 stream set once, gives each owner its share of the ids, and each owner scans
-only those. The ring routes query fan-out and, in phase 6, tail
-subscriptions. Writes never consult it. Saying this plainly is better than
-implying ownership does more than it does.
+only those. The ring routes query fan-out. Writes never consult it, and
+neither does live tail: ADR-0006 fans every record out over core NATS and
+evaluates subscriptions on the node the client connected to. Saying this
+plainly is better than implying ownership does more than it does.
 
-### Ship the query, not the SQL
+Amended 2026-09-16: this section originally said the ring would also route
+tail subscriptions in phase 6. ADR-0006 decided otherwise.
 
-The roadmap said to plan once and ship the plan. The first version did: the
-coordinator sent each peer its planned logs statement with the ids bound, and
-the peer checked the text against `query.CheckSQL`, the planner's identifier
-allow-list, before running it. Review showed why that is the wrong depth. An
-allow-list bounds vocabulary, not meaning: `SELECT ... FROM logs` with no
-`WHERE` and no `LIMIT`, or a self cross join, is made entirely of words the
-planner writes. A peer port would have been an execute-SQL endpoint bounded
-by a word list, and in the compose stack that port is plaintext on the whole
-compose network.
+Rejected:
+
+- Routing writes to the owner. A write is a publish to JetStream that any node
+  drains into the shared database, so an owner hop would add a network round
+  trip and buy nothing.
+
+### 3. Ship the query, not the SQL
+
+The project plan (not committed) said to plan once and ship the plan. The
+first version did: the coordinator sent each peer its planned logs statement
+with the ids bound, and the peer checked the text against `query.CheckSQL`,
+the planner's identifier allow-list, before running it. Review showed why that
+is the wrong depth. An allow-list bounds vocabulary, not meaning: `SELECT ...
+FROM logs` with no `WHERE` and no `LIMIT`, or a self cross join, is made
+entirely of words the planner writes. A peer port would have been an
+execute-SQL endpoint bounded by a word list, and in the compose stack that
+port is plaintext on the whole compose network.
 
 So the coordinator ships the query text and the request half of the plan
 (range, over-fetched limit, direction) with the peer's share of the ids, and
@@ -74,7 +92,14 @@ directions, so one CA signs every collector. Configuration refuses a loopback
 peer port behind a routable gossip address, since peers dial the gossip host
 with the peer port and would find nothing there.
 
-### Merge and degrade
+Rejected:
+
+- Shipping the planned SQL with the ids bound and checking it against
+  `query.CheckSQL` on the peer, which is what the first version did. An
+  allow-list bounds vocabulary, not meaning, and would have made the peer port
+  an execute-SQL endpoint.
+
+### 4. Merge and degrade
 
 Records from the shards are k-way merged with a heap in the request's
 direction and cut at the limit. Points are summed per bucket and group, since
@@ -96,7 +121,16 @@ a bucket that one shard cut and another kept. It is the known ceiling of
 applying the limit per shard, and the truncated flag is the signal that it
 may have happened.
 
-### A proxy, not port ranges
+Rejected:
+
+- gRPC's default 20-second minimum connect timeout for peer dials. It is longer
+  than the query budget, so a query touching a member that had just died would
+  time out whole instead of degrading to a shard warning.
+- Failing or warning when a stream's owner is not ready or not in the ring.
+  The database is shared, so the coordinator can scan those streams itself and
+  answer for a member that is starting or stopping.
+
+### 5. A proxy, not port ranges
 
 Compose cannot publish one host port for several replicas. The scaled stack
 puts nginx on the single collector's 8080 and 9095: the API proxied per
@@ -105,6 +139,13 @@ so gRPC frames pass untouched. nginx resolves the service name through
 Compose's DNS on every connection, so a killed replica leaves rotation within
 seconds. The proxy is development plumbing; a real deployment terminates TLS
 at the collectors.
+
+Rejected:
+
+- A host port range per replica, which Compose does allow. The host would then
+  talk to a different address for every value of `N`, and a client would have
+  to know which replica sits on which port. Only the admin port keeps a range,
+  so each replica's metrics and pprof stay reachable individually.
 
 ## Consequences
 
@@ -120,5 +161,7 @@ at the collectors.
   wait is the observable recovery time after a kill and is bounded by
   configuration, not by anything the agent does.
 - Per-shard limits and the shared database mean fan-out is a parallelism and
-  resilience demonstration more than a necessity today. Phase 8 measures
-  whether dividing the scan pays for the extra round trip.
+  resilience demonstration more than a necessity today. Whether dividing the
+  scan pays for the extra round trip is not measured and stays open: phase 8's
+  benchmarks went to the single-node write path (ADR-0008). (Amended
+  2026-09-16: originally "Phase 8 measures whether dividing the scan pays".)

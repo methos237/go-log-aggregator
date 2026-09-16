@@ -61,7 +61,7 @@ the Go layer regardless — which happens to be the point.
 A LogQL-shaped language compiled by a hand-written lexer, recursive-descent parser,
 AST, and planner that emits parameterized TimescaleDB SQL, reading a continuous
 aggregate instead of the raw hypertable when it can prove the answer is identical
-(the exactness rule is ADR-0004 §5, not a range heuristic). Grafana reads the same
+(the exactness rule is ADR-0004 §6, not a range heuristic). Grafana reads the same
 hypertables for dashboards.
 
 Rejected:
@@ -116,4 +116,5 @@ candidate follow-on, none is promised:
 - An object-storage tier for aged-out chunks.
 - A terminal UI for tail and query.
 - Kubernetes manifests and a Helm chart (see §4).
-- A Terraform module; researched in ADR-0011.
+- A Terraform module; researched and declined in ADR-0011, which holds the scoped
+  design should the decision be revisited.
