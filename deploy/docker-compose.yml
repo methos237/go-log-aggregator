@@ -36,7 +36,7 @@ services:
     # the tuned 1 GB max_wal_size the ingest benchmark ran a checkpoint every few
     # seconds, wrote 3x the WAL, and the writeback stalled JetStream on the shared
     # disk badly enough to time out publishes. 4 GB / 15 min took that to one
-    # checkpoint per run (ADR-0008 §3, docs/benchmarks). The price is a longer
+    # checkpoint per run (docs/benchmarks). The price is a longer
     # crash recovery, which is why stop_grace_period below is generous.
     command:
       - postgres

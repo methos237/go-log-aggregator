@@ -4,7 +4,7 @@
 -- every time-ordered scan the default index served, so logs_time_idx was a second
 -- copy of the same ordering: 89 MB per 3M rows here, and one more B-tree to
 -- maintain on every insert. Phase 8 measured dropping it at about 8% off the
--- mean write time (docs/benchmarks, ADR-0008 §5). Dropping the hypertable index
+-- mean write time (docs/benchmarks). Dropping the hypertable index
 -- drops it from every chunk.
 --
 -- IF EXISTS because a fresh database created after this migration has no such

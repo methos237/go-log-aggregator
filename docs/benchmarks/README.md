@@ -276,7 +276,8 @@ into `logs` directly; if a redelivered record trips the dedup index (SQLSTATE
 23505) the batch is redone through the staging path, and
 `logagg_storage_direct_copy_fallbacks_total` counts it. Each batch is sorted by
 the dedup key before either path, which preserves the cluster-wide lock order the
-staging `ORDER BY` used to provide. The ADR-0002 trade-off, now with numbers.
+staging `ORDER BY` used to provide. The trade-off the schema deferred, now with
+numbers.
 
 **Hypothesis.** Staging costs a second pass over every row (temp-table write,
 sort, `ON CONFLICT` probe of the unique index per row) that at-least-once
@@ -298,7 +299,7 @@ multi-row records rather than one per row.
 **Result.** About 1.3× the writer throughput in the median, with one run of
 three in the noise band. Adopted as the default; `staging` stays selectable for a
 deployment where replays are the norm, because a replayed batch on the direct
-path pays for both. Recorded in ADR-0008.
+path pays for both.
 
 ### 5. Storage: the default `time` index, compression, chunk sizing
 

@@ -59,10 +59,9 @@ send to the Postgres commit, Grafana dashboards provisioned from git), benchmark
 reproducible harness, published numbers with their methodology and hardware, and an
 optimization log of six measured changes in
 [`docs/benchmarks/`](docs/benchmarks/README.md)), and this documentation pass. Each
-phase was one GitHub issue and one pull request, and every design decision that
-shaped the code is written up in [`.aidocs/decisions`](.aidocs/decisions/). Stretch goals
-that did not make the cut are listed in
-[ADR-0001](.aidocs/decisions/ADR-0001-architecture-baseline.md).
+phase was one GitHub issue and one pull request, and the reasoning behind each design
+decision is recorded next to the code it shaped, in package documentation, migration
+comments and the pull requests.
 
 ## Quickstart
 
@@ -147,8 +146,9 @@ Every literal, including label names, becomes a `$n` argument. Tests assert the
 generated SQL contains no user bytes, an ast-grep rule forbids concatenated SQL at any
 query call, and `make fuzz` runs the lexer, parser and planner for a minute each. The
 full reference, with every operator and a worked example of each, is
-[`docs/query-language.md`](docs/query-language.md); the reasoning is in
-[`ADR-0004`](.aidocs/decisions/ADR-0004-query-compiler.md).
+[`docs/query-language.md`](docs/query-language.md); the reasoning is in the package
+documentation of [`internal/query`](internal/query/ast.go) and
+[`plan.go`](internal/query/plan.go).
 
 ### HTTP API
 
@@ -249,7 +249,7 @@ many publishes into one transaction, so its span is a child of the first shipmen
 trace and linked to the rest. Tracing is off unless `LOGAGG_TRACING_ENABLED=true`;
 `LOGAGG_TRACING_ENDPOINT` and `LOGAGG_TRACING_SAMPLE_RATIO` do what they say. The dev
 agent also follows the collector's own container, so `logagg` ingests its own logs.
-[ADR-0007](.aidocs/decisions/ADR-0007-observability.md) has the reasoning.
+[`internal/observability`](internal/observability/) has the reasoning.
 
 ## Cluster
 
@@ -282,7 +282,8 @@ proxy, kills two collectors outright while lines are in flight, then asserts eve
 numbered line landed with no gaps, that the ring settled on the survivors, and that a
 fanned-out count agrees with the database. It waits out the queue's `ack_wait`,
 since a killed collector's unacknowledged deliveries are redelivered only after it
-expires. The reasoning is in [`ADR-0005`](.aidocs/decisions/ADR-0005-cluster-layer.md).
+expires. The reasoning is in the package documentation of
+[`internal/cluster`](internal/cluster/ring.go).
 
 `make dev` publishes fixed host ports for its single collector. `make dev-scale N=5`
 puts an nginx proxy on the same 8080 and 9095 in front of N collectors, resolving
@@ -315,10 +316,8 @@ about 20%.
 The writer is the bottleneck throughout: the client pushes 90–120k records/s into
 JetStream and the database absorbs 30–55k/s. Compression measured at 5.3× (382 to 72
 bytes per row). Every change above, what it was expected to do, what it did, and the
-flame graphs behind it are in [`docs/benchmarks/`](docs/benchmarks/README.md); the
-defaults it changed are recorded in
-[`ADR-0008`](.aidocs/decisions/ADR-0008-benchmark-driven-defaults.md). Reproduce a run
-with `make bench-run NAME=mine`.
+flame graphs behind it are in [`docs/benchmarks/`](docs/benchmarks/README.md), along
+with the defaults it changed. Reproduce a run with `make bench-run NAME=mine`.
 
 ## Configuration
 
@@ -361,8 +360,9 @@ port on `127.0.0.1` only. Plaintext ingest also logs at WARN, since it is an
 unauthenticated write path.
 
 A verified client certificate authorises writing anything, not writing as a particular
-service; ingest is one trust domain. ADR-0003 §7 explains why that is deferred rather
-than half-implemented.
+service; ingest is one trust domain. Per-service authorisation is deferred rather than
+half-implemented: a certificate-to-service mapping without rotation and revocation
+behind it would be a policy the development CA cannot honour.
 
 These certificates are for local development only. A CA whose private key sits in your
 working tree signs them, they last a year, and nothing can revoke them. A real
@@ -420,20 +420,20 @@ with 1 hour chunks, columnar compression segmented by stream, 30 day retention, 
 per-minute and per-hour count aggregates that the query planner reads when an
 aggregation can be answered from them exactly.
 
-[`ADR-0003`](.aidocs/decisions/ADR-0003-ingest-path.md) covers the ingest path: why the
-ack comes after the JetStream publish, why a full buffer sheds instead of waiting, and
-why a corrupt message is terminated rather than retried.
+The package documentation of [`internal/ingest`](internal/ingest/) covers the ingest
+path: why the ack comes after the JetStream publish, why a full buffer sheds instead of
+waiting, and why a corrupt message is terminated rather than retried.
 
 The write path is a direct `COPY` into the hypertable, guarded by a unique
 `(stream_id, seq, time)` index. A redelivered batch trips that index, and the writer
 then redoes it through a session-local staging table and
 `INSERT ... ON CONFLICT DO NOTHING`, so a replay is a no-op instead of a duplicate or
 an error, and the normal case pays for one pass. `LOGAGG_WRITER_COPY_MODE=staging`
-makes every batch take the second path, for a deployment where replay is routine.
-[`ADR-0002`](.aidocs/decisions/ADR-0002-schema-and-write-path.md) has the reasoning,
-including the TimescaleDB behaviours that shaped it, and
-[`ADR-0008`](.aidocs/decisions/ADR-0008-benchmark-driven-defaults.md) the measurement
-that made direct the default.
+makes every batch take the second path, for a deployment where replay is routine. The
+migrations in [`migrations/`](migrations/) carry the reasoning inline, including the
+TimescaleDB behaviours that shaped the schema, and
+[`docs/benchmarks/`](docs/benchmarks/README.md) the measurement that made direct the
+default.
 
 ## Non-goals
 
@@ -449,8 +449,6 @@ Decided up front, so the scope reads as deliberate rather than unfinished.
 - No Kubernetes manifests or Helm chart, and no public cloud demo. Everything runs
   under Docker Compose via `make dev`.
 
-[`ADR-0001`](.aidocs/decisions/ADR-0001-architecture-baseline.md) records the rejected
-alternatives behind each.
 
 ## License
 

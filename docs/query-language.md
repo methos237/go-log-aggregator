@@ -5,7 +5,7 @@ set of streams, optionally filters and reshapes their records, and optionally
 aggregates them into a time series. This document is the complete surface; the
 package documentation of [`internal/query`](../internal/query/ast.go) carries the
 same grammar, and a test fails if the two drift apart. The reasoning behind the
-design is in [ADR-0004](decisions/ADR-0004-query-compiler.md).
+design is in the comments of [`plan.go`](../internal/query/plan.go).
 
 ```
 {service="api", env!="dev"} |= "timeout" | json | status >= 500 | rate(5m) by (level)
@@ -105,8 +105,8 @@ pass.
 Substring search is a sequential scan over the matching rows. On a large range,
 narrow the selector or the time window first. A `pg_trgm` index makes `|=` roughly
 fifty times faster on a needle-in-haystack search and is used automatically when
-present; it is opt-in because it costs write throughput
-([ADR-0008 §6](decisions/ADR-0008-benchmark-driven-defaults.md)).
+present; it is opt-in because it costs write throughput (measured in
+[`docs/benchmarks`](benchmarks/README.md)).
 
 ## Parser stages
 
