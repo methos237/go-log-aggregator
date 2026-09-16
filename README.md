@@ -143,7 +143,8 @@ reports which relation it read as `source`.
 Every literal, including label names, becomes a `$n` argument. Tests assert the
 generated SQL contains no user bytes, an ast-grep rule forbids concatenated SQL at any
 query call, and `make fuzz` runs the lexer, parser and planner for a minute each. The
-grammar is the package doc of `internal/query`; the reasoning is in
+full reference, with every operator and a worked example of each, is
+[`docs/query-language.md`](docs/query-language.md); the reasoning is in
 [`ADR-0004`](docs/decisions/ADR-0004-query-compiler.md).
 
 ### HTTP API
